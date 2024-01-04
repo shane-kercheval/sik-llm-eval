@@ -1,0 +1,15 @@
+coverage
+joblib
+openai
+markdown
+markdownify
+numpy
+pandas
+pydantic
+pygments
+pytest
+python-dotenv
+PyYAML
+ruff
+tiktoken
+transformers

@@ -1,0 +1,22 @@
+uuid: 5f8b1b4e-3b7e-4b0e-8b1b-4e3b7e4b0e8b
+name: Test Example  # do we need this
+description: This is an example test
+prompts:
+  - |
+    This is a prompt
+    with multiple lines
+  - |
+    This is another prompt
+    with multiple lines
+# optional; default evals (e.g. % of code blocks passing) along with performance metrics (characters per second) will still be recorded
+evals:
+  - type: match
+    value: answer
+  - type: python
+    file: example_test.py
+    function: example_test
+  - type: python
+    description: This is a python test
+    function: |
+      def example_test(response: str) -> list[TestResult]:
+        return True
