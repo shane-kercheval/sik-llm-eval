@@ -2,7 +2,10 @@
 
 model: gpt-3.5-turbo-1106
 eval_id: uuid
-hardware:
+# relevant for local runs or endpoints like HF where you choose your hardware config
+# but not for endpoints like OpenAI where you choose the model and the hardware is fixed
+# not sure how to capture that information
+system:
   cpu: ...
   gpu: ...
   memory: ...
