@@ -1,0 +1,29 @@
+project: Optional Project Name - Only used if using weights and biases
+# Whether to log to weights and biases
+# If true, the environment variable WANDB_API_KEY must be set (e.g. via .env file)
+log_wanb: True
+log_local: True  # Whether to log to local file
+models:
+  - name: gpt-3.5-turbo-1106  # could be anything but probably the official name/id of the model
+    # A model is simply a callable class
+    # The class must be defined in a file that is importable from the current directory
+    # The class is instantiated with the model parameters provided below, and then called with the
+    # prompt(s) from the eval. The prompts are called one at a time in succession, and the model
+    # is expected to return a single response for each prompt. The model is expected maintain the
+    # state/messages bewteen prompts if the intent is to evaluate the conversation.
+    file: /models/models.py
+    class: OpenAIModel
+    parameters:
+      model: gpt-3.5-turbo-1106
+      temperature: 0.1
+      max_tokens: 2048
+  - name: gpt-4-1106-preview
+    file: /models/models.py
+    class: OpenAIModel
+    parameters:
+      model: gpt-4-1106-preview
+      temperature: 0.1
+      max_tokens: 2048
+evals:
+  - file: /evals/example_eval.yaml
+  - file: /evals/example_eval_2.yaml

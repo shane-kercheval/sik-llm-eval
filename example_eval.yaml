@@ -1,0 +1,38 @@
+uuid: 5f8b1b4e-3b7e-4b0e-8b1b-4e3b7e4b0e8b
+name: Eval Example  # do we need this?
+description: This is an example of an eval. An eval contains a set of prompts and tests.
+prompts:
+  - This is a question/prompt.
+  - |
+    This is a followup prompt.
+    The intent is to evaluate multiple responses in a conversation, rather than a single response.
+# optional; default tests (e.g. % of code blocks passing) along with performance metrics (characters per second) will still be recorded
+ideal_responses:
+  - |
+    This is the ideal response (to the first prompt).
+    This field is optional.
+    It is only used if a test below is of type `llm-similarity`, in which case it is used as the ideal response and the LLM is asked to evaluate the similarity of the response to the ideal answer.
+    This value could also be used to fine-tune a model.
+  - This is the ideal response to the second prompt.
+tests:
+  - type: match
+    value: This is the expected response. It must match exactly.
+  # This is an test that uses a python function to evaluate the response.
+  # The function is defined in `example_test.py` and is called `test_function`.
+  - type: python
+    file: example_test.py
+    function: test_function
+  # This is an test that uses a python function to evaluate the response.
+  # The function is defined directly in the yaml file. It can be named anything but must take a
+  # single argument, the response, and return a list of TestResult objects. 
+  - type: python
+    description: This is a python test
+    function: |
+      def test_function(response: str) -> list[TestResult]:
+        expectation_1 = TestResult(passed=..., description='This is a description of the expecation.')
+        expectation_2 = TestResult(passed=..., description='This is a description of the expecation.')
+        return [expectation_1, expectation_2]
+  # This type of test is used to evaluate the similarity of the response to the ideal answer.
+  # The ideal answer should be captured in the `ideal_response` field, above.
+  - type: llm-similarity
+    model: gpt3.5-
