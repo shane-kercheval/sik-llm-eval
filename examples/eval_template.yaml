@@ -9,17 +9,16 @@ metadata:
     - plotly-express
   source: Anaconda
 prompts:
-  - This is a question/prompt.
-  - |
-    This is a followup prompt.
-    The intent is to evaluate multiple responses in a conversation, rather than a single response.
-ideal_responses:
-  - |
-    This is the ideal response (to the first prompt).
-    This field is optional.
-    It is only used if a test below is of type `llm-similarity`, in which case it is used as the ideal response and the LLM is asked to evaluate the similarity of the response to the ideal answer.
-    This value could also be used to fine-tune a model.
-  - This is the ideal response to the second prompt.
+  - value: This is a question/prompt.
+    ideal_response: |
+      This is the ideal response (to the first prompt).
+      This field is optional.
+      It is only used if a test below is of type `llm-similarity`, in which case it is used as the ideal response and the LLM is asked to evaluate the similarity of the response to the ideal answer.
+      This value could also be used to fine-tune a model.
+  - value: |
+      This is a followup prompt.
+      The intent is to evaluate multiple responses in a conversation, rather than a single response.
+    ideal_response: This is the ideal response to the second prompt.
 # optional; default tests (e.g. % of code blocks passing) along with performance metrics
 # (characters per second) will still be recorded
 tests:
@@ -64,5 +63,9 @@ tests:
   # This type of test is used to evaluate the similarity of the response to the ideal answer.
   # The ideal answer should be captured in the `ideal_response` field, above.
   # If the ideal response is not provided, the test harness will fail.
+  
+  # ****TODO****: this type of test won't return True/False so we need to figure out how to handle this.
+  # maybe have a result_type (Metric?) that is either boolean or scalar? not sure.
+  
   - type: llm-similarity
     model: gpt-3.5-turbo-1106
