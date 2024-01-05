@@ -29,7 +29,7 @@ tests:
     tags:
       - multiple-choice
   # This is a test that checks that any code blocks in the response run without error.
-  - type: code_blocks
+  - type: python_code_blocks
     # optional; some prompts/responses assume that imports/functions are already defined so this
     # this code is run before the code blocks returned in the response.
     setup: |
@@ -60,12 +60,14 @@ tests:
         expectation_1 = TestResult(passed=..., description='This is a description of the expecation.')
         expectation_2 = TestResult(passed=..., description='This is a description of the expecation.')
         return [expectation_1, expectation_2]
+  
   # This type of test is used to evaluate the similarity of the response to the ideal answer.
   # The ideal answer should be captured in the `ideal_response` field, above.
   # If the ideal response is not provided, the test harness will fail.
-  
+
   # ****TODO****: this type of test won't return True/False so we need to figure out how to handle this.
   # maybe have a result_type (Metric?) that is either boolean or scalar? not sure.
-  
-  - type: llm-similarity
+  # input would be the response and the ideal response
+  - type: llm
     model: gpt-3.5-turbo-1106
+    instruction: Compare the response to the ideal response. Give a score between 0 and 1, where 0 is not similar at all and 1 is very similar.
