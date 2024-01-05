@@ -1,17 +1,18 @@
-uuid: 5f8b1b4e-3b7e-4b0e-8b1b-4e3b7e4b0e8b
-name: Eval Example  # do we need this?
-description: This is an example of an eval. An eval contains a set of prompts and tests.
-difficulty: 1  # 1-5
-tags:
-  - example
-source: Anaconda
+metadata:
+  uuid: 5f8b1b4e-3b7e-4b0e-8b1b-4e3b7e4b0e8b
+  name: Eval Example  # do we need this?
+  description: This is an example of an eval. An eval contains a set of prompts and tests.
+  difficulty: 1  # 1-5
+  tags:
+    - example
+    - graphing
+    - plotly-express
+  source: Anaconda
 prompts:
   - This is a question/prompt.
   - |
     This is a followup prompt.
     The intent is to evaluate multiple responses in a conversation, rather than a single response.
-# optional; default tests (e.g. % of code blocks passing) along with performance metrics
-# (characters per second) will still be recorded
 ideal_responses:
   - |
     This is the ideal response (to the first prompt).
@@ -19,10 +20,13 @@ ideal_responses:
     It is only used if a test below is of type `llm-similarity`, in which case it is used as the ideal response and the LLM is asked to evaluate the similarity of the response to the ideal answer.
     This value could also be used to fine-tune a model.
   - This is the ideal response to the second prompt.
+# optional; default tests (e.g. % of code blocks passing) along with performance metrics
+# (characters per second) will still be recorded
 tests:
   # This is a test that simply checks if the response matches the value exactly.
   - type: match
     value: This is the expected response. It must match exactly.
+    description: This is an optional description of the test that explains what the test is checking or why the provided answer is correct.
   # This is a test that checks that any code blocks in the response run without error.
   - type: code_blocks
     # optional; some prompts/responses assume that imports/functions are already defined so this
@@ -31,9 +35,10 @@ tests:
       import os
       import sys
       from example_test import test_function
-    # optional; if provided, this code runs after the code blocks in the response, and a) is passed
-    # the code blocks and can either runs checks against the code blocks or b) run checks in the
-    # python the environment (the code has access to all global variables defined in the code blocks) (e.g. variables, functions, etc. that are created) for the expected
+    # optional; if provided, this code runs after all of the code blocks in the response, and
+    # a) is passed the code blocks and can either runs checks against the code blocks or b) run
+    # checks in the python the environment (the code has access to all global variables defined
+    # in the code blocks) (e.g. variables, functions, etc. that are created) for the expected
     # values.
     checks:
       - |
@@ -49,7 +54,6 @@ tests:
   # The function is defined directly in the yaml file. It can be named anything but must take a
   # single argument, the response, and return a list of TestResult objects. 
   - type: python
-    description: This is a python test
     function: |
       def test_function(response: str) -> list[TestResult]:
         expectation_1 = TestResult(passed=..., description='This is a description of the expecation.')
