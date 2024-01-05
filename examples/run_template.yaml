@@ -1,0 +1,8 @@
+# A 'run' is a single execution of an eval against a single model.
+seed: 1234
+samples: 10  # Number of samples to run for each eval/model combination
+hardware:
+  gpu: 1
+  gpu_type: 3090
+  gpu_memory: 24
+  etc: ...

@@ -3,6 +3,13 @@ project: Optional Project Name - Only used if using weights and biases
 # If true, the environment variable WANDB_API_KEY must be set (e.g. via .env file)
 log_wanb: True
 log_local: True  # Whether to log to local file
+parallel: True  # Should not run in parallel if running locally on a single CPU/GPU
+hardware:
+  gpu: 1
+  gpu_type: 3090
+  gpu_memory: 24
+  etc: ...
+samples: 1  # Number of samples to run for each eval/model combination
 models:
   - name: gpt-3.5-turbo-1106  # could be anything but probably the official name/id of the model
     # A model is simply a callable class
@@ -27,3 +34,4 @@ models:
 evals:
   - file: /evals/example_eval.yaml
   - file: /evals/example_eval_2.yaml
+  - directory: /evals/example_eval_directory  # reads all yaml files in the directory

@@ -27,6 +27,8 @@ tests:
   - type: match
     value: This is the expected response. It must match exactly.
     description: This is an optional description of the test that explains what the test is checking or why the provided answer is correct.
+    tags:
+      - multiple-choice
   # This is a test that checks that any code blocks in the response run without error.
   - type: code_blocks
     # optional; some prompts/responses assume that imports/functions are already defined so this

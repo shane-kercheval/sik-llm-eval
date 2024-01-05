@@ -1,0 +1,26 @@
+# TODO: what if multiple samples are ran? how to capture information and should i summarize?
+
+model: gpt-3.5-turbo-1106
+eval_id: uuid
+hardware:
+  cpu: ...
+  gpu: ...
+  memory: ...
+responses:
+  - This is a response to the first prompt.
+  - This is a response to the second prompt.
+total_time: 123.45
+response_characters: 1234
+characters_per_second: 9.996
+num_code_blocks: 2
+code_blocks_passed: 2
+test_results:
+  num_results: 10
+  results_passed: 7
+  percent_passed: 70.0
+  # not sure what this should look like or what information should be included
+  results:
+    - description: This is a description of the test result.
+      type: match
+      passed: True
+    - passed: False
