@@ -18,6 +18,7 @@ models:
     # prompt(s) from the eval. The prompts are called one at a time in succession, and the model
     # is expected to return a single response for each prompt. The model is expected maintain the
     # state/messages bewteen prompts if the intent is to evaluate the conversation.
+    # a class is instantiated with the corresponding parameters provided
     file: /models/models.py
     class: OpenAIModel
     parameters:
