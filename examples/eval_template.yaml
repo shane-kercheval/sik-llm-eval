@@ -1,5 +1,5 @@
+uuid: 5f8b1b4e-3b7e-4b0e-8b1b-4e3b7e4b0e8b
 metadata:
-  uuid: 5f8b1b4e-3b7e-4b0e-8b1b-4e3b7e4b0e8b
   name: Eval Example  # do we need this?
   description: This is an example of an eval. An eval contains a set of prompts and tests.
   difficulty: 1  # 1-5
