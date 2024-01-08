@@ -9,13 +9,13 @@ metadata:
     - plotly-express
   source: Anaconda
 prompts:
-  - value: This is a question/prompt.
+  - prompt: This is a question/prompt.
     ideal_response: |
       This is the ideal response (to the first prompt).
       This field is optional.
       It is only used if a test below is of type `llm-similarity`, in which case it is used as the ideal response and the LLM is asked to evaluate the similarity of the response to the ideal answer.
       This value could also be used to fine-tune a model.
-  - value: |
+  - prompt: |
       This is a followup prompt.
       The intent is to evaluate multiple responses in a conversation, rather than a single response.
     ideal_response: This is the ideal response to the second prompt.
@@ -23,13 +23,18 @@ prompts:
 # (characters per second) will still be recorded
 tests:
   # This is a test that simply checks if the response matches the value exactly.
-  - type: match
-    value: This is the expected response. It must match exactly.
-    description: This is an optional description of the test that explains what the test is checking or why the provided answer is correct.
-    tags:
-      - multiple-choice
+  - type: MATCH
+    # the number of values must match the number of prompts
+    # If a particular prompt should not be evaluated, use `null` as the value.
+    values:
+      - null  # the first prompt will not be evaluated
+      - This is the expected response. It must match exactly.
+    metadata:
+      description: This is an optional description of the test that explains what the test is checking or why the provided answer is correct.
+      tags:
+        - multiple-choice
   # This is a test that checks that any code blocks in the response run without error.
-  - type: python_code_blocks
+  - type: PYTHON_CODE_BLOCKS
     # optional; some prompts/responses assume that imports/functions are already defined so this
     # this code is run before the code blocks returned in the response.
     setup: |
@@ -47,7 +52,7 @@ tests:
   # This is an test that uses a python function to evaluate the response.
   # The function is defined in `example_test.py` and is called `test_function`.
   # The function must take a single argument, the response, and return a list of TestResult objects.
-  - type: python
+  - type: PYTHON_FUNCTION
     file: example_test.py
     function: test_function
   # This is an test that uses a python function to evaluate the response.
@@ -67,6 +72,6 @@ tests:
   # ****TODO****: this type of test won't return True/False so we need to figure out how to handle this.
   # maybe have a result_type (Metric?) that is either boolean or scalar? not sure.
   # input would be the response and the ideal response
-  - type: llm
+  - type: LLM
     model: gpt-3.5-turbo-1106
     instruction: Compare the response to the ideal response. Give a score between 0 and 1, where 0 is not similar at all and 1 is very similar.

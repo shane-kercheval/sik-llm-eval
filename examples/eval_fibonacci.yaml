@@ -8,7 +8,7 @@ metadata:
   tags:
     - python
 prompts:
-  - value: Create a python function named `fib` that calculates and returns a list of the first `n` integers in the fibonacci sequence. Use type hints and docstrings.
+  - prompt: Create a python function named `fib` that calculates and returns a list of the first `n` integers in the fibonacci sequence. Use type hints and docstrings.
     ideal_response: |
       Here's a Python function named `fib` that calculates and returns a list of the first `n` integers in the Fibonacci sequence. The function includes type hints and docstrings for clarity.
 
@@ -39,7 +39,7 @@ prompts:
       ```
 
       This function starts the Fibonacci sequence with 0 and 1, and then iterates to calculate subsequent numbers by summing the two preceding numbers in the sequence. The function handles edge cases such as when n is less than or equal to 0.
-  - value: Create a set of assertion statements to test the function including all edge-cases.
+  - prompt: Create a set of assertion statements to test the function including all edge-cases.
     ideal_response: |
       To thoroughly test the fib function, we need to create a set of assertion statements covering various scenarios, including typical use cases, edge cases, and any potential boundary conditions. Here are the assertion statements:
 
@@ -78,12 +78,6 @@ prompts:
 
       The last test case, which checks for non-integer input, will raise a TypeError since the function is not designed to handle this type of input. This test case is included to ensure that the function behaves as expected when encountering invalid input types.
 tests:
-  # - type: match
-  #   values:
-  #     - expected-value
-  #   description: description
-  #   tags:
-  #     - tag
   - type: python_code_blocks
     checks:
       - |
