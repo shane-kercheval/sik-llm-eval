@@ -1,0 +1,110 @@
+uuid: F392362B-BB18-425B-84F3-385D7B39A0EB
+metadata:
+  name: Fibonacci
+  description: Create a function that returns the nth fibonacci number. Then, create a set of assertion states to test the function.
+  author: Anaconda
+  attribution: OpenAI ChatGPT-4 was used to create the initial ideal_response values, and were slightly modified.
+  difficulty: 2  # 1-5
+  tags:
+    - python
+prompts:
+  - value: Create a python function named `fib` that calculates and returns a list of the first `n` integers in the fibonacci sequence. Use type hints and docstrings.
+    ideal_response: |
+      Here's a Python function named `fib` that calculates and returns a list of the first `n` integers in the Fibonacci sequence. The function includes type hints and docstrings for clarity.
+
+      ```python
+      def fib(n: int) -> list[int]:
+        """
+        Calculate the first n integers in the Fibonacci sequence.
+
+        Args:
+            n (int): The number of elements in the Fibonacci sequence to generate.
+
+        Examples:
+
+        >>> fib(5)
+        [0, 1, 1, 2, 3]
+        >>> fib(10)
+        [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+        """
+        if n <= 0:
+            return []
+        elif n == 1:
+            return [0]
+        else:
+            fib_sequence = [0, 1]
+            for _ in range(2, n):
+                fib_sequence.append(fib_sequence[-1] + fib_sequence[-2])
+            return fib_sequence
+      ```
+
+      This function starts the Fibonacci sequence with 0 and 1, and then iterates to calculate subsequent numbers by summing the two preceding numbers in the sequence. The function handles edge cases such as when n is less than or equal to 0.
+  - value: Create a set of assertion statements to test the function including all edge-cases.
+    ideal_response: |
+      To thoroughly test the fib function, we need to create a set of assertion statements covering various scenarios, including typical use cases, edge cases, and any potential boundary conditions. Here are the assertion statements:
+
+      ```python
+      # Test for typical input values
+      assert fib(5) == [0, 1, 1, 2, 3], "Test failed for n = 5"
+      assert fib(10) == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34], "Test failed for n = 10"
+
+      # Test for edge cases
+      assert fib(0) == [], "Test failed for n = 0 (no elements)"
+      assert fib(1) == [0], "Test failed for n = 1 (single element)"
+      assert fib(2) == [0, 1], "Test failed for n = 2 (two elements)"
+
+      # Test for negative input values
+      assert fib(-1) == [], "Test failed for n = -1 (negative input)"
+      assert fib(-10) == [], "Test failed for n = -10 (negative input)"
+
+      # Test for large input value
+      assert len(fib(100)) == 100, "Test failed for n = 100 (large input)"
+
+      # Test for non-integer input (should raise a TypeError)
+      try:
+          fib("5")
+          assert False, "Test failed for non-integer input (should raise TypeError)"
+      except TypeError:
+          pass
+      ```
+
+      This set of assertions covers the following scenarios:
+
+      - Typical Cases: Tests with normal input values like 5 and 10.
+      - Edge Cases: Tests with edge values like 0, 1, and 2.
+      - Negative Input: Tests the function with negative numbers to ensure it handles them gracefully.
+      - Large Input: Tests the function with a large value to check if it scales properly.
+      - Non-Integer Input: Verifies that the function raises an error when the input is not an integer.
+
+      The last test case, which checks for non-integer input, will raise a TypeError since the function is not designed to handle this type of input. This test case is included to ensure that the function behaves as expected when encountering invalid input types.
+tests:
+  # - type: match
+  #   values:
+  #     - expected-value
+  #   description: description
+  #   tags:
+  #     - tag
+  - type: python_code_blocks
+    checks:
+      - |
+        def check(code_blocks: list[list[str]]) -> list[TestResult]:
+            assert fib(5) == [0, 1, 1, 2, 3], "Test failed for n = 5"
+            assert fib(10) == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34], "Test failed for n = 10"
+            # Test for edge cases
+            assert fib(0) == [], "Test failed for n = 0 (no elements)"
+            assert fib(1) == [0], "Test failed for n = 1 (single element)"
+            assert fib(2) == [0, 1], "Test failed for n = 2 (two elements)"
+            # Test for negative input values
+            assert fib(-1) == [], "Test failed for n = -1 (negative input)"
+            assert fib(-10) == [], "Test failed for n = -10 (negative input)"
+            # Test for large input value
+            assert len(fib(100)) == 100, "Test failed for n = 100 (large input)"
+            # Test for non-integer input (should raise a TypeError)
+            try:
+                fib("5")
+                assert False, "Test failed for non-integer input (should raise TypeError)"
+            except TypeError:
+                pass
+      - |
+        def check(code_blocks: list[list[str]]) -> list[TestResult]:
+            assert 'def fib(n: int) -> list[int]:' in code_blocks[0][0], "First code block should have the function definition with type-hints."

@@ -41,8 +41,7 @@ tests:
     # checks in the python the environment (the code has access to all global variables defined
     # in the code blocks) (e.g. variables, functions, etc. that are created) for the expected
     # values.
-    checks:
-      - |
+    check: |
         def check(code_blocks: list[str]) -> list[TestResult]:
           return True
   # This is an test that uses a python function to evaluate the response.
