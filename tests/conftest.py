@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 import requests
 import random
+import yaml
 from faker import Faker
 import numpy as np
 from dotenv import load_dotenv
@@ -276,3 +277,17 @@ def pattern_found(value: str, pattern: str) -> bool:
     """Returns True if the pattern is found in the value."""
     pattern = re.compile(pattern)
     return bool(pattern.match(value))
+
+
+@pytest.fixture()
+def conversation_mask_email() -> dict:
+    """Returns a mock llm  conversation for masking emails."""
+    with open('tests/fake_data/fake_conversation__mask_email_function.yml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture()
+def conversation_sum() -> dict:
+    """Returns a mock llm  conversation for summing numbers."""
+    with open('tests/fake_data/fake_conversation__sum_function.yml') as f:
+        return yaml.safe_load(f)
