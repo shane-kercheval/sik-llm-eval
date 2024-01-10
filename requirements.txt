@@ -1,4 +1,6 @@
 coverage
+duckduckgo_search
+faker
 joblib
 openai
 markdown
@@ -11,5 +13,8 @@ pytest
 python-dotenv
 PyYAML
 ruff
+tenacity
+tensorflow
 tiktoken
+torch
 transformers

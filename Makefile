@@ -26,21 +26,21 @@ docker_zsh:
 # project commands
 ####
 # commands to run inside docker container
+linting:
+	ruff check llm_evals/
+	ruff check tests/
 
-# linting:
-# 	ruff check llm_workflow/
-# 	ruff check tests/
+unittests:
+	rm -f tests/test_files/log.log
+	# pytest tests
+	coverage run -m pytest --durations=0 tests
+	coverage html
 
-# unittests:
-# 	rm -f tests/test_files/log.log
-# 	# pytest tests
-# 	coverage run -m pytest --durations=0 tests
-# 	coverage html
+doctests:
+	# python -m doctest llm_evals/evals.py
 
-# doctests:
-# 	python -m doctest llm_workflow/utilities.py
+tests: linting unittests doctests
 
-# tests: linting unittests doctests
 
 # docker_tests:
 # 	# run tests within docker container
@@ -48,24 +48,3 @@ docker_zsh:
 
 # open_coverage:
 # 	open 'htmlcov/index.html'
-
-# ####
-# # Package Build
-# ####
-
-# ## Build package
-# package: clean
-# 	# NOTE: make sure .pypirc file is in home directory
-# 	# cp .pypirc ~/
-# 	rm -fr dist
-# 	python -m build
-# 	twine upload dist/*
-
-# docker_package:
-# 	# create package and upload via twine from within docker container
-# 	docker compose run --no-deps --entrypoint "make package" bash
-
-# ## Delete all generated files
-# clean:
-# 	rm -rf dist
-# 	rm -rf llm_workflow.egg-info
