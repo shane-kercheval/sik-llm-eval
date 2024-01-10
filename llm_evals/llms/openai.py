@@ -5,7 +5,7 @@ from typing import Callable
 from functools import cache
 import tiktoken
 from tiktoken import Encoding
-from llm_evals.internal_utilities import retry_handler
+from llm_evals.utilities.internal_utilities import retry_handler
 from llm_evals.llms.base import (
     ChatModel,
     Document,
