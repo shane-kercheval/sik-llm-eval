@@ -16,7 +16,7 @@ from pydantic import BaseModel
 class CheckType(Enum):
     """TODO document."""
 
-    MATCH = auto()
+    MATCH_EXACT = auto()
     MATCH_CONTAINS = auto()
     MATCH_REGEX = auto()
     PYTHON_FUNCTION = auto()
@@ -113,7 +113,7 @@ CHECK_REGISTRY = CheckRegistery()
 # results in self.results
 
 
-@register_check(CheckType.MATCH)
+@register_check(CheckType.MATCH_EXACT)
 class MatchCheck(EvalCheck):
     """TODO document."""
 
