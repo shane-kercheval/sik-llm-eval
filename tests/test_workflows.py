@@ -10,7 +10,7 @@ from llm_evals.llms.base import (
     Workflow,
     Value,
 )
-from llm_evals.internal_utilities import has_property
+from llm_evals.utilities.internal_utilities import has_property
 from tests.conftest import MockChatModel, MockRandomEmbeddings
 
 

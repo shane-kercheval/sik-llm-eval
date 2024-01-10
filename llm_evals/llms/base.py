@@ -6,7 +6,7 @@ from collections.abc import Callable
 from uuid import uuid4
 from datetime import datetime
 from pydantic import BaseModel, Field
-from llm_evals.internal_utilities import has_method, has_property
+from llm_evals.utilities.internal_utilities import has_method, has_property
 
 
 class Record(BaseModel):

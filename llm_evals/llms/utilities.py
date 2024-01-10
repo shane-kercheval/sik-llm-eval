@@ -8,8 +8,8 @@ import requests
 from pydantic import BaseModel, Field, field_validator
 
 from llm_evals.llms.base import Document, RecordKeeper, SearchRecord
-from llm_evals.internal_utilities import retry_handler
-from llm_evals.exceptions import RequestError
+from llm_evals.utilities.internal_utilities import retry_handler
+from llm_evals.utilities.exceptions import RequestError
 
 
 def split_documents(

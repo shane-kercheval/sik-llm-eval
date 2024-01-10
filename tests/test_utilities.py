@@ -5,9 +5,9 @@ import pytest
 import requests
 import os
 from textwrap import dedent
-from llm_evals.exceptions import RequestError
+from llm_evals.utilities.exceptions import RequestError
 from llm_evals.llms.base import Document
-from llm_evals.internal_utilities import (
+from llm_evals.utilities.internal_utilities import (
     create_hash,
     execute_code_blocks,
     extract_code_blocks,
