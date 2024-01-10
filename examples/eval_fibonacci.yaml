@@ -77,7 +77,7 @@ prompts:
       - Non-Integer Input: Verifies that the function raises an error when the input is not an integer.
 
       The last test case, which checks for non-integer input, will raise a TypeError since the function is not designed to handle this type of input. This test case is included to ensure that the function behaves as expected when encountering invalid input types.
-tests:
+checks:
   - type: python_code_blocks
     checks:
       - |

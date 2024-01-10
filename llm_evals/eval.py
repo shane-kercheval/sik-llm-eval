@@ -2,7 +2,7 @@
 import time
 from typing import Callable
 from pydantic import BaseModel
-from llm_evals.tests import EvalTest, TestType, TEST_REGISTRY
+from llm_evals.checks import EvalCheck, CheckType, CHECK_REGISTRY
 
 
 class Prompt(BaseModel):
@@ -31,7 +31,7 @@ class EvalResult(BaseModel):
     # this depends on a particular type of test, not sure i like that
     num_code_blocks: int
     code_blocks_passed: int
-    test_results: list[object]
+    check_results: list[object]
 
 # need to Register the different types of Tests
 
@@ -56,12 +56,12 @@ class Eval:
             uuid: str,
             metadata: dict,
             prompts: list[Prompt],
-            tests: list[EvalTest],
+            checks: list[EvalCheck],
             ):
         self.uuid = uuid
         self.metadata = metadata
         self.prompts = prompts
-        self.tests = tests
+        self.checks = checks
         self.results = None
 
     @classmethod
@@ -74,8 +74,8 @@ class Eval:
         tests = []
         for test in config['tests']:
             test['eval_uuid'] = config['uuid']
-            tests.append(TEST_REGISTRY.create_test(
-                test_type=TestType.to_enum(test.pop('type')),
+            tests.append(CHECK_REGISTRY.create_check(
+                check_type=CheckType.to_enum(test.pop('type')),
                 params=test,
             ))
         # tests = [
@@ -101,7 +101,7 @@ class Eval:
         self._duration = end - start
 
         # TODO
-        results = [test(responses) for test in self.tests]
+        results = [test(responses) for test in self.checks]
 
         self.results = EvalResult(
             llm_id=llm_id,
@@ -113,7 +113,7 @@ class Eval:
             characters_per_second=sum([len(r) for r in responses]) / self._duration,
             num_code_blocks=0,
             code_blocks_passed=0,
-            test_results=results,
+            check_results=results,
         )
 
     def __str__(self) -> str:
@@ -127,6 +127,6 @@ class Eval:
             prompts=[
                 {prompts}
             ],
-            tests=[{', '.join([str(type(t)) for t in self.tests])}]
+            tests=[{', '.join([str(type(t)) for t in self.checks])}]
         )
         """).strip()

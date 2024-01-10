@@ -1,9 +1,9 @@
 """TODO: document."""
 import pytest
-from llm_evals.tests import TestRegistry, EvalTest
+from llm_evals.checks import CheckRegistery, EvalCheck
 
 
-class FakeTest(EvalTest):
+class FakeTest(EvalCheck):
     """Mock test for testing."""
 
     def __init__(self, foo: str | None = None):
@@ -16,9 +16,9 @@ class FakeTest(EvalTest):
 
 
 @pytest.fixture()
-def registry() -> TestRegistry:
+def registry() -> CheckRegistery:
     """Fixture to provide a fresh instance of TestRegistry for each test."""
-    return TestRegistry()
+    return CheckRegistery()
 
 
 def test_register_model_success(registry):  # noqa
