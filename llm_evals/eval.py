@@ -17,18 +17,18 @@ class EvalResult(BaseModel):
     An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
     using specific hardware. The hardware is not applicable for services like OpenAI's API, but
     would be applicable for running locally or against specific/configurable hardware like Hugging
-    Face Endpoints or a custom server.
+    Face Endpoints or a custom server. The quality of responses might not change between hardware,
+    but the speed of responses could.
     """
 
     llm_id: str
     eval_id: str
     system: dict
-    # potential duplication of information, but i think we need it on this object
     responses: list[str]
     total_time: float
     response_characters: int
     characters_per_second: float
-    # this depends on a particular type of test, not sure i like that
+    # Code blocks are a particular type of check, not sure i like that here
     num_code_blocks: int
     code_blocks_passed: int
     check_results: list[object]
@@ -62,59 +62,93 @@ class Eval:
         self.metadata = metadata
         self.prompts = prompts
         self.checks = checks
-        self.results = None
+        self.result = None
 
     @classmethod
     def from_dict(cls, config: dict, results: dict | None = None) -> 'Eval':  # noqa: ANN102
-        """Creates an Eval object from a config/dictionary."""
+        """
+        Creates an Eval object from a config/dictionary.
+
+        Any custom checks must be registered with the CheckRegistry before calling this
+        method.
+
+        For example:
+
+        ```
+        from llm_evals.checks import register_check
+
+        @register_check('my_custom_check)
+        class MyCheck(EvalCheck):
+            ...
+        ```
+        """
         assert 'uuid' in config, "uuid is a required field when creating an Eval object"
         prompts = [Prompt(**prompt) for prompt in config['prompts']]
         # need to register the different types of tests
         # tests = [EvalTest(**test) for test in config['tests']]
-        tests = []
-        for test in config['tests']:
+        checks = []
+        for test in config['checks']:
             test['eval_uuid'] = config['uuid']
-            tests.append(CHECK_REGISTRY.create_check(
+            checks.append(CHECK_REGISTRY.create_check(
                 check_type=CheckType.to_enum(test.pop('type')),
                 params=test,
             ))
-        # tests = [
-        #     TEST_REGISTRY.create_test(test_type=TestType.to_enum(t.pop('type')), params=t)
-        #     for t in config['tests']
-        # ]
         obj = cls(
             uuid=config['uuid'],
             metadata=config['metadata'] if 'metadata' in config else {},
             prompts=prompts,
-            tests=tests,
+            checks=checks,
         )
         if results is not None:
-            obj.results = EvalResult(**results)
+            obj.result = EvalResult(**results)
         return obj
 
+    @classmethod
+    def from_yaml(cls, path: str, results: dict | None = None) -> 'Eval':  # noqa: ANN102
+        """
+        Creates an Eval object from a YAML file.
 
-    def __call__(self, llm_id: str, llm: Callable[[str], str]) -> dict:
+        Any custom checks must be registered with the CheckRegistry before calling this
+        method.
+
+        For example:
+
+        ```
+        from llm_evals.checks import register_check
+
+        @register_check('my_custom_check)
+        class MyCheck(EvalCheck):
+            ...
+        """
+        import yaml
+        with open(path) as f:
+            config = yaml.safe_load(f)
+        return cls.from_dict(config, results)
+
+
+    def __call__(self, llm_id: str, llm: Callable[[str], str]) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         start = time.time()
         responses = [llm(p.prompt) for p in self.prompts]
         end = time.time()
         self._duration = end - start
-
         # TODO
-        results = [test(responses) for test in self.checks]
-
-        self.results = EvalResult(
+        results = [check(responses) for check in self.checks]
+        code_block_results = [r for r in results if r.type == 'code_block']
+        self.result = EvalResult(
             llm_id=llm_id,
             eval_id=self.uuid,
-            system=self.metadata,
+            system=self.metadata,  # TODO: finalize this
             responses=responses,
             total_time=self._duration,
             response_characters=sum([len(r) for r in responses]),
             characters_per_second=sum([len(r) for r in responses]) / self._duration,
-            num_code_blocks=0,
-            code_blocks_passed=0,
+            # Code blocks are a particular type of check, not sure i like that here
+            # num_code_blocks=0,
+            # code_blocks_passed=0,
             check_results=results,
         )
+        return self.result
 
     def __str__(self) -> str:
         """Returns a string representation of the Eval."""
@@ -127,6 +161,6 @@ class Eval:
             prompts=[
                 {prompts}
             ],
-            tests=[{', '.join([str(type(t)) for t in self.checks])}]
+            checks=[{', '.join([str(type(t)) for t in self.checks])}]
         )
         """).strip()

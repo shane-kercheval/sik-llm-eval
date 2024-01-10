@@ -78,7 +78,11 @@ prompts:
 
       The last test case, which checks for non-integer input, will raise a TypeError since the function is not designed to handle this type of input. This test case is included to ensure that the function behaves as expected when encountering invalid input types.
 checks:
-  - type: python_code_blocks
+  - type: MATCH_REGEX
+    patterns:
+      - null
+      - def fib(n: int) -> list[int]:
+  - type: PYTHON_CODE_BLOCKS
     checks:
       - |
         def check(code_blocks: list[list[str]]) -> list[TestResult]:

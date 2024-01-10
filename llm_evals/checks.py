@@ -9,6 +9,7 @@ simple matching (i.e. does the LLM response exactly match the expected value pro
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 import re
+from typing import Type
 from pydantic import BaseModel
 
 
@@ -16,7 +17,8 @@ class CheckType(Enum):
     """TODO document."""
 
     MATCH = auto()
-    REGEX_MATCH = auto()
+    MATCH_CONTAINS = auto()
+    MATCH_REGEX = auto()
     PYTHON_FUNCTION = auto()
     PYTHON_CODE_BLOCKS = auto()
 
@@ -60,28 +62,36 @@ class CheckResult(BaseModel):
 class CheckRegistery:
     """Registry for types (subclasses) of EvalCheck."""
 
+    # TODO: test string registration type
+
     def __init__(self):
-        self._registry: dict[str, CheckType] = {}
+        self._registry: dict[str, str] = {}
 
-    def register(self, name: str, cls: CheckType) -> None:
+    def register(self, key: str | CheckType, check_type: Type[EvalCheck]) -> None:
         """Register an EvalCheck with the registry."""
-        if name in self._registry:
-            raise ValueError(f"An EvalCheck with name '{name}' is already registered.")
-        self._registry[name] = cls
+        if isinstance(key, CheckType):
+            key = key.name
+        if key in self._registry:
+            raise ValueError(f"An EvalCheck with name '{key}' is already registered.")
+        self._registry[key] = check_type
 
-    def create_check(self, check_type: CheckType, params: dict) -> EvalCheck:
+    def create_check(self, check_type: CheckType | str, params: dict) -> EvalCheck:
         """Create a test from a config."""
+        if isinstance(check_type, CheckType):
+            check_type = check_type.name
         if check_type not in self._registry:
             raise ValueError(f"CheckType '{check_type}' not found in registry.")
         return self._registry[check_type](**params)
 
-    def registered(self) -> dict[str, CheckType]:
+    def registered(self) -> dict[str, Type[EvalCheck]]:
         """List all registered EvalChecks."""
         return self._registry
 
-    def __contains__(self, value: str) -> bool:
+    def __contains__(self, key: CheckType | str) -> bool:
         """Check if a EvalCheck is registered."""
-        return value in self._registry
+        if isinstance(key, CheckType):
+            key = key.name
+        return key in self._registry
 
 
 def register_check(test_type: CheckType) -> EvalCheck:
@@ -97,6 +107,10 @@ def register_check(test_type: CheckType) -> EvalCheck:
 
 
 CHECK_REGISTRY = CheckRegistery()
+
+
+# TODO: __call__ should return a (list?) of CheckResult object(s) in addition to caching the
+# results in self.results
 
 
 @register_check(CheckType.MATCH)
@@ -122,8 +136,40 @@ class MatchCheck(EvalCheck):
             else:
                 self.results.append(CheckResult(result=r == v, description="TODO", metadata={}))
 
+@register_check(CheckType.MATCH_CONTAINS)
+class MatchContainsCheck(EvalCheck):
+    """
+    Checks if the LLM response (string) contains the provided value (i.e. the value/string is found
+    anywhere in the response).
 
-@register_check(CheckType.REGEX_MATCH)
+    If multiple prompts/responses are provided, a list of values must be provided that is the same
+    length as the number of prompts/responses.
+    """
+
+    def __init__(self,
+            eval_uuid: str,
+            values: list[str],
+            metadata: dict | None = None) -> None:
+        super().__init__(eval_uuid=eval_uuid, metadata=metadata)
+        self.values = values
+
+    def __call__(self, responses: list[str]) -> None:
+        """TODO document."""
+        assert len(responses) == len(self.values), \
+            f"Number of responses ({len(responses)}) does not equal number of match values " \
+            f"({len(self.values)})"
+        self.results = []
+        for r, v in zip(responses, self.values):
+            if v is None:
+                self.results.append(CheckResult(result=None, description="TODO", metadata={}))
+            else:
+                self.results.append(CheckResult(
+                    result=bool(v in r),
+                    description="TODO",
+                    metadata={'value': v}),
+                )
+
+@register_check(CheckType.MATCH_REGEX)
 class RegexMatchCheck(EvalCheck):
     """
     Checks if the LLM response (string) matches the provided regular expression.

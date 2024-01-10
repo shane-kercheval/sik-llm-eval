@@ -33,7 +33,7 @@ checks:
       description: This is an optional description of the test that explains what the test is checking or why the provided answer is correct.
       tags:
         - multiple-choice
-  - type: REGEX_MATCH
+  - type: MATCH_REGEX
     # the number of values must match the number of prompts
     # If a particular prompt should not be evaluated, use `null` as the value.
     patterns:
