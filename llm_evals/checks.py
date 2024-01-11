@@ -1,10 +1,10 @@
 """
 Defines classes for different types  of checks corresponding registry system.
 
-
 A "check" is a single test/check defined in an Eval (an Eval can have multiple checks). The check
 is responsible for evaluating the responses to the prompts. The intent of the check can range from
-simple matching (i.e. does the LLM response exactly match the expected value provided)  regex check to using an LLM to evaluate the responses.
+simple matching (i.e. does the LLM response exactly match the expected value provided) to using an
+LLM to evaluate the responses.
 """
 from abc import ABC, abstractmethod
 from enum import Enum, auto
@@ -218,7 +218,7 @@ class RegexMatchCheck(EvalCheck):
 @register_check(CheckType.PYTHON_FUNCTION)
 class PythonFunctionCheck(EvalCheck):
     """
-    Runs a Python function (using the LLM responses as input. A Python function is either
+    Runs a Python function (using the LLM responses as input). A Python function is either
     provided as a string, or the name of the function and the file path containing the function.
     A Python function test could be used for anything from a simple regex check to using an LLM
     to evaluate the responses.

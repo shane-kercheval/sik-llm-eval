@@ -41,8 +41,6 @@ checks:
       - This is the expected response. It must match exactly.
     metadata:
       description: This is an optional description of the test that explains what the test is checking or why the provided answer is correct.
-      tags:
-        - multiple-choice
   # This is a test that checks that any code blocks in the response run without error.
   - type: PYTHON_CODE_BLOCKS
     # optional; some prompts/responses assume that imports/functions are already defined so this
@@ -56,9 +54,15 @@ checks:
     # checks in the python the environment (the code has access to all global variables defined
     # in the code blocks) (e.g. variables, functions, etc. that are created) for the expected
     # values.
-    functions: |
+    function: |
         def check(code_blocks: list[str]) -> list[TestResult]:
           return True
+    # or
+    # function_name: custom_check
+    # function_file: example_test.py
+
+
+
   # This is an test that uses a python function to evaluate the response.
   # The function is defined in `example_test.py` and is called `test_function`.
   # The function must take a single argument, the response, and return a list of TestResult objects.

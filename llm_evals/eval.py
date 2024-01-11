@@ -2,7 +2,7 @@
 import time
 from typing import Callable
 from pydantic import BaseModel
-from llm_evals.checks import EvalCheck, CheckType, CHECK_REGISTRY
+from llm_evals.checks import CheckRegistery, EvalCheck, CheckType, CHECK_REGISTRY
 
 
 class Prompt(BaseModel):
@@ -65,7 +65,11 @@ class Eval:
         self.result = None
 
     @classmethod
-    def from_dict(cls, config: dict, results: dict | None = None) -> 'Eval':  # noqa: ANN102
+    def from_dict(
+            cls,  # noqa: ANN102
+            config: dict,
+            results: dict | None = None,
+            registry: CheckRegistery | None = None) -> 'Eval':
         """
         Creates an Eval object from a config/dictionary.
 
@@ -86,10 +90,11 @@ class Eval:
         prompts = [Prompt(**prompt) for prompt in config['prompts']]
         # need to register the different types of tests
         # tests = [EvalTest(**test) for test in config['tests']]
+        registry = registry or CHECK_REGISTRY
         checks = []
         for test in config['checks']:
             test['eval_uuid'] = config['uuid']
-            checks.append(CHECK_REGISTRY.create_check(
+            checks.append(registry.create_check(
                 check_type=CheckType.to_enum(test.pop('type')),
                 params=test,
             ))
@@ -132,7 +137,10 @@ class Eval:
         responses = [llm(p.prompt) for p in self.prompts]
         end = time.time()
         self._duration = end - start
-        # TODO
+        # TODO: can't actually do this because, for example, we can't run CODE_BLOCK checks until
+        # extract/execute code blocks in responses and we have to run `setup` from eval in same
+        # environment, and we need to pass the code blocks, not the
+        # responses
         results = [check(responses) for check in self.checks]
         code_block_results = [r for r in results if r.type == 'code_block']
         self.result = EvalResult(
