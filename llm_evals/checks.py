@@ -9,7 +9,7 @@ LLM to evaluate the responses.
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 import re
-from typing import Type
+from typing import Callable, Type
 from pydantic import BaseModel
 
 
@@ -39,10 +39,8 @@ class EvalCheck(ABC):
     checks). The EvalCheck is responsible for evaluating the responses to the prompts.
     """
 
-    # TODO: not sure if i need eval_uuid since it's in the EvalResult object
-    def __init__(self, eval_uuid: str, metadata: dict | None = None) -> None:
+    def __init__(self, metadata: dict | None = None) -> None:
         super().__init__()
-        self.eval_uuid = eval_uuid
         self.metadata = metadata or {}
         self.result = None
 
@@ -114,14 +112,13 @@ CHECK_REGISTRY = CheckRegistery()
 
 
 @register_check(CheckType.MATCH_EXACT)
-class MatchCheck(EvalCheck):
+class MatchExactCheck(EvalCheck):
     """TODO document."""
 
     def __init__(self,
-            eval_uuid: str,
             values: list[str],
             metadata: dict | None = None) -> None:
-        super().__init__(eval_uuid=eval_uuid, metadata=metadata)
+        super().__init__(metadata=metadata)
         self.values = values
 
     def __call__(self, responses: list[str]) -> None:
@@ -147,10 +144,9 @@ class MatchContainsCheck(EvalCheck):
     """
 
     def __init__(self,
-            eval_uuid: str,
             values: list[str],
             metadata: dict | None = None) -> None:
-        super().__init__(eval_uuid=eval_uuid, metadata=metadata)
+        super().__init__(metadata=metadata)
         self.values = values
 
     def __call__(self, responses: list[str]) -> None:
@@ -170,7 +166,7 @@ class MatchContainsCheck(EvalCheck):
                 )
 
 @register_check(CheckType.MATCH_REGEX)
-class RegexMatchCheck(EvalCheck):
+class MatchRegexCheck(EvalCheck):
     """
     Checks if the LLM response (string) matches the provided regular expression.
 
@@ -179,19 +175,17 @@ class RegexMatchCheck(EvalCheck):
     """
 
     def __init__(self,
-            eval_uuid: str,
             patterns: list[str],
             metadata: dict | None = None) -> None:
         """
         Args:
-            eval_uuid: TODO document.
             patterns:
                 The regular expression(s) to match the LLM response(s) against. If multiple
                 prompts/responses are provided, a list of regex values must be provided that is
                 the same length as the number of prompts/responses.
             metadata: TODO document.
         """
-        super().__init__(eval_uuid=eval_uuid, metadata=metadata)
+        super().__init__(metadata=metadata)
         if isinstance(patterns, str):
             patterns = [patterns]
         self.patterns = patterns
@@ -225,7 +219,6 @@ class PythonFunctionCheck(EvalCheck):
     """
 
     def __init__(self,
-            eval_uuid: str,
             function: str | None = None,
             function_name: str | None = None,
             function_file: str | None = None,
@@ -234,14 +227,13 @@ class PythonFunctionCheck(EvalCheck):
         TODO document.
 
         Args:
-            eval_uuid: TODO document.
             function: function definition as string value. If not provided, function_name and
                 function_file must be provided.
             function_name: The name of the function to import from `function_file`.
             function_file: The file containing the function to import.
             metadata: TODO document.
         """
-        super().__init__(eval_uuid=eval_uuid, metadata=metadata)
+        super().__init__(metadata=metadata)
         if function is None:
             assert function_name is not None and function_file is not None, \
                 "Either function or function_name and function_file must be provided."  # noqa: PT018
@@ -272,21 +264,17 @@ class PythonCodeBlocksCheck(EvalCheck):
     """  # noqa: D404
 
     def __init__(self,
-            eval_uuid: str,
             code_setup: str | None = None,
-            checks: list[dict] | None = None,
-            # function: str | None = None,
-            # function_name: str | None = None,
-            # function_file: str | None = None,
+            functions: list[Callable[[str], bool]] | None = None,
             metadata: dict | None = None) -> None:
-        super().__init__(eval_uuid=eval_uuid, metadata=metadata)
+        super().__init__(metadata=metadata)
         # if function is None:
         #     assert function_name is not None and function_file is not None, \
         #         "Either function or function_name and function_file must be provided."
         # self._function_str = function
         # self._function_name = function_name
         # self._function_file = function_file
-        self._checks = checks
+        self._functions = functions
         self._code_setup = code_setup
 
     def __call__(self, responses: list[str]) -> None:

@@ -12,6 +12,20 @@ class Prompt(BaseModel):
     ideal_response: str | None = None
 
 
+class Candidate(BaseModel):
+    """
+    A Candidate describes an LLM that may optionally be associated with specific parameters or
+    hardware.
+    """
+
+    name: str
+    model: Callable[[str], str]
+    description: str | None = None
+    uuid: str | None = None
+    parameters: dict | None = None
+    hardware: dict | None = None
+
+
 class EvalResult(BaseModel):
     """
     An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
@@ -21,35 +35,14 @@ class EvalResult(BaseModel):
     but the speed of responses could.
     """
 
-    eval_id: str
-    candidate_id: str
-    model_parameters: dict
-    system: dict
+    eval_obj: 'Eval'
+    candidate_obj: Candidate
     responses: list[str]
     total_time: float
     response_characters: int
     characters_per_second: float
-    # Code blocks are a particular type of check, not sure i like that here
     num_code_blocks: int
-    code_blocks_passed: int
     check_results: list[object]
-
-
-# class LLMModel(BaseModel):
-#     """TODO document."""
-#     name: str
-#     model: callable
-#     description: str | None = None
-#     metadata: dict | None = None   # ??? need hardwhere, where to specify? 
-
-
-class Candidate(BaseModel):
-    uuid: str
-    name: str
-    description: str
-    model: Callable[[str], str]
-    model_parameters: dict | None = None
-    hardware: dict | None = None
 
 
 class Eval:
@@ -70,15 +63,20 @@ class Eval:
 
     def __init__(
             self,
-            uuid: str,
             metadata: dict,
             prompts: list[Prompt],
             checks: list[EvalCheck],
+            uuid: str | None = None,
             ):
-        self.uuid = uuid
+        """
+        Args:
+            uuid: optional. Used to uniquely identify the Eval which is ultimately used to avoid
+                running the same Eval (against the same Candidate/llm) more than once.
+        """
         self.metadata = metadata
         self.prompts = prompts
         self.checks = checks
+        self.uuid = uuid
         self.result = None
 
     @classmethod
@@ -103,14 +101,12 @@ class Eval:
             ...
         ```
         """
-        assert 'uuid' in config, "uuid is a required field when creating an Eval object"
         prompts = [Prompt(**prompt) for prompt in config['prompts']]
         # need to register the different types of tests
         # tests = [EvalTest(**test) for test in config['tests']]
         registry = registry or CHECK_REGISTRY
         checks = []
         for test in config['checks']:
-            test['eval_uuid'] = config['uuid']
             checks.append(registry.create_check(
                 check_type=CheckType.to_enum(test.pop('type')),
                 params=test,
