@@ -2,9 +2,9 @@
 Defines classes for different types  of checks corresponding registry system.
 
 A "check" is a single test/check defined in an Eval (an Eval can have multiple checks). The check
-is responsible for evaluating the responses to the prompts. The intent of the check can range from
+is responsible for evaluating the response to the prompts. The intent of the check can range from
 simple matching (i.e. does the LLM response exactly match the expected value provided) to using an
-LLM to evaluate the responses.
+LLM to evaluate the response.
 """
 from abc import ABC, abstractmethod
 from enum import Enum, auto
@@ -35,8 +35,8 @@ class CheckType(Enum):
 
 class Check(ABC):
     """
-    An EvalCheck corresponds to a single test/check defined in an Eval (an Eval can have multiple
-    checks). The EvalCheck is responsible for evaluating the responses to the prompts.
+    A Check corresponds to a single test/check defined in an Eval (an Eval can have multiple
+    checks). The Check is responsible for evaluating the response to the prompt.
     """
 
     def __init__(self, metadata: dict | None = None) -> None:
@@ -62,7 +62,7 @@ class CheckResult(BaseModel):
 
 
 class CheckRegistery:
-    """Registry for types (subclasses) of EvalCheck."""
+    """Registry for types (subclasses) of Check."""
 
     # TODO: test string registration type
 
@@ -70,11 +70,11 @@ class CheckRegistery:
         self._registry: dict[str, str] = {}
 
     def register(self, key: str | CheckType, check_type: Type[Check]) -> None:
-        """Register an EvalCheck with the registry."""
+        """Register an Check with the registry."""
         if isinstance(key, CheckType):
             key = key.name
         if key in self._registry:
-            raise ValueError(f"An EvalCheck with name '{key}' is already registered.")
+            raise ValueError(f"An Check with name '{key}' is already registered.")
         self._registry[key] = check_type
 
     def create_check(self, check_type: CheckType | str, params: dict) -> Check:
@@ -86,18 +86,18 @@ class CheckRegistery:
         return self._registry[check_type](**params)
 
     def registered(self) -> dict[str, Type[Check]]:
-        """List all registered EvalChecks."""
+        """List all registered Checks."""
         return self._registry
 
     def __contains__(self, key: CheckType | str) -> bool:
-        """Check if a EvalCheck is registered."""
+        """Check if a Check is registered."""
         if isinstance(key, CheckType):
             key = key.name
         return key in self._registry
 
 
 def register_check(test_type: CheckType) -> Check:
-    """Decorator to register an EvalCheck."""
+    """Decorator to register an Check."""
     def decorator(cls: Check) -> Check:
         assert issubclass(cls, Check), \
             f"Test '{test_type}' ({cls.__name__}) must extend CheckType"
@@ -125,13 +125,10 @@ class MatchExactCheck(Check):
         super().__init__(metadata=metadata)
         self.values = values
 
-    def __call__(self, responses: list[str]) -> None:
+    def __call__(self, response: str) -> None:
         """TODO: document."""
-        assert len(responses) == len(self.values), \
-            f"Number of responses ({len(responses)}) does not equal number of match values " \
-            f"({len(self.values)})"
         self.results = []
-        for r, v in zip(responses, self.values):
+        for r, v in zip(response, self.values):
             if v is None:
                 self.results.append(CheckResult(result=None, description="TODO", metadata={}))
             else:
@@ -144,11 +141,8 @@ class MatchExactCheck(Check):
 @register_check(CheckType.MATCH_CONTAINS)
 class MatchContainsCheck(Check):
     """
-    Checks if the LLM response (string) contains the provided value (i.e. the value/string is found
-    anywhere in the response).
-
-    If multiple prompts/responses are provided, a list of values must be provided that is the same
-    length as the number of prompts/responses.
+    Checks if the LLM response (string) contains the provided value(s) (i.e. the value/string is
+    found anywhere in the response).
     """
 
     def __init__(self,
@@ -157,13 +151,10 @@ class MatchContainsCheck(Check):
         super().__init__(metadata=metadata)
         self.values = values
 
-    def __call__(self, responses: list[str]) -> None:
+    def __call__(self, response: str) -> None:
         """TODO document."""
-        assert len(responses) == len(self.values), \
-            f"Number of responses ({len(responses)}) does not equal number of match values " \
-            f"({len(self.values)})"
         self.results = []
-        for r, v in zip(responses, self.values):
+        for r, v in zip(response, self.values):
             if v is None:
                 self.results.append(CheckResult(result=None, description="TODO", metadata={}))
             else:
@@ -179,12 +170,7 @@ class MatchContainsCheck(Check):
 
 @register_check(CheckType.MATCH_REGEX)
 class MatchRegexCheck(Check):
-    """
-    Checks if the LLM response (string) matches the provided regular expression.
-
-    If multiple prompts/responses are provided, a list of regex values must be provided that is
-    the same length as the number of prompts/responses.
-    """
+    """Checks if the LLM response (string) matches the provided regular expression."""
 
     def __init__(self,
             patterns: list[str],
@@ -192,9 +178,7 @@ class MatchRegexCheck(Check):
         """
         Args:
             patterns:
-                The regular expression(s) to match the LLM response(s) against. If multiple
-                prompts/responses are provided, a list of regex values must be provided that is
-                the same length as the number of prompts/responses.
+                The regular expression(s) to match the LLM response(s) against.
             metadata: TODO document.
         """
         super().__init__(metadata=metadata)
@@ -202,14 +186,11 @@ class MatchRegexCheck(Check):
             patterns = [patterns]
         self.patterns = patterns
 
-    def __call__(self, responses: list[str]) -> None:
+    def __call__(self, response: str) -> None:
         """TODO document."""
-        assert len(responses) == len(self.patterns), \
-            f"Number of responses ({len(responses)}) does not equal number of regex values " \
-            f"({len(self.patterns)})"
         # patterns = [re.compile(r) if r is not None else None for r in self.regex]
         self.results = []
-        for r, p in zip(responses, self.patterns):
+        for r, p in zip(response, self.patterns):
             # TODO: should i return None if regex is None? Or should I Return a CheckResult object?
             # TODO: need to make sure this is consistent with other Check types
             if p is None:
@@ -228,10 +209,10 @@ class MatchRegexCheck(Check):
 @register_check(CheckType.PYTHON_FUNCTION)
 class PythonFunctionCheck(Check):
     """
-    Runs a Python function (using the LLM responses as input). A Python function is either
+    Runs a Python function (using the LLM response as input). A Python function is either
     provided as a string, or the name of the function and the file path containing the function.
     A Python function test could be used for anything from a simple regex check to using an LLM
-    to evaluate the responses.
+    to evaluate the response.
     """
 
     def __init__(self,
@@ -257,9 +238,9 @@ class PythonFunctionCheck(Check):
         self._function_name = function_name
         self._function_file = function_file
 
-    def __call__(self, responses: list[str]) -> None:
+    def __call__(self, response: str, ideal_response: str) -> None:
         """TODO document."""
-        return responses
+        return response
         # A slightly different requirement is that I have a python file and the name of a function
         # in that file. I need to dynamically import everything in that file and execute the
         # provided function, while passing in arguments. I don't want anything imported to affect
@@ -276,15 +257,20 @@ class PythonCodeBlocksCheck(Check):
 
     The difference between this class and PythonFunctionTest is that this class is responsible
     for running tests against the code blocks returned by the LLM, whereas PythonFunctionTest
-    is responsible for running tests against the (string) responses returned by the LLM.
+    is responsible for running tests against the (string) response returned by the LLM.
     """  # noqa: D404
 
     def __init__(self,
+            assert_code_blocks: bool = True,
             code_setup: str | None = None,
             functions: list[Callable[[list[str]], bool]] | None = None,
             metadata: dict | None = None) -> None:
         """
         args:
+            assert_code_blocks:
+                If True, ensure that the response contains code blocks. The code blocks do not
+                necessary need to run successfully, but they must be present.
+                If False, 
             functions:
                 A list of callables. Each callable is passed the list of code blocks that were
                 extracted from the response. The functions are executed in the same environment
@@ -298,6 +284,7 @@ class PythonCodeBlocksCheck(Check):
         # self._function_str = function
         # self._function_name = function_name
         # self._function_file = function_file
+        self._assert_code_blocks = assert_code_blocks
         self._functions = functions
         self._code_setup = code_setup
 

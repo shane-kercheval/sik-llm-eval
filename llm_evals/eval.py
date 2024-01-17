@@ -100,8 +100,8 @@ class Eval:
 
     def __init__(
             self,
-            metadata: dict,
             scenarios: list[Scenario],
+            metadata: dict | None = None,
             uuid: str | None = None,
             ):
         """

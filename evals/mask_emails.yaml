@@ -51,6 +51,7 @@ scenarios:
           - |
             def mask_email\s*\(\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(\s*:\s*[a-zA-Z_][a-zA-Z0-9_]*\s*)?\)\s*:
       - type: PYTHON_CODE_BLOCKS
+        assert_code_blocks: true
         code_setup: |
           import re
         functions:
