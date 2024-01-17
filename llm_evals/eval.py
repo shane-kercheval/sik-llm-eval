@@ -33,6 +33,16 @@ class EvalResult(BaseModel):
     code_blocks_passed: int
     check_results: list[object]
 
+
+
+class LLMModel(BaseModel):
+    """TODO document."""
+    name: str
+    model: callable
+    description: str | None = None
+    metadata: dict | None = None   # ??? need hardwhere, where to specify? 
+
+
 # need to Register the different types of Tests
 
 class Eval:
@@ -131,7 +141,10 @@ class Eval:
         return cls.from_dict(config, results)
 
 
-    def __call__(self, llm_id: str, llm: Callable[[str], str]) -> EvalResult:
+    def __call__(
+            self,
+            llm_id: str,
+            llm: Callable[[str], str]) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         start = time.time()
         responses = [llm(p.prompt) for p in self.prompts]
@@ -146,7 +159,7 @@ class Eval:
         self.result = EvalResult(
             llm_id=llm_id,
             eval_id=self.uuid,
-            system=self.metadata,  # TODO: finalize this
+            system=self.metadata,  # TODO: finalize this; can't just pull from unstructured dict
             responses=responses,
             total_time=self._duration,
             response_characters=sum([len(r) for r in responses]),

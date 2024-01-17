@@ -190,7 +190,7 @@ class OpenAIChat(ChatModel):
             model_name: str = 'gpt-3.5-turbo-1106',
             temperature: float = 0,
             max_tokens: int = 2000,
-            system_message: str = 'You are a helpful assistant.',
+            system_message: str = 'You are a helpful AI assistant.',
             streaming_callback: Callable[[StreamingEvent], None] | None = None,
             memory_manager: MemoryManager | None = None,
             timeout: int = 30,

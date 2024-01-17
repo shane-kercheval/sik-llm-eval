@@ -38,7 +38,7 @@ checks:
     # If a particular prompt should not be evaluated, use `null` as the value.
     patterns:
       - null  # the first prompt will not be evaluated
-      - This is the expected response. It must match exactly.
+      - mailto:.*@.*\.com
     metadata:
       description: This is an optional description of the test that explains what the test is checking or why the provided answer is correct.
   # This is a test that checks that any code blocks in the response run without error.

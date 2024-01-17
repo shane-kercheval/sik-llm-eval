@@ -4,14 +4,16 @@ project: Optional Project Name - Only used if using weights and biases
 log_wanb: True
 log_local: True  # Whether to log to local file
 parallel: True  # Should not run in parallel if running locally on a single CPU/GPU
-hardware:
-  gpu: 1
-  gpu_type: 3090
-  gpu_memory: 24
-  etc: ...
 samples: 1  # Number of samples to run for each eval/model combination
-models:
-  - name: gpt-3.5-turbo-1106  # could be anything but probably the official name/id of the model
+candidates:
+  - uuid:  # used to identiy the candidate so we can avoid re-running if we have already evaluated a candidate/eval
+    name: gpt-3.5-turbo-1106  # could be anything but probably the official name/id of the model
+    type: OPENAI  # could be anything but probably the official name/id of the model
+    parameters:
+      model: gpt-3.5-turbo-1106  # the official name/id of the model
+      system_message: You are a helpful assistant.
+      temperature: 0.1
+      max_tokens: 2048
     # A model is simply a callable class
     # The class must be defined in a file that is importable from the current directory
     # The class is instantiated with the model parameters provided below, and then called with the
@@ -19,14 +21,8 @@ models:
     # is expected to return a single response for each prompt. The model is expected maintain the
     # state/messages bewteen prompts if the intent is to evaluate the conversation.
     # a class is instantiated with the corresponding parameters provided
-    file: /models/models.py
-    class: OpenAIModel
-    parameters:
-      model: gpt-3.5-turbo-1106
-      system_message: You are a helpful assistant.
-      temperature: 0.1
-      max_tokens: 2048
-  - name: gpt-4-1106-preview
+  - uuid: gpt-4-1106-preview
+    type: CUSTOM
     file: /models/models.py
     class: OpenAIModel
     parameters:
@@ -34,7 +30,20 @@ models:
       system_message: You are a helpful assistant.
       temperature: 0.1
       max_tokens: 2048
+  - name: mistral_7b
+    type: HUGGING_FACE_ENDPOINT
+    huggingface_endpoint_id: 127.0.0.1:8000    
+    parameters:
+      model: mistral_7b
+      system_message: You are a helpful assistant.
+      temperature: 0.1
+      max_tokens: 2048
+    hardware:
+      gpu: 1
+      gpu_type: 3090
+      gpu_memory: 24
+      etc: ...
 evals:
-  - file: /evals/example_eval.yaml
-  - file: /evals/example_eval_2.yaml
+  - file: /evals/example_eval.yaml  # defines a single eval
+  - file: /evals/example_eval_2.yaml  # defines a single eval
   - directory: /evals/example_eval_directory  # reads all yaml files in the directory

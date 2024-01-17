@@ -80,8 +80,8 @@ prompts:
 checks:
   - type: MATCH_CONTAINS
     values:
-      - null
       - "def fib(n: int) -> list[int]:"
+      - null
   - type: PYTHON_CODE_BLOCKS
     checks:
       - |
