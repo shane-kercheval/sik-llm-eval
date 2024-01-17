@@ -33,7 +33,7 @@ class CheckType(Enum):
             raise ValueError(f"{name.upper()} is not a valid name for a CheckType member")
 
 
-class EvalCheck(ABC):
+class Check(ABC):
     """
     An EvalCheck corresponds to a single test/check defined in an Eval (an Eval can have multiple
     checks). The EvalCheck is responsible for evaluating the responses to the prompts.
@@ -47,6 +47,10 @@ class EvalCheck(ABC):
     @abstractmethod
     def __call__(self, responses: list[str]) -> None:
         """TODO document."""
+
+    def __str__(self) -> str:
+        """TODO document."""
+        return f"{self.__class__.__name__}(metadata={self.metadata})"
 
 
 class CheckResult(BaseModel):
@@ -65,7 +69,7 @@ class CheckRegistery:
     def __init__(self):
         self._registry: dict[str, str] = {}
 
-    def register(self, key: str | CheckType, check_type: Type[EvalCheck]) -> None:
+    def register(self, key: str | CheckType, check_type: Type[Check]) -> None:
         """Register an EvalCheck with the registry."""
         if isinstance(key, CheckType):
             key = key.name
@@ -73,7 +77,7 @@ class CheckRegistery:
             raise ValueError(f"An EvalCheck with name '{key}' is already registered.")
         self._registry[key] = check_type
 
-    def create_check(self, check_type: CheckType | str, params: dict) -> EvalCheck:
+    def create_check(self, check_type: CheckType | str, params: dict) -> Check:
         """Create a test from a config."""
         if isinstance(check_type, CheckType):
             check_type = check_type.name
@@ -81,7 +85,7 @@ class CheckRegistery:
             raise ValueError(f"CheckType '{check_type}' not found in registry.")
         return self._registry[check_type](**params)
 
-    def registered(self) -> dict[str, Type[EvalCheck]]:
+    def registered(self) -> dict[str, Type[Check]]:
         """List all registered EvalChecks."""
         return self._registry
 
@@ -92,10 +96,10 @@ class CheckRegistery:
         return key in self._registry
 
 
-def register_check(test_type: CheckType) -> EvalCheck:
+def register_check(test_type: CheckType) -> Check:
     """Decorator to register an EvalCheck."""
-    def decorator(cls: EvalCheck) -> EvalCheck:
-        assert issubclass(cls, EvalCheck), \
+    def decorator(cls: Check) -> Check:
+        assert issubclass(cls, Check), \
             f"Test '{test_type}' ({cls.__name__}) must extend CheckType"
         assert (test_type not in CHECK_REGISTRY), \
             f"Test '{test_type}' already registered."
@@ -112,7 +116,7 @@ CHECK_REGISTRY = CheckRegistery()
 
 
 @register_check(CheckType.MATCH_EXACT)
-class MatchExactCheck(EvalCheck):
+class MatchExactCheck(Check):
     """TODO document."""
 
     def __init__(self,
@@ -134,7 +138,7 @@ class MatchExactCheck(EvalCheck):
                 self.results.append(CheckResult(result=r == v, description="TODO", metadata={}))
 
 @register_check(CheckType.MATCH_CONTAINS)
-class MatchContainsCheck(EvalCheck):
+class MatchContainsCheck(Check):
     """
     Checks if the LLM response (string) contains the provided value (i.e. the value/string is found
     anywhere in the response).
@@ -166,7 +170,7 @@ class MatchContainsCheck(EvalCheck):
                 )
 
 @register_check(CheckType.MATCH_REGEX)
-class MatchRegexCheck(EvalCheck):
+class MatchRegexCheck(Check):
     """
     Checks if the LLM response (string) matches the provided regular expression.
 
@@ -210,7 +214,7 @@ class MatchRegexCheck(EvalCheck):
                 )
 
 @register_check(CheckType.PYTHON_FUNCTION)
-class PythonFunctionCheck(EvalCheck):
+class PythonFunctionCheck(Check):
     """
     Runs a Python function (using the LLM responses as input). A Python function is either
     provided as a string, or the name of the function and the file path containing the function.
@@ -251,7 +255,7 @@ class PythonFunctionCheck(EvalCheck):
 
 
 @register_check(CheckType.PYTHON_CODE_BLOCKS)
-class PythonCodeBlocksCheck(EvalCheck):
+class PythonCodeBlocksCheck(Check):
     """
     This class is responsible for executing Python code blocks returned by the LLM and then
     running the python function(s) defined in the test in the same environment as code blocks.

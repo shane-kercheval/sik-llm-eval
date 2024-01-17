@@ -1,9 +1,9 @@
 """TODO: document."""
 import pytest
-from llm_evals.checks import CheckRegistery, EvalCheck
+from llm_evals.checks import CheckRegistery, Check
 
 
-class FakeTest(EvalCheck):
+class FakeTest(Check):
     """Mock test for testing."""
 
     def __init__(self, foo: str | None = None):
