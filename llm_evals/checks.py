@@ -137,6 +137,10 @@ class MatchExactCheck(Check):
             else:
                 self.results.append(CheckResult(result=r == v, description="TODO", metadata={}))
 
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}(values={self.values}, metadata={self.metadata})"
+
 @register_check(CheckType.MATCH_CONTAINS)
 class MatchContainsCheck(Check):
     """
@@ -168,6 +172,10 @@ class MatchContainsCheck(Check):
                     description="TODO",
                     metadata={'value': v}),
                 )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}(values={self.values}, metadata={self.metadata})"
 
 @register_check(CheckType.MATCH_REGEX)
 class MatchRegexCheck(Check):
@@ -212,6 +220,10 @@ class MatchRegexCheck(Check):
                     description="TODO",
                     metadata={'regex': p}),
                 )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}(patterns={self.patterns}, metadata={self.metadata})"
 
 @register_check(CheckType.PYTHON_FUNCTION)
 class PythonFunctionCheck(Check):
@@ -296,3 +308,7 @@ class PythonCodeBlocksCheck(Check):
         # run code blocks
         # run function in same environent as code blocks
         pass
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}(functions={self._functions}, metadata={self.metadata})"
