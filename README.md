@@ -20,3 +20,4 @@ In order to test `HuggingFaceEndpointChat` in `llm_evals/llms/hugging_face.py` (
 # NOTES
 
 - perhaps `Scenario` can have system_message which would override system_message provided by Candidate?
+

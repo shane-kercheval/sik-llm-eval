@@ -269,8 +269,16 @@ class PythonCodeBlocksCheck(Check):
 
     def __init__(self,
             code_setup: str | None = None,
-            functions: list[Callable[[str], bool]] | None = None,
+            functions: list[Callable[[list[str]], bool]] | None = None,
             metadata: dict | None = None) -> None:
+        """
+        args:
+            functions:
+                A list of callables. Each callable is passed the list of code blocks that were
+                extracted from the response. The functions are executed in the same environment
+                that the code blocks were executed in. The code blocks may or may not have executed
+                successfully. The functions can test the enviroment or the code blocks.
+        """
         super().__init__(metadata=metadata)
         # if function is None:
         #     assert function_name is not None and function_file is not None, \
@@ -281,7 +289,7 @@ class PythonCodeBlocksCheck(Check):
         self._functions = functions
         self._code_setup = code_setup
 
-    def __call__(self, responses: list[str]) -> None:
+    def __call__(self, response: str) -> None:
         """TODO document."""
         # extract code blocks
         # run code setup if provided
