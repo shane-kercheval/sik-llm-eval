@@ -5,6 +5,7 @@ import time
 import requests
 from typing import Callable
 from transformers import PreTrainedTokenizer, AutoTokenizer
+from llm_evals.llms.message_formatters import llama_message_formatter
 from llm_evals.utilities.internal_utilities import retry_handler
 from llm_evals.llms.base import ChatModel, ExchangeRecord, StreamingEvent
 
@@ -80,44 +81,6 @@ def num_tokens(
     """
     tokens = tokenizer([value], return_tensors="pt").to(device)
     return len(tokens['input_ids'][0])
-
-
-def llama_message_formatter(
-        system_message: str | None,
-        history: list[ExchangeRecord] | None,
-        prompt: str | None) -> str:
-    """
-    A message formatter takes a list of messages (ExchangeRecord objects) and formats them
-    according to the best practices for interacting with the model.
-
-    For example, for Lamma-2-7b, the messages should be formatted as follows:
-        [INST] <<SYS>> You are a helpful assistant. <</SYS>> [/INST]
-        [INST] Hello, how are you? [/INST]
-        I am doing well. How are you?
-        [INST] I am doing well. How's the weather? [/INST]
-        It is sunny today.
-
-    https://huggingface.co/meta-llama/Llama-2-7b-chat-hf
-
-    Args:
-        system_message:
-            The content of the message associated with the "system" `role`.
-        history:
-            A list of ExchangeRecord objects, containing the prompt/response pairs.
-        prompt:
-            The next prompt to be sent to the model.
-    """
-    formatted_messages = []
-    if system_message:
-        formatted_messages.append(f"[INST] <<SYS>> {system_message} <</SYS>> [/INST]\n")
-    if history:
-        for message in history:
-            formatted_messages.append(
-                f"[INST] {message.prompt} [/INST]\n" + f"{message.response}\n",
-            )
-    if prompt:
-        formatted_messages.append(f"[INST] {prompt} [/INST]\n")
-    return ''.join(formatted_messages)
 
 
 class HuggingFaceEndpointChat(ChatModel):

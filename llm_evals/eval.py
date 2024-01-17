@@ -21,8 +21,9 @@ class EvalResult(BaseModel):
     but the speed of responses could.
     """
 
-    llm_id: str
     eval_id: str
+    candidate_id: str
+    model_parameters: dict
     system: dict
     responses: list[str]
     total_time: float
@@ -34,16 +35,22 @@ class EvalResult(BaseModel):
     check_results: list[object]
 
 
+# class LLMModel(BaseModel):
+#     """TODO document."""
+#     name: str
+#     model: callable
+#     description: str | None = None
+#     metadata: dict | None = None   # ??? need hardwhere, where to specify? 
 
-class LLMModel(BaseModel):
-    """TODO document."""
+
+class Candidate(BaseModel):
+    uuid: str
     name: str
-    model: callable
-    description: str | None = None
-    metadata: dict | None = None   # ??? need hardwhere, where to specify? 
+    description: str
+    model: Callable[[str], str]
+    model_parameters: dict | None = None
+    hardware: dict | None = None
 
-
-# need to Register the different types of Tests
 
 class Eval:
     """
@@ -141,13 +148,10 @@ class Eval:
         return cls.from_dict(config, results)
 
 
-    def __call__(
-            self,
-            llm_id: str,
-            llm: Callable[[str], str]) -> EvalResult:
+    def __call__(self, candidate: Candidate) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         start = time.time()
-        responses = [llm(p.prompt) for p in self.prompts]
+        responses = [candidate.model(p.prompt) for p in self.prompts]
         end = time.time()
         self._duration = end - start
         # TODO: can't actually do this because, for example, we can't run CODE_BLOCK checks until
