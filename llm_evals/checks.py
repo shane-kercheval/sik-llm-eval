@@ -168,10 +168,6 @@ def register_check(test_type: CheckType) -> Check:
 CHECK_REGISTRY = CheckRegistery()
 
 
-# TODO: __call__ should return a (list?) of CheckResult object(s) in addition to caching the
-# results in self.results
-
-
 @register_check(CheckType.MATCH_EXACT)
 class MatchExactCheck(Check):
     """TODO document."""
@@ -267,7 +263,7 @@ class PythonFunctionCheck(Check):
     """
 
     def __init__(self,
-            function: Callable[[str, str], list[Result]],
+            function: Callable[[str, str, str], list[Result]],
             metadata: dict | None = None) -> None:
         """
         TODO document.
@@ -284,11 +280,7 @@ class PythonFunctionCheck(Check):
 
     def __call__(self, prompt: str, response: str, ideal_response: str) -> Result:
         """TODO document."""
-        return None
-        # A slightly different requirement is that I have a python file and the name of a function
-        # in that file. I need to dynamically import everything in that file and execute the
-        # provided function, while passing in arguments. I don't want anything imported to affect
-        # the environment that is running it.
+        return self._function(prompt, response, ideal_response)
 
 
 @register_check(CheckType.PYTHON_CODE_BLOCKS)
