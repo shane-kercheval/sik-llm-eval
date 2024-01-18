@@ -20,7 +20,8 @@ class CheckType(Enum):
     MATCH_CONTAINS = auto()
     MATCH_REGEX = auto()
     PYTHON_FUNCTION = auto()
-    PYTHON_CODE_BLOCKS = auto()
+    PYTHON_CODE_BLOCKS_PRESENT = auto()  # tests that code blocks are present; does not run code blocks
+    PYTHON_CODE_BLOCKS_RUN = auto()  # tests that code blocks run successfully
 
     @staticmethod
     def to_enum(name: str) -> 'CheckType':
@@ -33,7 +34,7 @@ class CheckType(Enum):
             raise ValueError(f"{name.upper()} is not a valid name for a CheckType member")
 
 
-class Result(ABC):
+class CheckResult(ABC):
     """
     The result of an individual check. There can be multiple results per check and various Check
     objects can have different types of results, making large-scale summarization difficult if
@@ -63,7 +64,8 @@ class Result(ABC):
             )
         """).strip()
 
-class PassFailResult(Result):
+
+class PassFailResult(CheckResult):
     """TODO document."""
 
     @property
@@ -72,7 +74,7 @@ class PassFailResult(Result):
         return self.value
 
 
-class ScoreResult(Result):
+class ScoreResult(CheckResult):
     """TODO document."""
 
     def __init__(
@@ -110,11 +112,11 @@ class Check(ABC):
         self.metadata = metadata or {}
 
     @abstractmethod
-    def __call__(self, response: str) -> list[Result]:
-        """A check can have multiple sub-checks/results."""
+    def __call__(self, response: str) -> CheckResult:
+        """TODO."""
 
     def __str__(self) -> str:
-        """TODO document."""
+        """String representation."""
         return f"{self.__class__.__name__}(metadata={self.metadata})"
 
 
@@ -173,24 +175,22 @@ class MatchExactCheck(Check):
     """TODO document."""
 
     def __init__(self,
-            values: list[str],
+            value: list[str],
             metadata: dict | None = None) -> None:
         super().__init__(metadata=metadata)
-        self.values = values
+        self.value = value
 
-    def __call__(self, response: str) -> list[Result]:
+    def __call__(self, response: str) -> CheckResult:
         """TODO: document."""
-        return [
-            PassFailResult(
-                value=response == value,
-                metadata={'type': CheckType.MATCH_EXACT.name, 'value': value},
-            )
-            for value in self.values
-        ]
+        return PassFailResult(
+            value=response == self.value,
+            metadata={'type': CheckType.MATCH_EXACT.name, 'value': self.value},
+        )
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self.__class__.__name__}(values={self.values}, metadata={self.metadata})"
+        return f"{self.__class__.__name__}(value={self.value}, metadata={self.metadata})"
+
 
 @register_check(CheckType.MATCH_CONTAINS)
 class MatchContainsCheck(Check):
@@ -200,24 +200,21 @@ class MatchContainsCheck(Check):
     """
 
     def __init__(self,
-            values: list[str],
+            value: str,
             metadata: dict | None = None) -> None:
         super().__init__(metadata=metadata)
-        self.values = values
+        self.value = value
 
-    def __call__(self, response: str) -> list[Result]:
+    def __call__(self, response: str) -> CheckResult:
         """TODO: document."""
-        return [
-            PassFailResult(
-                value=value in response,
-                metadata={'type': CheckType.MATCH_CONTAINS.name, 'value': value},
-            )
-            for value in self.values
-        ]
+        return PassFailResult(
+            value=self.value in response,
+            metadata={'type': CheckType.MATCH_CONTAINS.name, 'value': self.value},
+        )
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self.__class__.__name__}(values={self.values}, metadata={self.metadata})"
+        return f"{self.__class__.__name__}(value='{self.value}', metadata={self.metadata})"
 
 
 @register_check(CheckType.MATCH_REGEX)
@@ -225,32 +222,27 @@ class MatchRegexCheck(Check):
     """Checks if the LLM response (string) matches the provided regular expression."""
 
     def __init__(self,
-            patterns: list[str],
+            pattern: list[str],
             metadata: dict | None = None) -> None:
         """
         Args:
-            patterns:
+            pattern:
                 The regular expression(s) to match the LLM response(s) against.
             metadata: TODO document.
         """
         super().__init__(metadata=metadata)
-        if isinstance(patterns, str):
-            patterns = [patterns]
-        self.patterns = patterns
+        self.pattern = pattern
 
-    def __call__(self, response: str) -> list[Result]:
+    def __call__(self, response: str) -> CheckResult:
         """TODO document."""
-        return [
-            PassFailResult(
-                value=re.compile(pattern).match(response) is not None,
-                metadata={'type': CheckType.MATCH_REGEX.name, 'pattern': pattern},
-            )
-            for pattern in self.patterns
-        ]
+        return PassFailResult(
+            value=re.compile(self.pattern).match(response) is not None,
+            metadata={'type': CheckType.MATCH_REGEX.name, 'pattern': self.pattern},
+        )
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self.__class__.__name__}(patterns={self.patterns}, metadata={self.metadata})"
+        return f"{self.__class__.__name__}(pattern='{self.pattern}', metadata={self.metadata})"
 
 
 @register_check(CheckType.PYTHON_FUNCTION)
@@ -260,10 +252,13 @@ class PythonFunctionCheck(Check):
     provided as a string, or the name of the function and the file path containing the function.
     A Python function test could be used for anything from a simple regex check to using an LLM
     to evaluate the response.
+
+    TODO: document, named parameters are required for the function so we can pass in correct
+    parameters.
     """
 
     def __init__(self,
-            function: Callable[[str, str, str], list[Result]],
+            function: Callable[[str, str, str], list[CheckResult]],
             metadata: dict | None = None) -> None:
         """
         TODO document.
@@ -278,28 +273,75 @@ class PythonFunctionCheck(Check):
         super().__init__(metadata=metadata)
         self._function = function
 
-    def __call__(self, prompt: str, response: str, ideal_response: str) -> Result:
-        """TODO document."""
-        return self._function(prompt, response, ideal_response)
+    def __call__(
+            self,
+            **kwargs) -> CheckResult:  # noqa: ANN003
+        """
+        Calls the function based on the named parameters of the function supplied during object
+        creation.
+
+        The named parameters of the function can be kwargs (which passes all options below to the
+        function) or any combination of the following:
+            - prompt
+            - ideal_response
+            - response
+            - code_blocks
+        """
+        return self._function(**kwargs)
 
 
-@register_check(CheckType.PYTHON_CODE_BLOCKS)
-class PythonCodeBlocksCheck(Check):
+@register_check(CheckType.PYTHON_CODE_BLOCKS_PRESENT)
+class PythonCodeBlocksPresent(Check):
     """
-    This class is responsible for executing Python code blocks returned by the LLM and then
-    running the python function(s) defined in the test in the same environment as code blocks.
-    For example, if the code blocks define a pandas DataFrame, the function could be used to
-    check that the shape or data of the DataFrame matches expectations.
+    Checks that the response contains code blocks. The code blocks do not necessary need to run
+    successfully, but they must be present.
+    """
 
-    The difference between this class and PythonFunctionTest is that this class is responsible
-    for running tests against the code blocks returned by the LLM, whereas PythonFunctionTest
-    is responsible for running tests against the (string) response returned by the LLM.
+    def __init__(self,
+            min_code_blocks: int = 1,
+            metadata: dict | None = None) -> None:
+        super().__init__(metadata=metadata)
+        self._min_code_blocks = min_code_blocks
+
+    def __call__(self, code_blocks: str) -> CheckResult:
+        """TODO document."""
+        return PassFailResult(
+            value=len(code_blocks) >= self._min_code_blocks,
+            metadata={
+                'type': CheckType.PYTHON_CODE_BLOCKS_PRESENT.name,
+            },
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}(min_code_blocks={self._min_code_blocks}, metadata={self.metadata})"  # noqa
+
+
+@register_check(CheckType.PYTHON_CODE_BLOCKS_RUN)
+class PythonCodeBlocksRun(Check):
+    """
+    Unlike other checks, this check aggregates several metrics into a single result.
+        - how many code blocks were generated
+        - how many code blocks ran successfully
+        - how custom functions ran successfully
+
+    NOTE: this check will run all code blocks. If you have multiple PythonCodeBlocksRun (e.g. one
+    for each PromptTest, then the code blocks will be run multiple times. It's recommended to
+    only have one PythonCodeBlocksRun which is ran on the last PromptTest.)
+
+    # This class is responsible for executing Python code blocks returned by the LLM and then
+    # running the python function(s) defined in the test in the same environment as code blocks.
+    # For example, if the code blocks define a pandas DataFrame, the function could be used to
+    # check that the shape or data of the DataFrame matches expectations.
+
+    # The difference between this class and PythonFunctionTest is that this class is responsible
+    # for running tests against the code blocks returned by the LLM, whereas PythonFunctionTest
+    # is responsible for running tests against the (string) response returned by the LLM.
     """  # noqa: D404
 
     def __init__(self,
-            assert_code_blocks: bool = True,
             code_setup: str | None = None,
-            functions: list[Callable[[list[str], str, dict], list[Result]]] | None = None,
+            functions: list[Callable[[list[str], str, dict], list[CheckResult]]] | None = None,
             metadata: dict | None = None) -> None:
         """
         args:
@@ -314,54 +356,47 @@ class PythonCodeBlocksCheck(Check):
                 successfully. The functions can test the enviroment or the code blocks.
         """
         super().__init__(metadata=metadata)
-        self._assert_code_blocks = assert_code_blocks
-        self._functions = functions
+        self._functions = functions or []
         self._code_setup = code_setup
 
-    def __call__(self, response: str, environment: dict) -> list[Result]:
+    def __call__(self, code_blocks: list[str]) -> list[CheckResult]:
         """TODO document."""
-        check_results = []
-        # extract code blocks
-        code_blocks = []
-        if self._assert_code_blocks:
-            check_results.append(PassFailResult(
-                value=len(code_blocks) >= 1,
-                metadata={
-                    'type': CheckType.PYTHON_CODE_BLOCKS.name,
-                    'subtype': 'assert_code_blocks'
-                },
-            ))
-        # run code setup if provided
-        if self._code_setup is not None:
-            exec(self._code_setup, environment)
-        # run code blocks; capture if the code blocks run successfully
-        for code in code_blocks:
-            try:
-                exec(code, environment)
-                check_results.append(PassFailResult(
-                    value=True,
-                    metadata={
-                        'type': CheckType.PYTHON_CODE_BLOCKS.name,
-                        'subtype': 'code_block',
-                        'code': code,
-                    },
-                ))
-            except Exception as e:
-                check_results.append(PassFailResult(
-                    value=False,
-                    metadata={
-                        'type': CheckType.PYTHON_CODE_BLOCKS.name,
-                        'subtype': 'code_block',
-                        'code': code,
-                        'exception': e,
-                    },
-                ))
-        for func in self.functions:
-            # run function in same environent as code blocks
-            # check_results.append(func(code_blocks, response, environment))
-            pass
 
-        return check_results
+        # run code blocks and any setup code
+        code_block_errors = []
+        if code_blocks:
+            environment = {}
+            if self._code_setup is not None:
+                exec(self._code_setup, environment)
+            # run code blocks; capture if the code blocks run successfully
+            for code in code_blocks:
+                try:
+                    exec(code, environment)
+                    code_block_errors.append(None)
+                except Exception as e:
+                    code_block_errors.append(e)
+            for func in self._functions:
+                # run function in same environent as code blocks
+                # check_results.append(func(code_blocks, response, environment))
+                pass
+            # return CodeBlocksRunResult(
+                
+            # )
+        num_code_blocks = len(code_blocks)
+        num_code_blocks_successful = len([e for e in code_block_errors if e is None])
+
+        return ScoreResult(
+            value=num_code_blocks_successful / num_code_blocks if num_code_blocks > 0 else 0.0,
+            success_threshold=1.0,
+            metadata={
+                'type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+                'num_code_blocks': num_code_blocks,
+                'num_code_blocks_successful': num_code_blocks_successful,
+                'code_blocks': code_blocks,
+                'code_block_errors': code_block_errors,
+                'function_check_results': None, # TODO
+            },
+        )
 
     def __str__(self) -> str:
         """String representation."""

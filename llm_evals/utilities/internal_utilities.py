@@ -1,9 +1,9 @@
 
 """Helper functions and classes that are not intended to be used externally."""
 
-import inspect
 import datetime
 import hashlib
+from inspect import signature
 from collections.abc import Callable
 import re
 import io
@@ -141,3 +141,21 @@ def extract_variables(value: str) -> set[str]:
     # The regex pattern looks for @ followed by word characters or underscores and
     # ensures that it is not preceded by a word character or dot.
     return set(re.findall(r'(?<![\w.])@([a-zA-Z0-9_]+)(?![a-zA-Z0-9_]*\.[a-zA-Z0-9_])', value))
+
+
+def extract_valid_parameters(func: callable, parameters: dict) -> dict:
+    """
+
+    TODO: TEST. test both functions and classes e.g. obj.__call__
+
+
+    Given a dictionary of possible parameters to pass a function `func`, returns a dictionary
+    containing only the parameters that are valid for `func`.
+
+    If `func` has a parameter named `kwargs`, then all parameters are valid and the original
+    dictionary is returned.
+    """
+    valid_parameters = list(signature(func).parameters.keys())
+    if 'kwargs' in valid_parameters:  # all parameters are valid
+        return parameters
+    return {p: parameters[p] for p in valid_parameters}

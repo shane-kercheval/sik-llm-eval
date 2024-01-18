@@ -5,14 +5,15 @@ import time
 from typing import Callable
 from pydantic import BaseModel
 import yaml
-from llm_evals.checks import CheckRegistery, Check, CheckType, CHECK_REGISTRY, Result
+from llm_evals.checks import CheckRegistery, Check, CheckType, CHECK_REGISTRY, CheckResult
+from llm_evals.utilities.internal_utilities import extract_valid_parameters
 
 
-class Scenario(BaseModel):
+class PromptTest(BaseModel):
     """
     TODO document.
 
-    Checks can be optional because even a scenario without checks still collects responses (that
+    Checks can be optional because even a test without checks still collects responses (that
     can be visually/subjectively compared against either the ideal response or the responses from
     other LLMs).
     """
@@ -27,7 +28,7 @@ class Scenario(BaseModel):
         arbitrary_types_allowed = True
 
     def __str__(self) -> str:
-        """Returns a string representation of the Scenario."""
+        """Returns a string representation of the PromptTest."""
         if self.checks:
             indent_value = ' ' * 16
             checks = '[\n' + indent_value
@@ -43,7 +44,7 @@ class Scenario(BaseModel):
         else:
             ideal_response = ''
         return dedent(f"""
-        Scenario(
+        {self.__class__.__name__}(
             prompt='{self.prompt}',{ideal_response}
             checks={checks},
         )
@@ -79,7 +80,7 @@ class Candidate(BaseModel):
         parameters = '' if not self.parameters else f'\n            parameters={self.parameters},'
         system_info = '' if not self.system_info else f'\n            system_info={self.system_info},'  # noqa
         return dedent(f"""
-        Candidate(
+        {self.__class__.__name__}(
             uuid={self.uuid},
             name={self.name},
             description={self.description},{parameters}{system_info}
@@ -102,7 +103,7 @@ class EvalResult:
             candidate_obj: Candidate,
             responses: list[str],
             response_characters: int,
-            results: list[list[Result]],
+            results: list[list[CheckResult]],
             total_time_seconds: float,
             characters_per_second: float,
             ) -> None:
@@ -151,7 +152,7 @@ class EvalResult:
     # @property
     # def check_results(self) -> str:
     #     """TODO document."""
-    #     return [c.result for s in self.eval_obj.scenarios for c in s.checks]
+    #     return [c.result for s in self.eval_obj.test_sequence for c in s.checks]
 
 
 class Eval:
@@ -172,7 +173,7 @@ class Eval:
 
     def __init__(
             self,
-            scenarios: list[Scenario],
+            test_sequence: list[PromptTest],
             metadata: dict | None = None,
             uuid: str | None = None,
             ):
@@ -182,7 +183,7 @@ class Eval:
                 running the same Eval (against the same Candidate/llm) more than once.
         """
         self.metadata = metadata
-        self.scenarios = scenarios
+        self.test_sequence = test_sequence
         self.uuid = uuid
         self.result = None
 
@@ -208,7 +209,7 @@ class Eval:
             ...
         ```
         """
-        # prompts = [Scenario(**prompt) for prompt in config['scenarios']]
+        # prompts = [Scenario(**prompt) for prompt in config['test_sequence']]
         # need to register the different types of tests
         # tests = [EvalTest(**test) for test in config['tests']]
         registry = registry or CHECK_REGISTRY
@@ -221,15 +222,15 @@ class Eval:
                 checks.append(check)
             return checks
 
-        scenarios = []
-        for scenario in config['scenarios']:
-            checks = create_checks(scenario.pop('checks')) if 'checks' in scenario else None
-            scenarios.append(Scenario(**scenario, checks=checks))
+        test_sequence = []
+        for test in config['test_sequence']:
+            checks = create_checks(test.pop('checks')) if 'checks' in test else None
+            test_sequence.append(PromptTest(**test, checks=checks))
 
         obj = cls(
             uuid=config['uuid'],
             metadata=config['metadata'] if 'metadata' in config else {},
-            scenarios=scenarios,
+            test_sequence=test_sequence,
         )
         if results is not None:
             obj.result = EvalResult(**results)
@@ -260,27 +261,35 @@ class Eval:
     def __call__(self, candidate: Candidate) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         start = time.time()
-        responses = [candidate.model(p.prompt) for p in self.scenarios]
+        responses = [candidate.model(p.prompt) for p in self.test_sequence]
         end = time.time()
         self._duration = end - start
         results = []
-        for scenario, response in zip(self.scenarios, responses):
+        for test, response in zip(self.test_sequence, responses):
             check_results = []
             # this probably won't work with CODE blocks
             # TODO: how do i retain the enviornment of the code block so during the next round of
             # I can execute the subsequent code block in the same environment as the first code
             # blocks?
-            environment = {}
+            # TODO: Extract and report number of code blocks generated
+            # If there are code blocks generated, run ...???
+            # only need to run if there are CODE_BLOCKS_RUN or CODE_BLOCKS_EVIRONMENT
+            # i don't like this dependency
+            # hnmm.m.m.mm.m..m..m.mm.m.
+            # if there are code blocks. How do i know they are python? I don't. I need to know
+            # I can't run them here, this code shouldn't know how to run them because someone
+            # needs to register the the check which knows how to run them and which language they
+            # are, but i do need to distract them
+            code_blocks = []  # TODO: extract_code_blocks()
             parameters = {
-                'prompt': scenario.prompt,
-                'ideal_response': scenario.ideal_response,
+                'prompt': test.prompt,
+                'ideal_response': test.ideal_response,
                 'response': response,
-                'environment': environment,
+                'code_blocks': code_blocks,
             }
-            for check in scenario.checks:
-                # dynamically get the valid parameters for the current check object
-                valid_parameters = list(signature(check.__call__).parameters.keys())
-                check_results.append(check(**{p: parameters[p] for p in valid_parameters}))
+            for check in test.checks:
+                valid_parameters = extract_valid_parameters(check.__call__, parameters)
+                check_results.append(check(**valid_parameters))
             results.append(check_results)
 
         self.result = EvalResult(
@@ -296,17 +305,17 @@ class Eval:
 
     def __str__(self) -> str:
         """Returns a string representation of the Eval."""
-        if self.scenarios:
-            scenarios = '[\n'
+        if self.test_sequence:
+            test_sequence = '[\n'
             indent_value = ' ' * 16
-            scenarios += ',\n'.join([indent(str(s), indent_value) for s in self.scenarios])
-            scenarios += '\n            ]'
+            test_sequence += ',\n'.join([indent(str(s), indent_value) for s in self.test_sequence])
+            test_sequence += '\n            ]'
         else:
-            scenarios = '[]'
+            test_sequence = '[]'
         metadata = '' if not self.metadata else f'\n            metadata={self.metadata},'
         return dedent(f"""
         Eval(
             uuid={self.uuid},{metadata}
-            scenarios={scenarios},
+            test_sequence={test_sequence},
         )
         """).strip()
