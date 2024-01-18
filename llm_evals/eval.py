@@ -1,4 +1,5 @@
 """TODO document."""
+from inspect import signature
 from textwrap import dedent, indent
 import time
 from typing import Callable
@@ -256,7 +257,6 @@ class Eval:
             config = yaml.safe_load(f)
         return cls.from_dict(config, results)
 
-
     def __call__(self, candidate: Candidate) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         start = time.time()
@@ -270,8 +270,17 @@ class Eval:
             # TODO: how do i retain the enviornment of the code block so during the next round of
             # I can execute the subsequent code block in the same environment as the first code
             # blocks?
+            environment = {}
+            parameters = {
+                'prompt': scenario.prompt,
+                'ideal_response': scenario.ideal_response,
+                'response': response,
+                'environment': environment,
+            }
             for check in scenario.checks:
-                check_results.append(check(response))
+                # dynamically get the valid parameters for the current check object
+                valid_parameters = list(signature(check.__call__).parameters.keys())
+                check_results.append(check(**{p: parameters[p] for p in valid_parameters}))
             results.append(check_results)
 
         self.result = EvalResult(

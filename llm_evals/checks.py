@@ -90,6 +90,17 @@ class ScoreResult(Result):
             return None
         return self.value >= self.success_threshold
 
+    def __str__(self) -> str:
+        """TODO document."""
+        return dedent(f"""
+            {self.__class__.__name__}(
+                success={self.success},
+                value={self.value},
+                success_threshold={self.success_threshold},
+                metadata={self.metadata}
+            )
+        """).strip()
+
 
 class Check(ABC):
     """TODO."""
@@ -233,7 +244,6 @@ class MatchRegexCheck(Check):
 
     def __call__(self, response: str) -> list[Result]:
         """TODO document."""
-        re.compile(self.patterns[0]).match(response)
         return [
             PassFailResult(
                 value=re.compile(pattern).match(response) is not None,
@@ -257,9 +267,7 @@ class PythonFunctionCheck(Check):
     """
 
     def __init__(self,
-            function: str | None = None,
-            function_name: str | None = None,
-            function_file: str | None = None,
+            function: Callable[[str, str], list[Result]],
             metadata: dict | None = None) -> None:
         """
         TODO document.
@@ -272,16 +280,11 @@ class PythonFunctionCheck(Check):
             metadata: TODO document.
         """
         super().__init__(metadata=metadata)
-        if function is None:
-            assert function_name is not None and function_file is not None, \
-                "Either function or function_name and function_file must be provided."  # noqa: PT018
-        self._function_str = function
-        self._function_name = function_name
-        self._function_file = function_file
+        self._function = function
 
-    def __call__(self, response: str, ideal_response: str) -> None:
+    def __call__(self, prompt: str, response: str, ideal_response: str) -> Result:
         """TODO document."""
-        return response
+        return None
         # A slightly different requirement is that I have a python file and the name of a function
         # in that file. I need to dynamically import everything in that file and execute the
         # provided function, while passing in arguments. I don't want anything imported to affect
@@ -304,7 +307,7 @@ class PythonCodeBlocksCheck(Check):
     def __init__(self,
             assert_code_blocks: bool = True,
             code_setup: str | None = None,
-            functions: list[Callable[[list[str]], bool]] | None = None,
+            functions: list[Callable[[list[str]], list[Result]]] | None = None,
             metadata: dict | None = None) -> None:
         """
         args:
@@ -319,17 +322,11 @@ class PythonCodeBlocksCheck(Check):
                 successfully. The functions can test the enviroment or the code blocks.
         """
         super().__init__(metadata=metadata)
-        # if function is None:
-        #     assert function_name is not None and function_file is not None, \
-        #         "Either function or function_name and function_file must be provided."
-        # self._function_str = function
-        # self._function_name = function_name
-        # self._function_file = function_file
         self._assert_code_blocks = assert_code_blocks
         self._functions = functions
         self._code_setup = code_setup
 
-    def __call__(self, response: str) -> None:
+    def __call__(self, response: str, environment: dict) -> list[Result]:
         """TODO document."""
         # extract code blocks
         # run code setup if provided
