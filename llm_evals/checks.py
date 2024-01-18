@@ -56,7 +56,7 @@ class Result(ABC):
     def __str__(self) -> str:
         """TODO document."""
         return dedent(f"""
-            Result(
+            {self.__class__.__name__}(
                 success={self.success},
                 value={self.value},
                 metadata={self.metadata}
@@ -70,16 +70,6 @@ class PassFailResult(Result):
     def success(self) -> bool:
         """TODO document."""
         return self.value
-
-    def __str__(self) -> str:
-        """TODO document."""
-        return dedent(f"""
-            Result(
-                success={self.success},
-                value={self.value},
-                metadata={self.metadata}
-            )
-        """).strip()
 
 
 class ScoreResult(Result):
@@ -184,7 +174,10 @@ class MatchExactCheck(Check):
     def __call__(self, response: str) -> list[Result]:
         """TODO: document."""
         return [
-            PassFailResult(value=response == value, metadata={'value': value})
+            PassFailResult(
+                value=response == value,
+                metadata={'type': CheckType.MATCH_EXACT.name, 'value': value},
+            )
             for value in self.values
         ]
 
@@ -208,7 +201,10 @@ class MatchContainsCheck(Check):
     def __call__(self, response: str) -> list[Result]:
         """TODO: document."""
         return [
-            PassFailResult(value=value in response, metadata={'value': value})
+            PassFailResult(
+                value=value in response,
+                metadata={'type': CheckType.MATCH_CONTAINS.name, 'value': value},
+            )
             for value in self.values
         ]
 
@@ -237,10 +233,11 @@ class MatchRegexCheck(Check):
 
     def __call__(self, response: str) -> list[Result]:
         """TODO document."""
+        re.compile(self.patterns[0]).match(response)
         return [
             PassFailResult(
-                value=re.compile(pattern).match(response),
-                metadata={'pattern': pattern},
+                value=re.compile(pattern).match(response) is not None,
+                metadata={'type': CheckType.MATCH_REGEX.name, 'pattern': pattern},
             )
             for pattern in self.patterns
         ]
