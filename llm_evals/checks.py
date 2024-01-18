@@ -307,7 +307,7 @@ class PythonCodeBlocksCheck(Check):
     def __init__(self,
             assert_code_blocks: bool = True,
             code_setup: str | None = None,
-            functions: list[Callable[[list[str]], list[Result]]] | None = None,
+            functions: list[Callable[[list[str], str, dict], list[Result]]] | None = None,
             metadata: dict | None = None) -> None:
         """
         args:
@@ -328,11 +328,48 @@ class PythonCodeBlocksCheck(Check):
 
     def __call__(self, response: str, environment: dict) -> list[Result]:
         """TODO document."""
+        check_results = []
         # extract code blocks
+        code_blocks = []
+        if self._assert_code_blocks:
+            check_results.append(PassFailResult(
+                value=len(code_blocks) >= 1,
+                metadata={
+                    'type': CheckType.PYTHON_CODE_BLOCKS.name,
+                    'subtype': 'assert_code_blocks'
+                },
+            ))
         # run code setup if provided
-        # run code blocks
-        # run function in same environent as code blocks
-        return []
+        if self._code_setup is not None:
+            exec(self._code_setup, environment)
+        # run code blocks; capture if the code blocks run successfully
+        for code in code_blocks:
+            try:
+                exec(code, environment)
+                check_results.append(PassFailResult(
+                    value=True,
+                    metadata={
+                        'type': CheckType.PYTHON_CODE_BLOCKS.name,
+                        'subtype': 'code_block',
+                        'code': code,
+                    },
+                ))
+            except Exception as e:
+                check_results.append(PassFailResult(
+                    value=False,
+                    metadata={
+                        'type': CheckType.PYTHON_CODE_BLOCKS.name,
+                        'subtype': 'code_block',
+                        'code': code,
+                        'exception': e,
+                    },
+                ))
+        for func in self.functions:
+            # run function in same environent as code blocks
+            # check_results.append(func(code_blocks, response, environment))
+            pass
+
+        return check_results
 
     def __str__(self) -> str:
         """String representation."""
