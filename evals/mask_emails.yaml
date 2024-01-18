@@ -1,4 +1,5 @@
 uuid: 8C297EA8-42B9-4237-9571-5C95A042E3BA
+version: 1
 metadata:
   name: Python Function to Mask Emails
   description: Creates a python function that uses regex to mask all emails.

@@ -5,7 +5,7 @@ import time
 from typing import Callable
 from pydantic import BaseModel
 import yaml
-from llm_evals.checks import CheckRegistery, Check, CheckType, CHECK_REGISTRY, CheckResult
+from llm_evals.checks import CheckRegistery, Check, CheckType, CHECK_REGISTRY, CheckResult, PassFailResult
 from llm_evals.utilities.internal_utilities import extract_valid_parameters
 
 
@@ -88,71 +88,6 @@ class Candidate(BaseModel):
         """).strip()
 
 
-class EvalResult:
-    """
-    An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
-    using specific hardware. The hardware is not applicable for services like OpenAI's API, but
-    would be applicable for running locally or against specific/configurable hardware like Hugging
-    Face Endpoints or a custom server. The quality of responses might not change between hardware,
-    but the speed of responses could.
-    """
-
-    def __init__(
-            self,
-            eval_obj: 'Eval',
-            candidate_obj: Candidate,
-            responses: list[str],
-            response_characters: int,
-            results: list[list[CheckResult]],
-            total_time_seconds: float,
-            characters_per_second: float,
-            ) -> None:
-        self.eval_obj = eval_obj
-        self.candidate_obj = candidate_obj
-        self.responses = responses
-        self.response_characters = response_characters
-        self.results = results
-        self.total_time_seconds = total_time_seconds
-        self.characters_per_second = characters_per_second
-
-    # def to_dict(self) -> dict:
-    #     """Returns a dictionary representation of the EvalResult."""
-    #     # TODO need to create customs dicts for eval/candidate/results 
-    #     return {
-    #         'eval': self.eval_obj.uuid,
-    #         'candidate': self.candidate_obj.uuid,
-    #         'responses': self.responses,
-    #         'response_characters': self.response_characters,
-    #         'results': self.results,
-    #         'total_time_seconds': self.total_time_seconds,
-    #         'characters_per_second': self.characters_per_second,
-    #     }
-
-    # def __str__(self) -> str:
-    #     """Returns a string representation of the EvalResult."""
-    #     responses = '[\n'
-    #     indent_value = ' ' * 16
-    #     responses += ',\n'.join([indent(f'"{r}"', indent_value) for r in self.responses])
-    #     responses += '\n            ]'
-    #     results = '[\n'
-    #     results += ',\n'.join([indent(str(r), indent_value) for r in self.results])
-    #     results += '\n            ]'
-    #     return dedent(f"""
-    #     EvalResult(
-    #         eval_obj={self.eval_obj},
-    #         candidate_obj={self.candidate_obj},
-    #         responses={responses},
-    #         response_characters={self.response_characters},
-    #         results={results},
-    #         total_time_seconds={self.total_time_seconds},
-    #         characters_per_second={self.characters_per_second},
-    #     )
-    #     """).strip()
-
-    # @property
-    # def check_results(self) -> str:
-    #     """TODO document."""
-    #     return [c.result for s in self.eval_obj.test_sequence for c in s.checks]
 
 
 class Eval:
@@ -176,6 +111,7 @@ class Eval:
             test_sequence: list[PromptTest],
             metadata: dict | None = None,
             uuid: str | None = None,
+            version: str | None = None,
             ):
         """
         Args:
@@ -185,6 +121,7 @@ class Eval:
         self.metadata = metadata
         self.test_sequence = test_sequence
         self.uuid = uuid
+        self.version = version
         self.result = None
 
     @classmethod
@@ -228,7 +165,8 @@ class Eval:
             test_sequence.append(PromptTest(**test, checks=checks))
 
         obj = cls(
-            uuid=config['uuid'],
+            uuid=config['uuid'] if 'uuid' in config else None,
+            version=config['version'] if 'version' in config else None,
             metadata=config['metadata'] if 'metadata' in config else {},
             test_sequence=test_sequence,
         )
@@ -258,7 +196,7 @@ class Eval:
             config = yaml.safe_load(f)
         return cls.from_dict(config, results)
 
-    def __call__(self, candidate: Candidate) -> EvalResult:
+    def __call__(self, candidate: Candidate) -> 'EvalResult':
         """Evaluates the model against the prompts and tests."""
         start = time.time()
         responses = [candidate.model(p.prompt) for p in self.test_sequence]
@@ -297,9 +235,7 @@ class Eval:
             candidate_obj=candidate,
             responses=responses,
             results=results,
-            response_characters=sum([len(r) for r in responses]),
             total_time_seconds=self._duration,
-            characters_per_second=sum([len(r) for r in responses]) / self._duration,
         )
         return self.result
 
@@ -318,4 +254,53 @@ class Eval:
             uuid={self.uuid},{metadata}
             test_sequence={test_sequence},
         )
+        """).strip()
+
+
+class EvalResult:
+    """
+    An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
+    using specific hardware. The hardware is not applicable for services like OpenAI's API, but
+    would be applicable for running locally or against specific/configurable hardware like Hugging
+    Face Endpoints or a custom server. The quality of responses might not change between hardware,
+    but the speed of responses could.
+    """
+
+    def __init__(
+            self,
+            eval_obj: 'Eval',
+            candidate_obj: Candidate,
+            responses: list[str],
+            total_time_seconds: float,
+            results: list[list[CheckResult]],
+            ) -> None:
+        self.eval_obj = eval_obj
+        self.candidate_obj = candidate_obj
+        self.responses = responses
+        self.total_time_seconds = total_time_seconds
+        self.response_characters = sum([len(r) for r in responses])
+        total_time_seconds += 1e-6  # prevent divide by zero
+        self.characters_per_second = sum([len(r) for r in responses]) / total_time_seconds
+        self.results = results
+        self.num_checks = sum([len(r) for r in results])
+        self.num_pass_fail_checks = sum([len(r) for r in results if isinstance(r, PassFailResult)])
+        if self.num_pass_fail_checks == 0:
+            self.num_passing_checks = None
+            self.perc_passed_checks = None
+        else:
+            self.num_passing_checks = sum(r.success for r in self.results if isinstance(r, PassFailResult))  # noqa
+            self.perc_passed_checks = self.num_passing_checks / self.num_pass_fail_checks
+
+
+    def __str__(self) -> str:
+        """Returns a string representation of the EvalResult."""
+        return dedent(f"""
+        EvalResult:
+            # of Response Characters={self.response_characters}
+            Total Time (seconds)={self.total_time_seconds}
+            Characters per Second={self.characters_per_second}
+            # of Checks={self.num_checks}
+            # of Pass/Fail Checks={self.num_pass_fail_checks}
+            # of Passing Checks={self.num_passing_checks}
+            % of Passing Checks={self.perc_passed_checks}
         """).strip()

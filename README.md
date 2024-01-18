@@ -21,3 +21,8 @@ In order to test `HuggingFaceEndpointChat` in `llm_evals/llms/hugging_face.py` (
 
 - perhaps `Scenario` can have system_message which would override system_message provided by Candidate?
 
+
+
+
+- Botht the eval yaml and the candidate yaml are duplicated in results yaml. This seems useful for
+comparing versions/archiving/etc. You don't have to retain the exact eval to know what was tested for a particular result
