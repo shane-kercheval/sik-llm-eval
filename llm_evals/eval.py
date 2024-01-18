@@ -3,7 +3,8 @@ from textwrap import dedent, indent
 import time
 from typing import Callable
 from pydantic import BaseModel
-from llm_evals.checks import CheckRegistery, Check, CheckType, CHECK_REGISTRY
+import yaml
+from llm_evals.checks import CheckRegistery, Check, CheckType, CHECK_REGISTRY, Result
 
 
 class Scenario(BaseModel):
@@ -55,15 +56,37 @@ class Candidate(BaseModel):
     hardware.
     """
 
-    name: str
     model: Callable[[str], str]
-    description: str | None = None
     uuid: str | None = None
+    name: str | None = None
+    description: str | None = None
     parameters: dict | None = None
-    hardware: dict | None = None
+    system_info: dict | None = None
+
+    @classmethod
+    def from_yaml(cls, path: str) -> 'Candidate':  # noqa: ANN102
+        """Creates a Candidate object from a YAML file."""
+        with open(path) as f:
+            config = yaml.safe_load(f)
+        model_type = config.pop('type')
+        # lookup model registry based on type
+        config['model'] = lambda x: x
+        return cls(**config)
+
+    def __str__(self) -> str:
+        """Returns a string representation of the Candidate."""
+        parameters = '' if not self.parameters else f'\n            parameters={self.parameters},'
+        system_info = '' if not self.system_info else f'\n            system_info={self.system_info},'  # noqa
+        return dedent(f"""
+        Candidate(
+            uuid={self.uuid},
+            name={self.name},
+            description={self.description},{parameters}{system_info}
+        )
+        """).strip()
 
 
-class EvalResult(BaseModel):
+class EvalResult:
     """
     An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
     using specific hardware. The hardware is not applicable for services like OpenAI's API, but
@@ -72,14 +95,62 @@ class EvalResult(BaseModel):
     but the speed of responses could.
     """
 
-    eval_obj: 'Eval'
-    candidate_obj: Candidate
-    responses: list[str]
-    total_time: float
-    response_characters: int
-    characters_per_second: float
-    num_code_blocks: int
-    check_results: list[object]
+    def __init__(
+            self,
+            eval_obj: 'Eval',
+            candidate_obj: Candidate,
+            responses: list[str],
+            response_characters: int,
+            results: list[list[Result]],
+            total_time_seconds: float,
+            characters_per_second: float,
+            ) -> None:
+        self.eval_obj = eval_obj
+        self.candidate_obj = candidate_obj
+        self.responses = responses
+        self.response_characters = response_characters
+        self.results = results
+        self.total_time_seconds = total_time_seconds
+        self.characters_per_second = characters_per_second
+
+    # def to_dict(self) -> dict:
+    #     """Returns a dictionary representation of the EvalResult."""
+    #     # TODO need to create customs dicts for eval/candidate/results 
+    #     return {
+    #         'eval': self.eval_obj.uuid,
+    #         'candidate': self.candidate_obj.uuid,
+    #         'responses': self.responses,
+    #         'response_characters': self.response_characters,
+    #         'results': self.results,
+    #         'total_time_seconds': self.total_time_seconds,
+    #         'characters_per_second': self.characters_per_second,
+    #     }
+
+    # def __str__(self) -> str:
+    #     """Returns a string representation of the EvalResult."""
+    #     responses = '[\n'
+    #     indent_value = ' ' * 16
+    #     responses += ',\n'.join([indent(f'"{r}"', indent_value) for r in self.responses])
+    #     responses += '\n            ]'
+    #     results = '[\n'
+    #     results += ',\n'.join([indent(str(r), indent_value) for r in self.results])
+    #     results += '\n            ]'
+    #     return dedent(f"""
+    #     EvalResult(
+    #         eval_obj={self.eval_obj},
+    #         candidate_obj={self.candidate_obj},
+    #         responses={responses},
+    #         response_characters={self.response_characters},
+    #         results={results},
+    #         total_time_seconds={self.total_time_seconds},
+    #         characters_per_second={self.characters_per_second},
+    #     )
+    #     """).strip()
+
+    # @property
+    # def check_results(self) -> str:
+    #     """TODO document."""
+    #     return [c.result for s in self.eval_obj.scenarios for c in s.checks]
 
 
 class Eval:
@@ -192,24 +263,25 @@ class Eval:
         responses = [candidate.model(p.prompt) for p in self.scenarios]
         end = time.time()
         self._duration = end - start
-        # TODO: can't actually do this because, for example, we can't run CODE_BLOCK checks until
-        # extract/execute code blocks in responses and we have to run `setup` from eval in same
-        # environment, and we need to pass the code blocks, not the
-        # responses
-        results = [check(responses) for check in self.checks]
-        code_block_results = [r for r in results if r.type == 'code_block']
+        results = []
+        for scenario, response in zip(self.scenarios, responses):
+            check_results = []
+            # this probably won't work with CODE blocks
+            # TODO: how do i retain the enviornment of the code block so during the next round of
+            # I can execute the subsequent code block in the same environment as the first code
+            # blocks?
+            for check in scenario.checks:
+                check_results.append(check(response))
+            results.append(check_results)
+
         self.result = EvalResult(
-            llm_id=llm_id,
-            eval_id=self.uuid,
-            system=self.metadata,  # TODO: finalize this; can't just pull from unstructured dict
+            eval_obj=self,
+            candidate_obj=candidate,
             responses=responses,
-            total_time=self._duration,
+            results=results,
             response_characters=sum([len(r) for r in responses]),
+            total_time_seconds=self._duration,
             characters_per_second=sum([len(r) for r in responses]) / self._duration,
-            # Code blocks are a particular type of check, not sure i like that here
-            # num_code_blocks=0,
-            # code_blocks_passed=0,
-            check_results=results,
         )
         return self.result
 

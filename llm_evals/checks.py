@@ -6,11 +6,11 @@ is responsible for evaluating the response to the prompts. The intent of the che
 simple matching (i.e. does the LLM response exactly match the expected value provided) to using an
 LLM to evaluate the response.
 """
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from enum import Enum, auto
 import re
+from textwrap import dedent
 from typing import Callable, Type
-from pydantic import BaseModel
 
 
 class CheckType(Enum):
@@ -33,32 +33,88 @@ class CheckType(Enum):
             raise ValueError(f"{name.upper()} is not a valid name for a CheckType member")
 
 
+class Result(ABC):
+    """
+    The result of an individual check. There can be multiple results per check and various Check
+    objects can have different types of results, making large-scale summarization difficult if
+    results are not standardized. The Result class is responsible for standardizing the results
+    across all checks.
+    """
+
+    def __init__(self, value: bool | int | float | object, metadata: dict | None = None) -> None:
+        self.value = value
+        self.metadata = metadata
+
+    @abstractproperty
+    @property
+    def success(self) -> bool:
+        """
+        Regardless if the result is a boolean (pass/fail) or int/float (score), the definition of
+        success should be defined.
+        """
+
+    def __str__(self) -> str:
+        """TODO document."""
+        return dedent(f"""
+            Result(
+                success={self.success},
+                value={self.value},
+                metadata={self.metadata}
+            )
+        """).strip()
+
+class PassFailResult(Result):
+    """TODO document."""
+
+    @property
+    def success(self) -> bool:
+        """TODO document."""
+        return self.value
+
+    def __str__(self) -> str:
+        """TODO document."""
+        return dedent(f"""
+            Result(
+                success={self.success},
+                value={self.value},
+                metadata={self.metadata}
+            )
+        """).strip()
+
+
+class ScoreResult(Result):
+    """TODO document."""
+
+    def __init__(
+            self,
+            value: bool | int | float | object,
+            success_threshold: float | None = None,
+            metadata: dict | None = None) -> None:
+        super().__init__(value, metadata)
+        self.success_threshold = success_threshold
+
+    @property
+    def success(self) -> bool:
+        """TODO document."""
+        if self.success_threshold is None:
+            return None
+        return self.value >= self.success_threshold
+
+
 class Check(ABC):
-    """
-    A Check corresponds to a single test/check defined in an Eval (an Eval can have multiple
-    checks). The Check is responsible for evaluating the response to the prompt.
-    """
+    """TODO."""
 
     def __init__(self, metadata: dict | None = None) -> None:
         super().__init__()
         self.metadata = metadata or {}
-        self.result = None
 
     @abstractmethod
-    def __call__(self, responses: list[str]) -> None:
-        """TODO document."""
+    def __call__(self, response: str) -> list[Result]:
+        """A check can have multiple sub-checks/results."""
 
     def __str__(self) -> str:
         """TODO document."""
         return f"{self.__class__.__name__}(metadata={self.metadata})"
-
-
-class CheckResult(BaseModel):
-    """TODO document."""
-
-    result: bool | int | float | object
-    description: str
-    metadata: dict | None
 
 
 class CheckRegistery:
@@ -125,14 +181,12 @@ class MatchExactCheck(Check):
         super().__init__(metadata=metadata)
         self.values = values
 
-    def __call__(self, response: str) -> None:
+    def __call__(self, response: str) -> list[Result]:
         """TODO: document."""
-        self.results = []
-        for r, v in zip(response, self.values):
-            if v is None:
-                self.results.append(CheckResult(result=None, description="TODO", metadata={}))
-            else:
-                self.results.append(CheckResult(result=r == v, description="TODO", metadata={}))
+        return [
+            PassFailResult(value=response == value, metadata={'value': value})
+            for value in self.values
+        ]
 
     def __str__(self) -> str:
         """String representation."""
@@ -151,22 +205,17 @@ class MatchContainsCheck(Check):
         super().__init__(metadata=metadata)
         self.values = values
 
-    def __call__(self, response: str) -> None:
-        """TODO document."""
-        self.results = []
-        for r, v in zip(response, self.values):
-            if v is None:
-                self.results.append(CheckResult(result=None, description="TODO", metadata={}))
-            else:
-                self.results.append(CheckResult(
-                    result=bool(v in r),
-                    description="TODO",
-                    metadata={'value': v}),
-                )
+    def __call__(self, response: str) -> list[Result]:
+        """TODO: document."""
+        return [
+            PassFailResult(value=value in response, metadata={'value': value})
+            for value in self.values
+        ]
 
     def __str__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}(values={self.values}, metadata={self.metadata})"
+
 
 @register_check(CheckType.MATCH_REGEX)
 class MatchRegexCheck(Check):
@@ -186,25 +235,20 @@ class MatchRegexCheck(Check):
             patterns = [patterns]
         self.patterns = patterns
 
-    def __call__(self, response: str) -> None:
+    def __call__(self, response: str) -> list[Result]:
         """TODO document."""
-        # patterns = [re.compile(r) if r is not None else None for r in self.regex]
-        self.results = []
-        for r, p in zip(response, self.patterns):
-            # TODO: should i return None if regex is None? Or should I Return a CheckResult object?
-            # TODO: need to make sure this is consistent with other Check types
-            if p is None:
-                self.results.append(CheckResult(result=None, description="TODO", metadata={}))
-            else:
-                self.results.append(CheckResult(
-                    result=bool(re.compile(p).match(r)),
-                    description="TODO",
-                    metadata={'regex': p}),
-                )
+        return [
+            PassFailResult(
+                value=re.compile(pattern).match(response),
+                metadata={'pattern': pattern},
+            )
+            for pattern in self.patterns
+        ]
 
     def __str__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}(patterns={self.patterns}, metadata={self.metadata})"
+
 
 @register_check(CheckType.PYTHON_FUNCTION)
 class PythonFunctionCheck(Check):
@@ -294,7 +338,7 @@ class PythonCodeBlocksCheck(Check):
         # run code setup if provided
         # run code blocks
         # run function in same environent as code blocks
-        pass
+        return []
 
     def __str__(self) -> str:
         """String representation."""
