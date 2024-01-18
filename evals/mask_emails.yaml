@@ -99,3 +99,4 @@ scenarios:
         values:
           - assert mask_emails(
       - type: PYTHON_CODE_BLOCKS
+        assert_code_blocks: true
