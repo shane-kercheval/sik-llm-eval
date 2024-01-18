@@ -292,6 +292,10 @@ class EvalResult:
             self.perc_passed_checks = self.num_passing_checks / self.num_pass_fail_checks
 
 
+    def all_results(self) -> list[CheckResult]:
+        """Returns a list of all CheckResults."""
+        return [r for result in self.results for r in result]
+
     def __str__(self) -> str:
         """Returns a string representation of the EvalResult."""
         return dedent(f"""
@@ -304,3 +308,32 @@ class EvalResult:
             # of Passing Checks={self.num_passing_checks}
             % of Passing Checks={self.perc_passed_checks}
         """).strip()
+
+
+def summarizer(result: EvalResult) -> dict:
+    """Simple summarizer that returns a dictionary of summary statistics."""
+    code_run_checks = [
+        r for r in result.all_results()
+        if r.metadata['type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    ]
+    summary = {}
+    if result.eval_obj.uuid:
+        summary['eval_uuid'] = result.eval_obj.uuid
+    if result.candidate_obj.uuid:
+        summary['candidate_uuid'] = result.candidate_obj.uuid
+    summary['num_prompts'] = len(result.responses)
+    summary['response_characters'] = result.response_characters
+    summary['total_time_seconds'] = result.total_time_seconds
+    summary['characters_per_second'] = result.characters_per_second
+    summary['num_checks'] = result.num_checks
+    summary['num_pass_fail_checks'] = result.num_pass_fail_checks
+    summary['num_passing_checks'] = result.num_passing_checks
+    summary['perc_passed_checks'] = result.perc_passed_checks
+    summary['num_code_blocks'] = sum(r.metadata['num_code_blocks'] for r in code_run_checks)
+    if summary['num_code_blocks'] == 0:
+        summary['num_code_blocks_successful'] = None
+        summary['perc_code_blocks_successful'] = None
+    else:
+        summary['num_code_blocks_successful'] = sum(r.metadata['num_code_blocks_successful'] for r in code_run_checks)  # noqa
+        summary['perc_code_blocks_successful'] = summary['num_code_blocks_successful'] / summary['num_code_blocks']  # noqa
+    return summary
