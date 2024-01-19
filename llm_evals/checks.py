@@ -213,19 +213,23 @@ CHECK_REGISTRY = CheckRegistery()
 
 @register_check(CheckType.MATCH_EXACT)
 class MatchExactCheck(Check):
-    """TODO document."""
+    """Checks if the LLM response exactly matches the provided value."""
 
     def __init__(self,
-            value: list[str],
+            value: str,
             metadata: dict | None = None) -> None:
         super().__init__(metadata=metadata)
         self.value = value
 
     def __call__(self, response: str) -> CheckResult:
-        """TODO: document."""
+        """Executes the check on the response and returns a PassFailResult."""
         return PassFailResult(
             value=response == self.value,
-            metadata={'type': CheckType.MATCH_EXACT.name, 'value': self.value},
+            metadata={
+                'check_type': CheckType.MATCH_EXACT.name,
+                'check_value': self.value,
+                'check_metadata': self.metadata,
+            },
         )
 
     def __str__(self) -> str:

@@ -269,3 +269,34 @@ def test__ScoreResult():  # noqa
     assert result.value == 0
     assert result.metadata == {'foo': 'bar'}
     assert str(result)
+
+def test__MatchExactCheck():  # noqa
+    # this should fail because we didn't pass the required param
+    with pytest.raises(TypeError):
+        CHECK_REGISTRY.create_instance(CheckType.MATCH_EXACT)
+
+    check = CHECK_REGISTRY.create_instance(CheckType.MATCH_EXACT, params={'value': 'foo'})
+    assert check.value == 'foo'
+    assert check.type == CheckType.MATCH_EXACT.name
+    assert check.metadata == {}
+    result = check('foo')  # passing in the matching value which should pass
+    assert result.success
+    assert result.value
+    assert result.metadata['check_type'] == CheckType.MATCH_EXACT.name
+    assert result.metadata['check_value'] == 'foo'
+    assert result.metadata['check_metadata'] == {}
+
+    check = CHECK_REGISTRY.create_instance(
+        CheckType.MATCH_EXACT,
+        params={'value': 'bar', 'metadata': {'bar': 'foo'}},
+    )
+    assert check.value == 'bar'
+    assert check.type == CheckType.MATCH_EXACT.name
+    assert check.metadata == {'bar': 'foo'}
+    result = check('foo')  # passing in the non-matching value which should fail
+    assert not result.success
+    assert not result.value
+    assert result.metadata['check_type'] == CheckType.MATCH_EXACT.name
+    assert result.metadata['check_value'] == 'bar'
+    assert result.metadata['check_metadata'] == {'bar': 'foo'}
+
