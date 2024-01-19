@@ -155,7 +155,7 @@ class Eval:
             checks = []
             for check_data in checks_data:
                 check_type = CheckType.to_enum(check_data.pop('type'))
-                check = registry.create_check(check_type=check_type, params=check_data)
+                check = registry.create_instance(check_type=check_type, params=check_data)
                 checks.append(check)
             return checks
 

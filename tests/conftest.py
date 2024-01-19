@@ -288,6 +288,6 @@ def conversation_mask_email() -> dict:
 
 @pytest.fixture()
 def conversation_sum() -> dict:
-    """Returns a mock llm  conversation for summing numbers."""
+    """Returns a mock llm conversation for summing numbers."""
     with open('tests/fake_data/fake_conversation__sum_function.yml') as f:
         return yaml.safe_load(f)

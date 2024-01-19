@@ -136,12 +136,14 @@ class CheckRegistery:
             raise ValueError(f"An Check with name '{key}' is already registered.")
         self._registry[key] = check_type
 
-    def create_check(self, check_type: CheckType | str, params: dict) -> Check:
+    def create_instance(self, check_type: CheckType | str, params: dict | None = None) -> Check:
         """Create a test from a config."""
         if isinstance(check_type, CheckType):
             check_type = check_type.name
         if check_type not in self._registry:
             raise ValueError(f"CheckType '{check_type}' not found in registry.")
+        if params is None:
+            params = {}
         return self._registry[check_type](**params)
 
     def registered(self) -> dict[str, Type[Check]]:
@@ -394,7 +396,7 @@ class PythonCodeBlocksRun(Check):
                 'num_code_blocks_successful': num_code_blocks_successful,
                 'code_blocks': code_blocks,
                 'code_block_errors': code_block_errors,
-                'function_check_results': None, # TODO
+                'function_check_results': None, # TODO;; these are individual PassFailResults
             },
         )
 
