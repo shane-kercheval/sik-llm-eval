@@ -34,16 +34,17 @@ class CheckType(Enum):
             raise ValueError(f"{name.upper()} is not a valid name for a CheckType member")
 
     def __eq__(self, other: str) -> bool:
+        """Check if the CheckType is equal to a string (case-insensitive)."""
         if isinstance(other, CheckType):
             return super().__eq__(other)
         if isinstance(other, str):
-            return other.lower() == self.name.lower()
+            return other.upper() == self.name.upper()
         return NotImplemented
 
 
 class CheckResult(ABC):
     """
-    Encapsulates the information/result of an individual Check. There are different types of
+    Encapsulates the result of an individual Check. There are different types of
     checks and corresponding results (e.g. pass/fail, integer/float scores with different
     thresholds of success, etc.), making large-scale summarization difficult if results are not
     standardized. The CheckResult class is a mechanism to standardize the results of checks.
@@ -52,19 +53,26 @@ class CheckResult(ABC):
     should be considered successful or not.
 
     As a general rule, the `value` property should be a simple type (e.g. bool, int, float, etc.)
-    that represents the underlying result. The `metadata` property can be used to store additional
-    information about the result.
+    that represents the underlying result, for which success is based on.
+    The `metadata` property can be used to store additional information about the result.
     """
 
     def __init__(self, value: bool | int | float | object, metadata: dict | None = None) -> None:
+        """
+        Args:
+            value:
+                The underlying value/result of the check. In general, this value will be used in
+                the `success` property to determine if the check was successful or not.
+            metadata:
+                Additional information about the result.
+        """
         self.value = value
-        self.metadata = metadata
+        self.metadata = metadata or {}
 
     @abstractproperty
     @property
     def success(self) -> bool:
         """Indicates wehther the result was successful or not."""
-
 
     def __str__(self) -> str:
         """TODO document."""
@@ -78,7 +86,7 @@ class CheckResult(ABC):
 
 
 class PassFailResult(CheckResult):
-    """Simple class that represents a pass/fail (True/False) result."""
+    """Simple class representing a pass/fail (True/False) result."""
 
     @property
     def success(self) -> bool:
@@ -87,19 +95,26 @@ class PassFailResult(CheckResult):
 
 
 class ScoreResult(CheckResult):
-    """TODO document."""
+    """
+    Represents a result that has a score (e.g. int/float) and, optionally, a threshold for success.
+
+    If the `success_threshold` is not provided, the `success` property will be None.
+    """
 
     def __init__(
             self,
-            value: bool | int | float | object,
-            success_threshold: float | None = None,
+            value: int | float,
+            success_threshold: int | float | None = None,
             metadata: dict | None = None) -> None:
         super().__init__(value, metadata)
         self.success_threshold = success_threshold
 
     @property
     def success(self) -> bool:
-        """TODO document."""
+        """
+        Indicates wehther the result was successful or not, based on the success_threshold. If the
+        success_threshold is not provided, the `success` property will be None.
+        """
         if self.success_threshold is None:
             return None
         return self.value >= self.success_threshold
@@ -117,7 +132,13 @@ class ScoreResult(CheckResult):
 
 
 class Check(ABC):
-    """TODO."""
+    """
+    Represents a single check/test in an Eval. Each Eval can test multiple/sequential prompts, and
+    each prompt can have multiple checks. The check is responsible for evaluating the response to
+    the prompt. The intent of the check can range from simple matching (i.e. does the LLM response
+    exactly match the expected value provided) to using custom logic (e.g. using an LLM to evaluate
+    the response).
+    """
 
     def __init__(self, metadata: dict | None = None) -> None:
         super().__init__()
@@ -125,15 +146,23 @@ class Check(ABC):
 
     @abstractmethod
     def __call__(self, response: str) -> CheckResult:
-        """TODO."""
+        """Invokes the check on the response and returns a single result."""
 
     def __str__(self) -> str:
-        """String representation."""
+        """String representation of the Check."""
         return f"{self.__class__.__name__}(metadata={self.metadata})"
 
 
 class CheckRegistery:
-    """Registry of 'checks' i.e. (subclasses) of Check."""
+    """
+    Registry sytem of 'checks' i.e. (subclasses) of Check. The registry system is used to
+    dynamically create checks from a config (dictionary or yaml). Any user can register a new
+    check by decorating a class with the `register_check` decorator. A Check object can then be
+    created from a dictionary by calling `create_instance` with the name of the check (registered
+    with the decorator) and any parameters for the Check.
+
+    The CHECK_REGISTRY is a global instance of CheckRegistery that is used to create checks.
+    """
 
     def __init__(self):
         self.registered: dict[str, Type[Check]] = {}
@@ -160,22 +189,21 @@ class CheckRegistery:
         obj.type = check_type
         return obj
 
-    def __contains__(self, key: CheckType | str) -> bool:
-        """Check if a Check is registered."""
-        if isinstance(key, CheckType):
-            key = key.name
-        key = key.upper()
-        return key in self.registered
+    def __contains__(self, check_type: CheckType | str) -> bool:
+        """Return true if the CheckType is registered."""
+        if isinstance(check_type, CheckType):
+            check_type = check_type.name
+        return check_type.upper() in self.registered
 
 
-def register_check(test_type: CheckType) -> Check:
-    """Decorator to register an Check."""
+def register_check(check_type: CheckType | str) -> Check:
+    """Decorator to register a Check with CHECK_REGISTRY."""
     def decorator(cls: Check) -> Check:
         assert issubclass(cls, Check), \
-            f"Test '{test_type}' ({cls.__name__}) must extend CheckType"
-        assert (test_type not in CHECK_REGISTRY), \
-            f"Test '{test_type}' already registered."
-        CHECK_REGISTRY.register(test_type, cls)
+            f"Test '{check_type}' ({cls.__name__}) must extend CheckType"
+        assert (check_type not in CHECK_REGISTRY), \
+            f"Test '{check_type}' already registered."
+        CHECK_REGISTRY.register(check_type, cls)
         return cls
     return decorator
 
