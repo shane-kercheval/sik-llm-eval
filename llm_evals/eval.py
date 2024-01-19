@@ -1,11 +1,17 @@
 """TODO document."""
-from inspect import signature
 from textwrap import dedent, indent
 import time
 from typing import Callable
 from pydantic import BaseModel
 import yaml
-from llm_evals.checks import CheckRegistery, Check, CheckType, CHECK_REGISTRY, CheckResult, PassFailResult
+from llm_evals.checks import (
+    CHECK_REGISTRY,
+    CheckRegistery,
+    Check,
+    CheckType,
+    CheckResult,
+    PassFailResult,
+)
 from llm_evals.utilities.internal_utilities import extract_valid_parameters
 
 

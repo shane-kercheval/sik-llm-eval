@@ -45,18 +45,22 @@ def test__register_check__success__str__ensure_creation(registry):  # noqa
     instance = registry.create_instance('FakeCheck')
     assert isinstance(instance, FakeCheck)
     assert instance.metadata == {}
+    assert instance.type == 'FAKECHECK'
 
     instance = registry.create_instance('FakeCheck', params=None)
     assert isinstance(instance, FakeCheck)
     assert instance.metadata == {}
+    assert instance.type == 'FAKECHECK'
 
     instance = registry.create_instance('FakeCheck', params={})
     assert isinstance(instance, FakeCheck)
     assert instance.metadata == {}
+    assert instance.type == 'FAKECHECK'
 
     instance = registry.create_instance('FakeCheck', params={'metadata': {'foo': 'bar'}})
     assert isinstance(instance, FakeCheck)
     assert instance.metadata == {'foo': 'bar'}
+    assert instance.type == 'FAKECHECK'
 
 def test__register_check__success__CheckType__ensure_creation(registry):  # noqa
     """Test successful registration of a check."""
@@ -99,7 +103,7 @@ def test__register_check__success__CheckType__ensure_creation(registry):  # noqa
 def test__register_check__success__ensure_creation__with_required_params(registry):  # noqa
     """Test successful registration of a check."""
     registry.register('FakeParamCheck', FakeParamCheck)
-    assert 'FakeParamCheck' in registry.registered()
+    assert 'FakeParamCheck' in registry
 
     # if we don't pass the required param, we should get an error
     with pytest.raises(TypeError):
@@ -124,6 +128,18 @@ def test__register_check__success__ensure_creation__with_required_params(registr
     assert instance.metadata == {'foo': 'bar'}
     assert instance.required_field == 'foo'
 
+def test__register_check_create_instance__case_insensitive(registry):  # noqa
+    """Test that the check name is case insensitive."""
+    registry.register('FakeCheck', FakeCheck)
+    assert 'fakecheck' in registry
+    assert 'FAKECHECK' in registry
+    instance = registry.create_instance('fakecheck', params={'metadata': {'foo': 'bar'}})
+    assert isinstance(instance, FakeCheck)
+    assert instance.metadata == {'foo': 'bar'}
+    instance = registry.create_instance('FAKECHECK', params={'metadata': {'foo': 'bar'}})
+    assert isinstance(instance, FakeCheck)
+    assert instance.metadata == {'foo': 'bar'}
+
 def test__register_check__duplicate__str__(registry):  # noqa
     """Test registering a check with a duplicate name raises an error."""
     registry.register('FakeCheck', FakeCheck)
@@ -145,3 +161,12 @@ def test__register_check__duplicate__str_and_CheckType(registry):  # noqa
         registry.register(CheckType.MATCH_EXACT, FakeCheck)
     with pytest.raises(ValueError):  # noqa: PT011
         registry.register(CheckType.MATCH_EXACT.name, FakeCheck)
+
+def test__CheckType():  # noqa
+    assert CheckType.MATCH_EXACT.name == 'MATCH_EXACT'
+    assert CheckType.to_enum('MATCH_EXACT') == CheckType.MATCH_EXACT
+    assert CheckType.to_enum('match_exact') == CheckType.MATCH_EXACT
+    assert CheckType.MATCH_EXACT == 'MATCH_EXACT'
+    assert CheckType.MATCH_EXACT == 'match_exact'
+    with pytest.raises(ValueError):  # noqa: PT011
+        CheckType.to_enum('foo')

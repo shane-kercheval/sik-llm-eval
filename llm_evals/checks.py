@@ -14,18 +14,18 @@ from typing import Callable, Type
 
 
 class CheckType(Enum):
-    """TODO document."""
+    """Provides a typesafe representation of the built-in types of Checks."""
 
     MATCH_EXACT = auto()
     MATCH_CONTAINS = auto()
     MATCH_REGEX = auto()
     PYTHON_FUNCTION = auto()
-    PYTHON_CODE_BLOCKS_PRESENT = auto()  # tests that code blocks are present; does not run code blocks
-    PYTHON_CODE_BLOCKS_RUN = auto()  # tests that code blocks run successfully
+    PYTHON_CODE_BLOCKS_PRESENT = auto()
+    PYTHON_CODE_BLOCKS_RUN = auto()
 
     @staticmethod
     def to_enum(name: str) -> 'CheckType':
-        """Get a CheckType from its name."""
+        """Get a CheckType from its string name (case-insensitive)."""
         if isinstance(name, CheckType):
             return name
         try:
@@ -33,13 +33,27 @@ class CheckType(Enum):
         except KeyError:
             raise ValueError(f"{name.upper()} is not a valid name for a CheckType member")
 
+    def __eq__(self, other: str) -> bool:
+        if isinstance(other, CheckType):
+            return super().__eq__(other)
+        if isinstance(other, str):
+            return other.lower() == self.name.lower()
+        return NotImplemented
+
 
 class CheckResult(ABC):
     """
-    The result of an individual check. There can be multiple results per check and various Check
-    objects can have different types of results, making large-scale summarization difficult if
-    results are not standardized. The Result class is responsible for standardizing the results
-    across all checks.
+    Encapsulates the information/result of an individual Check. There are different types of
+    checks and corresponding results (e.g. pass/fail, integer/float scores with different
+    thresholds of success, etc.), making large-scale summarization difficult if results are not
+    standardized. The CheckResult class is a mechanism to standardize the results of checks.
+
+    Each subclass should define the `success` property, which is used to determine if the check
+    should be considered successful or not.
+
+    As a general rule, the `value` property should be a simple type (e.g. bool, int, float, etc.)
+    that represents the underlying result. The `metadata` property can be used to store additional
+    information about the result.
     """
 
     def __init__(self, value: bool | int | float | object, metadata: dict | None = None) -> None:
@@ -49,10 +63,8 @@ class CheckResult(ABC):
     @abstractproperty
     @property
     def success(self) -> bool:
-        """
-        Regardless if the result is a boolean (pass/fail) or int/float (score), the definition of
-        success should be defined.
-        """
+        """Indicates wehther the result was successful or not."""
+
 
     def __str__(self) -> str:
         """TODO document."""
@@ -66,11 +78,11 @@ class CheckResult(ABC):
 
 
 class PassFailResult(CheckResult):
-    """TODO document."""
+    """Simple class that represents a pass/fail (True/False) result."""
 
     @property
     def success(self) -> bool:
-        """TODO document."""
+        """Indicates wehther the result was successful or not."""
         return self.value
 
 
@@ -121,40 +133,39 @@ class Check(ABC):
 
 
 class CheckRegistery:
-    """Registry for types (subclasses) of Check."""
-
-    # TODO: test string registration type
+    """Registry of 'checks' i.e. (subclasses) of Check."""
 
     def __init__(self):
-        self._registry: dict[str, str] = {}
+        self.registered: dict[str, Type[Check]] = {}
 
-    def register(self, key: str | CheckType, check_type: Type[Check]) -> None:
+    def register(self, check_type: str | CheckType, check_class: Type[Check]) -> None:
         """Register an Check with the registry."""
-        if isinstance(key, CheckType):
-            key = key.name
-        if key in self._registry:
-            raise ValueError(f"An Check with name '{key}' is already registered.")
-        self._registry[key] = check_type
+        if isinstance(check_type, CheckType):
+            check_type = check_type.name
+        check_type = check_type.upper()
+        if check_type in self.registered:
+            raise ValueError(f"An Check with name '{check_type}' is already registered.")
+        self.registered[check_type] = check_class
 
     def create_instance(self, check_type: CheckType | str, params: dict | None = None) -> Check:
         """Create a test from a config."""
         if isinstance(check_type, CheckType):
             check_type = check_type.name
-        if check_type not in self._registry:
+        check_type = check_type.upper()
+        if check_type not in self.registered:
             raise ValueError(f"CheckType '{check_type}' not found in registry.")
         if params is None:
             params = {}
-        return self._registry[check_type](**params)
-
-    def registered(self) -> dict[str, Type[Check]]:
-        """List all registered Checks."""
-        return self._registry
+        obj = self.registered[check_type](**params)
+        obj.type = check_type
+        return obj
 
     def __contains__(self, key: CheckType | str) -> bool:
         """Check if a Check is registered."""
         if isinstance(key, CheckType):
             key = key.name
-        return key in self._registry
+        key = key.upper()
+        return key in self.registered
 
 
 def register_check(test_type: CheckType) -> Check:
