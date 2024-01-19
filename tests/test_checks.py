@@ -279,12 +279,14 @@ def test__MatchExactCheck():  # noqa
     assert check.value == 'foo'
     assert check.type == CheckType.MATCH_EXACT.name
     assert check.metadata == {}
-    result = check('foo')  # passing in the matching value which should pass
+    assert str(check)
+    result = check(response='foo')  # passing in the matching value which should pass
     assert result.success
     assert result.value
     assert result.metadata['check_type'] == CheckType.MATCH_EXACT.name
     assert result.metadata['check_value'] == 'foo'
     assert result.metadata['check_metadata'] == {}
+    assert str(result)
 
     check = CHECK_REGISTRY.create_instance(
         CheckType.MATCH_EXACT,
@@ -293,10 +295,47 @@ def test__MatchExactCheck():  # noqa
     assert check.value == 'bar'
     assert check.type == CheckType.MATCH_EXACT.name
     assert check.metadata == {'bar': 'foo'}
-    result = check('foo')  # passing in the non-matching value which should fail
+    assert str(check)
+    result = check(response='foo')  # passing in the non-matching value which should fail
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.MATCH_EXACT.name
     assert result.metadata['check_value'] == 'bar'
     assert result.metadata['check_metadata'] == {'bar': 'foo'}
+    assert str(result)
 
+def test__MatchContainsCheck():  # noqa
+    # this should fail because we didn't pass the required param
+    with pytest.raises(TypeError):
+        CHECK_REGISTRY.create_instance(CheckType.MATCH_CONTAINS)
+
+    check = CHECK_REGISTRY.create_instance(CheckType.MATCH_CONTAINS, params={'value': 'o ba'})
+    assert check.value == 'o ba'
+    assert check.type == CheckType.MATCH_CONTAINS.name
+    assert check.metadata == {}
+    assert str(check)
+    # passing in str that is contained within value which should pass
+    result = check(response='foo bar')
+    assert result.success
+    assert result.value
+    assert result.metadata['check_type'] == CheckType.MATCH_CONTAINS.name
+    assert result.metadata['check_value'] == 'o ba'
+    assert result.metadata['check_metadata'] == {}
+    assert str(result)
+
+    check = CHECK_REGISTRY.create_instance(
+        CheckType.MATCH_CONTAINS,
+        params={'value': 'o ba', 'metadata': {'bar': 'foo'}},
+    )
+    assert check.value == 'o ba'
+    assert check.type == CheckType.MATCH_CONTAINS.name
+    assert check.metadata == {'bar': 'foo'}
+    assert str(check)
+    # passing in str that is not contained within value which should fail
+    result = check(response='bar foo')
+    assert not result.success
+    assert not result.value
+    assert result.metadata['check_type'] == CheckType.MATCH_CONTAINS.name
+    assert result.metadata['check_value'] == 'o ba'
+    assert result.metadata['check_metadata'] == {'bar': 'foo'}
+    assert str(result)

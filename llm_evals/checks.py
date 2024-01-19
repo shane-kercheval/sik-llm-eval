@@ -218,6 +218,13 @@ class MatchExactCheck(Check):
     def __init__(self,
             value: str,
             metadata: dict | None = None) -> None:
+        """
+        Args:
+            value:
+                The value to match the LLM response against. If the response exactly matches the
+                value, the check is considered successful.
+            metadata: Any additional metadata to store with the check.
+        """
         super().__init__(metadata=metadata)
         self.value = value
 
@@ -240,21 +247,32 @@ class MatchExactCheck(Check):
 @register_check(CheckType.MATCH_CONTAINS)
 class MatchContainsCheck(Check):
     """
-    Checks if the LLM response (string) contains the provided value(s) (i.e. the value/string is
-    found anywhere in the response).
+    Checks if the LLM response contains the provided value (i.e. the value is found anywhere in the
+    response).
     """
 
     def __init__(self,
             value: str,
             metadata: dict | None = None) -> None:
+        """
+        Args:
+            value:
+                The value to match the LLM response against. If the response contains the value,
+                the check is considered successful.
+            metadata: Any additional metadata to store with the check.
+        """
         super().__init__(metadata=metadata)
         self.value = value
 
     def __call__(self, response: str) -> CheckResult:
-        """TODO: document."""
+        """Executes the check on the response and returns a PassFailResult."""
         return PassFailResult(
             value=self.value in response,
-            metadata={'type': CheckType.MATCH_CONTAINS.name, 'value': self.value},
+            metadata={
+                'check_type': CheckType.MATCH_CONTAINS.name,
+                'check_value': self.value,
+                'check_metadata': self.metadata,
+            },
         )
 
     def __str__(self) -> str:
