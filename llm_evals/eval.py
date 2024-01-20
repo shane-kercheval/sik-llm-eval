@@ -289,14 +289,19 @@ class EvalResult:
         self.characters_per_second = sum([len(r) for r in responses]) / total_time_seconds
         self.results = results
         self.num_checks = sum([len(r) for r in results])
-        self.num_pass_fail_checks = sum([len(r) for r in results if isinstance(r, PassFailResult)])
+        # Each item of the outer list is a list of CheckResults. Each item of the inner list is a
+        # CheckResult.
+        pass_fail_results = [
+            result for prompt_test in results for result in prompt_test
+            if isinstance(result, PassFailResult)
+        ]
+        self.num_pass_fail_checks = len(pass_fail_results)
         if self.num_pass_fail_checks == 0:
             self.num_passing_checks = None
             self.perc_passed_checks = None
         else:
-            self.num_passing_checks = sum(r.success for r in self.results if isinstance(r, PassFailResult))  # noqa
+            self.num_passing_checks = sum(r.success for r in pass_fail_results)
             self.perc_passed_checks = self.num_passing_checks / self.num_pass_fail_checks
-
 
     def all_results(self) -> list[CheckResult]:
         """Returns a list of all CheckResults."""
@@ -320,7 +325,7 @@ def summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
     code_run_checks = [
         r for r in result.all_results()
-        if r.metadata['type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+        if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
     ]
     summary = {}
     if result.eval_obj.uuid:

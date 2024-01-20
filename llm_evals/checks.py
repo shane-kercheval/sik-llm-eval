@@ -141,8 +141,15 @@ class Check(ABC):
     """
 
     def __init__(self, metadata: dict | None = None) -> None:
+        """
+        Args:
+            metadata:
+                Any additional metadata to store with the check.
+        """
         super().__init__()
         self.metadata = metadata or {}
+        # `type` is set by registry; ensures all checks have a `type` property even if not set
+        self.type = None
 
     @abstractmethod
     def __call__(self, response: str) -> CheckResult:
