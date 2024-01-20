@@ -1,5 +1,5 @@
 """
-Defines classes for different types  of checks corresponding registry system.
+Defines classes for different types of checks and corresponding registry system.
 
 A "check" is a single test/check defined in an Eval (an Eval can have multiple checks). The check
 is responsible for evaluating the response to the prompts. The intent of the check can range from
@@ -11,7 +11,7 @@ from enum import Enum, auto
 import re
 from textwrap import dedent
 from typing import Any, Callable, Type
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, root_validator, validator
 
 
 class CheckType(Enum):
@@ -106,25 +106,31 @@ class ScoreResult(CheckResult):
         """).strip()
 
 
-class Check(ABC):
+class Check(BaseModel, ABC):
     """
     Represents a single check/test in an Eval. Each Eval can test multiple/sequential prompts, and
     each prompt can have multiple checks. The check is responsible for evaluating the response to
     the prompt. The intent of the check can range from simple matching (i.e. does the LLM response
     exactly match the expected value provided) to using custom logic (e.g. using an LLM to evaluate
     the response).
+
+    `check_type` is set by registry.
     """
 
-    def __init__(self, metadata: dict | None = None) -> None:
-        """
-        Args:
-            metadata:
-                Any additional metadata to store with the check.
-        """
-        super().__init__()
-        self.metadata = metadata or {}
-        # `type` is set by registry; ensures all checks have a `type` property even if not set
-        self.type = None
+    metadata: dict[str, Any] | None = {}
+    check_type: CheckType | str | None = None
+
+    @validator('metadata')
+    def set_metadata(cls, metadata: dict[str, Any] | None) -> dict[str, Any]:  # noqa: N805
+        """Set metadata to empty dict if None."""
+        return metadata or {}
+
+    @validator('check_type')
+    def set_check_type(cls, check_type: CheckType | str | None) -> str | None:  # noqa: N805
+        """Set check_type to string if a CheckType was passed in. Capitalize the string."""
+        if isinstance(check_type, CheckType):
+            check_type = check_type.name
+        return None if check_type is None else check_type.upper()
 
     @abstractmethod
     def __call__(self, response: str) -> CheckResult:
@@ -168,7 +174,7 @@ class CheckRegistery:
         if params is None:
             params = {}
         obj = self.registered[check_type](**params)
-        obj.type = check_type
+        obj.check_type = check_type
         return obj
 
     def __contains__(self, check_type: CheckType | str) -> bool:
@@ -197,26 +203,14 @@ CHECK_REGISTRY = CheckRegistery()
 class MatchExactCheck(Check):
     """Checks if the LLM response exactly matches the provided value."""
 
-    def __init__(self,
-            value: str,
-            metadata: dict | None = None) -> None:
-        """
-        Args:
-            value:
-                The value to match the LLM response against. If the response exactly matches the
-                value, the check is considered successful.
-            metadata:
-                Any additional metadata to store with the check.
-        """
-        super().__init__(metadata=metadata)
-        self.value = value
+    value: str = Field(description="The value to match the LLM response against.")
 
     def __call__(self, response: str) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
         return PassFailResult(
             value=response == self.value,
             metadata={
-                'check_type': CheckType.MATCH_EXACT.name,
+                'check_type': self.check_type,
                 'check_value': self.value,
                 'check_metadata': self.metadata,
             },
@@ -234,26 +228,14 @@ class MatchContainsCheck(Check):
     response).
     """
 
-    def __init__(self,
-            value: str,
-            metadata: dict | None = None) -> None:
-        """
-        Args:
-            value:
-                The value to match the LLM response against. If the response contains the value,
-                the check is considered successful.
-            metadata:
-                Any additional metadata to store with the check.
-        """
-        super().__init__(metadata=metadata)
-        self.value = value
+    value: str = Field(description="The value to match the LLM response against. If the response contains the value, the check is considered successful.")  # noqa
 
     def __call__(self, response: str) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
         return PassFailResult(
             value=self.value in response,
             metadata={
-                'check_type': CheckType.MATCH_CONTAINS.name,
+                'check_type': self.check_type,
                 'check_value': self.value,
                 'check_metadata': self.metadata,
             },
@@ -268,25 +250,14 @@ class MatchContainsCheck(Check):
 class MatchRegexCheck(Check):
     """Checks if the a given regular expression matches the LLM response."""
 
-    def __init__(self,
-            pattern: str,
-            metadata: dict | None = None) -> None:
-        """
-        Args:
-            pattern:
-                The regular expression to match the LLM response against.
-            metadata:
-                Any additional metadata to store with the check.
-        """
-        super().__init__(metadata=metadata)
-        self.pattern = pattern
+    pattern: str = Field(description="The regular expression to match the LLM response against.")
 
     def __call__(self, response: str) -> CheckResult:
-        """TODO document."""
+        """Executes the check on the response and returns a PassFailResult."""
         return PassFailResult(
             value=re.compile(self.pattern).match(response) is not None,
             metadata={
-                'check_type': CheckType.MATCH_REGEX.name,
+                'check_type': self.check_type,
                 'check_pattern': self.pattern,
                 'check_metadata': self.metadata,
             },
