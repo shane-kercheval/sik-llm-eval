@@ -57,7 +57,6 @@ class PromptTest(BaseModel):
         """).strip()
 
 
-
 class Candidate(BaseModel):
     """
     A Candidate describes an LLM that may optionally be associated with specific parameters or
@@ -92,8 +91,6 @@ class Candidate(BaseModel):
             description={self.description},{parameters}{system_info}
         )
         """).strip()
-
-
 
 
 class Eval:

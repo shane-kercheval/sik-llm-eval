@@ -6,11 +6,12 @@ is responsible for evaluating the response to the prompts. The intent of the che
 simple matching (i.e. does the LLM response exactly match the expected value provided) to using an
 LLM to evaluate the response.
 """
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from enum import Enum, auto
 import re
 from textwrap import dedent
-from typing import Callable, Type
+from typing import Any, Callable, Type
+from pydantic import BaseModel
 
 
 class CheckType(Enum):
@@ -42,40 +43,25 @@ class CheckType(Enum):
         return NotImplemented
 
 
-class CheckResult(ABC):
+class CheckResult(BaseModel, ABC):
     """
     Encapsulates the result of an individual Check. There are different types of
-    checks and corresponding results (e.g. pass/fail, integer/float scores with different
-    thresholds of success, etc.), making large-scale summarization difficult if results are not
+    checks and corresponding results, making large-scale summarization difficult if results are not
     standardized. The CheckResult class is a mechanism to standardize the results of checks.
 
     Each subclass should define the `success` property, which is used to determine if the check
     should be considered successful or not.
 
-    As a general rule, the `value` property should be a simple type (e.g. bool, int, float, etc.)
-    that represents the underlying result, for which success is based on.
-    The `metadata` property can be used to store additional information about the result.
+    The `value` property should be a simple type that represents the underlying result (which
+    "success" is based on). The `metadata` property can be used to store additional information
+    about the result.
     """
 
-    def __init__(self, value: bool | int | float | object, metadata: dict | None = None) -> None:
-        """
-        Args:
-            value:
-                The underlying value/result of the check. In general, this value will be used in
-                the `success` property to determine if the check was successful or not.
-            metadata:
-                Additional information about the result.
-        """
-        self.value = value
-        self.metadata = metadata or {}
-
-    @abstractproperty
-    @property
-    def success(self) -> bool:
-        """Indicates wehther the result was successful or not."""
+    value: bool | int | float | Any
+    success: bool | None = None
+    metadata: dict[str, Any] = {}
 
     def __str__(self) -> str:
-        """TODO document."""
         return dedent(f"""
             {self.__class__.__name__}(
                 success={self.success},
@@ -86,12 +72,12 @@ class CheckResult(ABC):
 
 
 class PassFailResult(CheckResult):
-    """Simple class representing a pass/fail (True/False) result."""
+    """Represents a pass/fail (True/False) result."""
 
-    @property
-    def success(self) -> bool:
-        """Indicates wehther the result was successful or not."""
-        return self.value
+    def __init__(self, **data):  # noqa: ANN003
+        super().__init__(**data)
+        # definition of success is simply the value
+        self.success = self.value
 
 
 class ScoreResult(CheckResult):
@@ -101,26 +87,15 @@ class ScoreResult(CheckResult):
     If the `success_threshold` is not provided, the `success` property will be None.
     """
 
-    def __init__(
-            self,
-            value: int | float,
-            success_threshold: int | float | None = None,
-            metadata: dict | None = None) -> None:
-        super().__init__(value, metadata)
-        self.success_threshold = success_threshold
+    success_threshold: int | float | None = None
 
-    @property
-    def success(self) -> bool:
-        """
-        Indicates wehther the result was successful or not, based on the success_threshold. If the
-        success_threshold is not provided, the `success` property will be None.
-        """
-        if self.success_threshold is None:
-            return None
-        return self.value >= self.success_threshold
+    def __init__(self, **data):  # noqa: ANN003
+        super().__init__(**data)
+        # definition of success is whether the value is greater than the success_threshold
+        if self.success_threshold is not None:
+            self.success = self.value >= self.success_threshold
 
     def __str__(self) -> str:
-        """TODO document."""
         return dedent(f"""
             {self.__class__.__name__}(
                 success={self.success},
@@ -390,7 +365,10 @@ class PythonCodeBlocksPresent(Check):
         return PassFailResult(
             value=len(code_blocks) >= self._min_code_blocks,
             metadata={
-                'type': CheckType.PYTHON_CODE_BLOCKS_PRESENT.name,
+                'check_type': CheckType.PYTHON_CODE_BLOCKS_PRESENT.name,
+                'num_code_blocks': len(code_blocks),
+                'min_code_blocks': self._min_code_blocks,
+                'code_blocks': code_blocks,
             },
         )
 
@@ -471,7 +449,7 @@ class PythonCodeBlocksRun(Check):
             value=num_code_blocks_successful / num_code_blocks if num_code_blocks > 0 else 0.0,
             success_threshold=1.0,
             metadata={
-                'type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+                'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
                 'num_code_blocks': num_code_blocks,
                 'num_code_blocks_successful': num_code_blocks_successful,
                 'code_blocks': code_blocks,

@@ -229,6 +229,25 @@ def test__PassFailResult():  # noqa
     assert str(PassFailResult(value=True))
     assert str(PassFailResult(value=False, metadata={'foo': 'bar'}))
 
+def test__PassFailResult__serialize():  # noqa
+    result = PassFailResult(value=False, metadata={'foo': 'bar'})
+    result_dict = result.model_dump()
+    assert result_dict == {
+        'value': False,
+        'success': False,
+        'metadata': {'foo': 'bar'},
+    }
+    assert PassFailResult(**result_dict) == result
+
+    result = PassFailResult(value=True, metadata={'bar': 'foo'})
+    result_dict = result.model_dump()
+    assert result_dict == {
+        'value': True,
+        'success': True,
+        'metadata': {'bar': 'foo'},
+    }
+    assert PassFailResult(**result_dict) == result
+
 def test__ScoreResult():  # noqa
     assert ScoreResult(value=0.5).value == 0.5
     assert str(ScoreResult(value=0.5))
@@ -269,6 +288,36 @@ def test__ScoreResult():  # noqa
     assert result.value == 0
     assert result.metadata == {'foo': 'bar'}
     assert str(result)
+
+def test__ScoreResult__serialize():  # noqa
+    result = ScoreResult(value=0.5, metadata={'foo': 'bar'})
+    result_dict = result.model_dump()
+    assert result_dict == {
+        'value': 0.5,
+        'success_threshold': None,
+        'success': None,
+        'metadata': {'foo': 'bar'},
+    }
+    assert ScoreResult(**result_dict) == result
+
+    result = ScoreResult(value=0.5, success_threshold=0.5, metadata={'foo': 'bar'})
+    result_dict = result.model_dump()
+    assert result_dict == {
+        'value': 0.5,
+        'success_threshold': 0.5,
+        'success': True,
+        'metadata': {'foo': 'bar'},
+    }
+    assert ScoreResult(**result_dict) == result
+
+    result = ScoreResult(value=0.5, success_threshold=0.51, metadata={'bar': 'foo'})
+    result_dict = result.model_dump()
+    assert result_dict == {
+        'value': 0.5,
+        'success_threshold': 0.51,
+        'success': False,
+        'metadata': {'bar': 'foo'},
+    }
 
 def test__MatchExactCheck():  # noqa
     # this should fail because we didn't pass the required param
