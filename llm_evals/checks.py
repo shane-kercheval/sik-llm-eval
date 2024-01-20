@@ -223,7 +223,8 @@ class MatchExactCheck(Check):
             value:
                 The value to match the LLM response against. If the response exactly matches the
                 value, the check is considered successful.
-            metadata: Any additional metadata to store with the check.
+            metadata:
+                Any additional metadata to store with the check.
         """
         super().__init__(metadata=metadata)
         self.value = value
@@ -259,7 +260,8 @@ class MatchContainsCheck(Check):
             value:
                 The value to match the LLM response against. If the response contains the value,
                 the check is considered successful.
-            metadata: Any additional metadata to store with the check.
+            metadata:
+                Any additional metadata to store with the check.
         """
         super().__init__(metadata=metadata)
         self.value = value
@@ -282,16 +284,17 @@ class MatchContainsCheck(Check):
 
 @register_check(CheckType.MATCH_REGEX)
 class MatchRegexCheck(Check):
-    """Checks if the LLM response (string) matches the provided regular expression."""
+    """Checks if the a given regular expression matches the LLM response."""
 
     def __init__(self,
-            pattern: list[str],
+            pattern: str,
             metadata: dict | None = None) -> None:
         """
         Args:
             pattern:
-                The regular expression(s) to match the LLM response(s) against.
-            metadata: TODO document.
+                The regular expression to match the LLM response against.
+            metadata:
+                Any additional metadata to store with the check.
         """
         super().__init__(metadata=metadata)
         self.pattern = pattern
@@ -300,7 +303,11 @@ class MatchRegexCheck(Check):
         """TODO document."""
         return PassFailResult(
             value=re.compile(self.pattern).match(response) is not None,
-            metadata={'type': CheckType.MATCH_REGEX.name, 'pattern': self.pattern},
+            metadata={
+                'check_type': CheckType.MATCH_REGEX.name,
+                'check_pattern': self.pattern,
+                'check_metadata': self.metadata,
+            },
         )
 
     def __str__(self) -> str:

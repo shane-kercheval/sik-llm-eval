@@ -339,3 +339,46 @@ def test__MatchContainsCheck():  # noqa
     assert result.metadata['check_value'] == 'o ba'
     assert result.metadata['check_metadata'] == {'bar': 'foo'}
     assert str(result)
+
+def test__MatchRegexCheck():  # noqa
+    # this should fail because we didn't pass the required param
+    with pytest.raises(TypeError):
+        CHECK_REGISTRY.create_instance(CheckType.MATCH_REGEX)
+
+    # example of regex to test
+    regex = r'^[a-z]+$'  # this regex matches any string that is all lowercase letters
+    check = CHECK_REGISTRY.create_instance(CheckType.MATCH_REGEX, params={'pattern': regex})
+    assert check.pattern == regex
+    assert check.type == CheckType.MATCH_REGEX.name
+    assert check.metadata == {}
+    assert str(check)
+    # passing in str that matches the regex which should pass
+    result = check(response='foo')
+    assert result.success
+    assert result.value
+    assert result.metadata['check_type'] == CheckType.MATCH_REGEX.name
+    assert result.metadata['check_pattern'] == regex
+    assert result.metadata['check_metadata'] == {}
+    assert str(result)
+
+    check = CHECK_REGISTRY.create_instance(
+        CheckType.MATCH_REGEX,
+        params={'pattern': regex, 'metadata': {'bar': 'foo'}},
+    )
+    assert check.pattern == regex
+    assert check.type == CheckType.MATCH_REGEX.name
+    assert check.metadata == {'bar': 'foo'}
+    assert str(check)
+    # passing in str that does not match the regex which should fail
+    result = check(response='Foo')
+    assert not result.success
+    assert not result.value
+    assert result.metadata['check_type'] == CheckType.MATCH_REGEX.name
+    assert result.metadata['check_pattern'] == regex
+    assert result.metadata['check_metadata'] == {'bar': 'foo'}
+    assert str(result)
+
+    assert check(response='foo').success
+    assert not check(response='foo123').success
+    assert not check(response='123foo').success
+    assert not check(response='Foo').success
