@@ -1,8 +1,8 @@
 """TODO document."""
 from textwrap import dedent, indent
 import time
-from typing import Callable
-from pydantic import BaseModel
+from typing import Any, Callable
+from pydantic import BaseModel, Field, root_validator
 import yaml
 from llm_evals.checks import (
     CHECK_REGISTRY,
@@ -17,21 +17,45 @@ from llm_evals.utilities.internal_utilities import extract_valid_parameters
 
 class PromptTest(BaseModel):
     """
-    TODO document.
+    A PromptTest represents a prompt, an optional ideal response, and a list of checks to run
+    against the response.
 
-    Checks can be optional because even a test without checks still collects responses (that
-    can be visually/subjectively compared against either the ideal response or the responses from
-    other LLMs).
+    Checks are optional because even a test without checks still collects performance information
+    (e.g. characters per second) as well as responses (which can be visually/subjectively compared
+    against either the ideal response or the responses from other LLMs).
+
+    A PromptTest only contains information, it is not directly callable. The reason for this is so
+    that all PromptTests can be evaluated sequentially, in order to accurately measure performance.
     """
 
     prompt: str
     ideal_response: str | None = None
-    checks: list[Check] | None = None
+    checks: list[Check | dict] | None = Field(
+        default=None,
+        description='A list of checks to run against the response. If a dictionary is provided, the checks need to be registered with the CHECK_REGISTRY. The dictionary needs a `check_type` key with the registration value.',  # noqa
+    )
 
-    class Config:
-        """Needed to allow for arbitrary types (i.e. Check object)."""
+    @root_validator(pre=True)
+    def process_checks(cls, values):  # noqa
+        checks = values.get('checks', None)
 
-        arbitrary_types_allowed = True
+        if checks is None:
+            return values
+
+        checks_created = []
+        for check in checks:
+            if isinstance(check, dict):
+                check_type = check.pop('check_type')
+                assert check_type, "Check dictionary must contain a 'check_type' key"
+                check_instance = CHECK_REGISTRY.create_instance(check_type=check_type, params=check)
+                checks_created.append(check_instance)
+            elif isinstance(check, Check):
+                checks_created.append(check)
+            else:
+                raise TypeError("Checks must be either a Check instance or a dictionary")
+
+        values['checks'] = checks_created
+        return values
 
     def __str__(self) -> str:
         """Returns a string representation of the PromptTest."""
@@ -56,6 +80,17 @@ class PromptTest(BaseModel):
         )
         """).strip()
 
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the PromptTest."""
+        # model_dump doesn't include `value` on Check objects unless called directly?
+        # return self.model_dump(exclude_defaults=True, exclude_none=True)
+        value = {'prompt': self.prompt}
+        if self.ideal_response:
+            value['ideal_response'] = self.ideal_response
+        if self.checks:
+            value['checks'] = [c.to_dict() for c in self.checks]
+        return value
+
 
 class Candidate(BaseModel):
     """
@@ -72,7 +107,10 @@ class Candidate(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: str) -> 'Candidate':  # noqa: ANN102
-        """Creates a Candidate object from a YAML file."""
+        """
+        Creates a Candidate object from a YAML file. This method requires the underlying model
+        (callable) be registered with the ModelRegistry before calling this method.
+        """
         with open(path) as f:
             config = yaml.safe_load(f)
         model_type = config.pop('type')
