@@ -45,6 +45,10 @@ def test__register_check__success__str__ensure_creation():  # noqa
     registry.register('FakeCheck', FakeCheck)
     assert 'FakeCheck' in registry
 
+    # check_type should be set (via register()) whether or not we call create_instance()
+    instance = FakeCheck()
+    assert instance.check_type == 'FAKECHECK'
+
     instance = registry.create_instance('FakeCheck')
     assert isinstance(instance, FakeCheck)
     assert instance.metadata == {}
@@ -76,6 +80,12 @@ def test__register_check__success__using_decorator():  # noqa
 
     assert 'test' in CHECK_REGISTRY
     assert 'TEST' in CHECK_REGISTRY
+
+    # check_type should be set (via register()) whether or not we call create_instance()
+    instance = TestCheck()
+    assert instance.check_type == 'TEST'
+
+
     obj = CHECK_REGISTRY.create_instance('test')
     assert isinstance(obj, TestCheck)
     assert obj.check_type == 'TEST'
@@ -229,8 +239,16 @@ def test__PassFailResult():  # noqa
     assert str(PassFailResult(value=False, metadata={'foo': 'bar'}))
 
 def test__PassFailResult__serialize():  # noqa
+    result = PassFailResult(value=True)
+    result_dict = result.to_dict()
+    # ensure metadata isn't included in the dict since it's empty
+    assert result_dict == {
+        'value': True,
+        'success': True,
+    }
+    assert PassFailResult(**result_dict) == result
     result = PassFailResult(value=False, metadata={'foo': 'bar'})
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': False,
         'success': False,
@@ -239,7 +257,7 @@ def test__PassFailResult__serialize():  # noqa
     assert PassFailResult(**result_dict) == result
 
     result = PassFailResult(value=True, metadata={'bar': 'foo'})
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': True,
         'success': True,
@@ -289,18 +307,25 @@ def test__ScoreResult():  # noqa
     assert str(result)
 
 def test__ScoreResult__serialize():  # noqa
-    result = ScoreResult(value=0.5, metadata={'foo': 'bar'})
-    result_dict = dict(result)
+    result = ScoreResult(value=0.5)
+    result_dict = result.to_dict()
+    # ensure metadata and success_threshold isn't included in the dict since it's empty
     assert result_dict == {
         'value': 0.5,
-        'success_threshold': None,
+        'success': None,
+    }
+    assert ScoreResult(**result_dict) == result
+    result = ScoreResult(value=0.5, metadata={'foo': 'bar'})
+    result_dict = result.to_dict()
+    assert result_dict == {
+        'value': 0.5,
         'success': None,
         'metadata': {'foo': 'bar'},
     }
     assert ScoreResult(**result_dict) == result
 
     result = ScoreResult(value=0.5, success_threshold=0.5, metadata={'foo': 'bar'})
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': 0.5,
         'success_threshold': 0.5,
@@ -310,13 +335,27 @@ def test__ScoreResult__serialize():  # noqa
     assert ScoreResult(**result_dict) == result
 
     result = ScoreResult(value=0.5, success_threshold=0.51, metadata={'bar': 'foo'})
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': 0.5,
         'success_threshold': 0.51,
         'success': False,
         'metadata': {'bar': 'foo'},
     }
+
+def test__MatchExactCheck__has_check_type():  # noqa
+    """
+    Test that the check has a check_type upon object creation (without using create_instance from
+    the registry).
+    """
+    check = MatchExactCheck(value='foo')
+    assert check.check_type == CheckType.MATCH_EXACT.name
+    check_dict = check.to_dict()
+    assert check_dict == {
+        'check_type': CheckType.MATCH_EXACT.name,
+        'value': 'foo',
+    }
+    assert MatchExactCheck(**check_dict) == check
 
 def test__MatchExactCheck():  # noqa
     # this should fail because we didn't pass the required param
@@ -328,11 +367,11 @@ def test__MatchExactCheck():  # noqa
     assert check.check_type == CheckType.MATCH_EXACT.name
     assert check.metadata == {}
     assert str(check)
-    check_dict = dict(check)
+    check_dict = check.to_dict()
     assert check_dict == {
         'check_type': CheckType.MATCH_EXACT.name,
         'value': 'foo',
-        'metadata': {},
+        # 'metadata': {},
     }
     assert MatchExactCheck(**check_dict) == check
 
@@ -343,7 +382,7 @@ def test__MatchExactCheck():  # noqa
     assert result.metadata['check_value'] == 'foo'
     assert result.metadata['check_metadata'] == {}
     assert str(result)
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': True,
         'success': True,
@@ -363,7 +402,7 @@ def test__MatchExactCheck():  # noqa
     assert check.check_type == CheckType.MATCH_EXACT.name
     assert check.metadata == {'bar': 'foo'}
     assert str(check)
-    check_dict = dict(check)
+    check_dict = check.to_dict()
     assert check_dict == {
         'check_type': CheckType.MATCH_EXACT.name,
         'value': 'bar',
@@ -378,7 +417,7 @@ def test__MatchExactCheck():  # noqa
     assert result.metadata['check_value'] == 'bar'
     assert result.metadata['check_metadata'] == {'bar': 'foo'}
     assert str(result)
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': False,
         'success': False,
@@ -388,6 +427,20 @@ def test__MatchExactCheck():  # noqa
             'check_metadata': {'bar': 'foo'},
         },
     }
+
+def test__MatchContainsCheck__has_check_type():  # noqa
+    """
+    Test that the check has a check_type upon object creation (without using create_instance from
+    the registry).
+    """
+    check = MatchContainsCheck(value='foo')
+    assert check.check_type == CheckType.MATCH_CONTAINS.name
+    check_dict = check.to_dict()
+    assert check_dict == {
+        'check_type': CheckType.MATCH_CONTAINS.name,
+        'value': 'foo',
+    }
+    assert MatchContainsCheck(**check_dict) == check
 
 def test__MatchContainsCheck():  # noqa
     # this should fail because we didn't pass the required param
@@ -399,11 +452,11 @@ def test__MatchContainsCheck():  # noqa
     assert check.check_type == CheckType.MATCH_CONTAINS.name
     assert check.metadata == {}
     assert str(check)
-    check_dict = dict(check)
+    check_dict = check.to_dict()
     assert check_dict == {
         'check_type': CheckType.MATCH_CONTAINS.name,
         'value': 'o ba',
-        'metadata': {},
+        # 'metadata': {},
     }
     assert MatchContainsCheck(**check_dict) == check
 
@@ -415,7 +468,7 @@ def test__MatchContainsCheck():  # noqa
     assert result.metadata['check_value'] == 'o ba'
     assert result.metadata['check_metadata'] == {}
     assert str(result)
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': True,
         'success': True,
@@ -434,7 +487,7 @@ def test__MatchContainsCheck():  # noqa
     assert check.check_type == CheckType.MATCH_CONTAINS.name
     assert check.metadata == {'bar': 'foo'}
     assert str(check)
-    check_dict = dict(check)
+    check_dict = check.to_dict()
     assert check_dict == {
         'check_type': CheckType.MATCH_CONTAINS.name,
         'value': 'o ba',
@@ -450,7 +503,7 @@ def test__MatchContainsCheck():  # noqa
     assert result.metadata['check_value'] == 'o ba'
     assert result.metadata['check_metadata'] == {'bar': 'foo'}
     assert str(result)
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': False,
         'success': False,
@@ -461,6 +514,20 @@ def test__MatchContainsCheck():  # noqa
         },
     }
     assert PassFailResult(**result_dict) == result
+
+def test__MatchRegexCheck__has_check_type():  # noqa
+    """
+    Test that the check has a check_type upon object creation (without using create_instance from
+    the registry).
+    """
+    check = MatchRegexCheck(pattern='foo')
+    assert check.check_type == CheckType.MATCH_REGEX.name
+    check_dict = check.to_dict()
+    assert check_dict == {
+        'check_type': CheckType.MATCH_REGEX.name,
+        'pattern': 'foo',
+    }
+    assert MatchRegexCheck(**check_dict) == check
 
 def test__MatchRegexCheck():  # noqa
     # this should fail because we didn't pass the required param
@@ -474,11 +541,11 @@ def test__MatchRegexCheck():  # noqa
     assert check.check_type == CheckType.MATCH_REGEX.name
     assert check.metadata == {}
     assert str(check)
-    check_dict = dict(check)
+    check_dict = check.to_dict()
     assert check_dict == {
         'check_type': CheckType.MATCH_REGEX.name,
         'pattern': regex,
-        'metadata': {},
+        # 'metadata': {},
     }
     assert MatchRegexCheck(**check_dict) == check
 
@@ -490,7 +557,7 @@ def test__MatchRegexCheck():  # noqa
     assert result.metadata['check_pattern'] == regex
     assert result.metadata['check_metadata'] == {}
     assert str(result)
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': True,
         'success': True,
@@ -510,7 +577,7 @@ def test__MatchRegexCheck():  # noqa
     assert check.check_type == CheckType.MATCH_REGEX.name
     assert check.metadata == {'bar': 'foo'}
     assert str(check)
-    check_dict = dict(check)
+    check_dict = check.to_dict()
     assert check_dict == {
         'check_type': CheckType.MATCH_REGEX.name,
         'pattern': regex,
@@ -526,7 +593,7 @@ def test__MatchRegexCheck():  # noqa
     assert result.metadata['check_pattern'] == regex
     assert result.metadata['check_metadata'] == {'bar': 'foo'}
     assert str(result)
-    result_dict = dict(result)
+    result_dict = result.to_dict()
     assert result_dict == {
         'value': False,
         'success': False,

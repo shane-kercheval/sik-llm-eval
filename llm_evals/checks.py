@@ -70,6 +70,14 @@ class CheckResult(BaseModel, ABC):
             )
         """).strip()
 
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the CheckResult."""
+        result_dict = self.model_dump(exclude_defaults=True, exclude_none=True)
+        # always include success
+        if 'success' not in result_dict:
+            result_dict['success'] = self.success
+        return result_dict
+
 
 class PassFailResult(CheckResult):
     """Represents a pass/fail (True/False) result."""
@@ -117,13 +125,15 @@ class Check(BaseModel, ABC):
     `check_type` is set by registry.
     """
 
-    metadata: dict[str, Any] | None = {}
+    metadata: dict[str, Any] = {}
     check_type: CheckType | str | None = None
 
-    @validator('metadata')
-    def set_metadata(cls, metadata: dict[str, Any] | None) -> dict[str, Any]:  # noqa: N805
-        """Set metadata to empty dict if None."""
-        return metadata or {}
+    def __init__(self, **data):  # noqa: ANN003
+        super().__init__(**data)
+        # the `check_type` is set by the registry, as a class variable (since we don't have an
+        # instance); so if it exists, set `check_type
+        if self.check_type is None and hasattr(self.__class__, 'check_type'):
+            self.check_type = self.__class__.check_type
 
     @validator('check_type')
     def set_check_type(cls, check_type: CheckType | str | None) -> str | None:  # noqa: N805
@@ -139,6 +149,10 @@ class Check(BaseModel, ABC):
     def __str__(self) -> str:
         """String representation of the Check."""
         return f"{self.__class__.__name__}(metadata={self.metadata})"
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the Check."""
+        return self.model_dump(exclude_defaults=True, exclude_none=True)
 
 
 class CheckRegistery:
@@ -162,6 +176,7 @@ class CheckRegistery:
         check_type = check_type.upper()
         if check_type in self.registered:
             raise ValueError(f"An Check with name '{check_type}' is already registered.")
+        check_class.check_type = check_type
         self.registered[check_type] = check_class
 
     def create_instance(self, check_type: CheckType | str, params: dict | None = None) -> Check:
@@ -173,9 +188,7 @@ class CheckRegistery:
             raise ValueError(f"CheckType '{check_type}' not found in registry.")
         if params is None:
             params = {}
-        obj = self.registered[check_type](**params)
-        obj.check_type = check_type
-        return obj
+        return self.registered[check_type](**params)
 
     def __contains__(self, check_type: CheckType | str) -> bool:
         """Return true if the CheckType is registered."""
@@ -320,11 +333,10 @@ class PythonCodeBlocksPresent(Check):
     successfully, but they must be present.
     """
 
-    def __init__(self,
-            min_code_blocks: int = 1,
-            metadata: dict | None = None) -> None:
-        super().__init__(metadata=metadata)
-        self._min_code_blocks = min_code_blocks
+    min_code_blocks: int = Field(
+        default=1,
+        description="The minimum number of code blocks that must be present in the response.",
+    )
 
     def __call__(self, code_blocks: str) -> CheckResult:
         """TODO document."""
@@ -334,18 +346,18 @@ class PythonCodeBlocksPresent(Check):
         # PythonCodeBlocksRun check and b) just because the code blocks fail doesn't mean they
         # aren't Python code blocks.
         return PassFailResult(
-            value=len(code_blocks) >= self._min_code_blocks,
+            value=len(code_blocks) >= self.min_code_blocks,
             metadata={
                 'check_type': CheckType.PYTHON_CODE_BLOCKS_PRESENT.name,
                 'num_code_blocks': len(code_blocks),
-                'min_code_blocks': self._min_code_blocks,
+                'min_code_blocks': self.min_code_blocks,
                 'code_blocks': code_blocks,
             },
         )
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self.__class__.__name__}(min_code_blocks={self._min_code_blocks}, metadata={self.metadata})"  # noqa
+        return f"{self.__class__.__name__}(min_code_blocks={self.min_code_blocks}, metadata={self.metadata})"  # noqa
 
 
 @register_check(CheckType.PYTHON_CODE_BLOCKS_RUN)
@@ -370,25 +382,14 @@ class PythonCodeBlocksRun(Check):
     # is responsible for running tests against the (string) response returned by the LLM.
     """  # noqa: D404
 
-    def __init__(self,
-            code_setup: str | None = None,
-            functions: list[Callable[[list[str], str, dict], list[CheckResult]]] | None = None,
-            metadata: dict | None = None) -> None:
-        """
-        args:
-            assert_code_blocks:
-                If True, ensure that the response contains code blocks. The code blocks do not
-                necessary need to run successfully, but they must be present.
-                If False, 
-            functions:
-                A list of callables. Each callable is passed the list of code blocks that were
-                extracted from the response. The functions are executed in the same environment
-                that the code blocks were executed in. The code blocks may or may not have executed
-                successfully. The functions can test the enviroment or the code blocks.
-        """
-        super().__init__(metadata=metadata)
-        self._functions = functions or []
-        self._code_setup = code_setup
+    code_setup: str | None = Field(
+        default=None,
+        description="Python code that is executed before the code blocks are executed.",
+    )
+    functions: list[Callable[[list[str], str, dict], list[CheckResult]]] | None = Field(
+        default=None,
+        description="A list of callables. Each callable is passed the list of code blocks that were extracted from the response. The functions are executed in the same environment that the code blocks were executed in. The code blocks may or may not have executed successfully. The functions can test the enviroment or the code blocks.",  # noqa
+    )
 
     def __call__(self, code_blocks: list[str]) -> list[CheckResult]:
         """TODO document."""
@@ -406,7 +407,7 @@ class PythonCodeBlocksRun(Check):
                     code_block_errors.append(None)
                 except Exception as e:
                     code_block_errors.append(e)
-            for func in self._functions:
+            for func in self.functions:
                 # run function in same environent as code blocks
                 # check_results.append(func(code_blocks, response, environment))
                 pass
@@ -431,4 +432,4 @@ class PythonCodeBlocksRun(Check):
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self.__class__.__name__}(functions={self._functions}, metadata={self.metadata})"
+        return f"{self.__class__.__name__}(functions={self.functions}, metadata={self.metadata})"
