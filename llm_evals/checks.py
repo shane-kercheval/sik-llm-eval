@@ -11,7 +11,7 @@ from enum import Enum, auto
 import re
 from textwrap import dedent
 from typing import Any, Callable, Type
-from pydantic import BaseModel, Field, root_validator, validator
+from pydantic import BaseModel, Field, root_validator, field_validator
 
 
 class CheckType(Enum):
@@ -40,7 +40,7 @@ class CheckType(Enum):
             return super().__eq__(other)
         if isinstance(other, str):
             return other.upper() == self.name.upper()
-        return NotImplemented
+        return False
 
 
 class CheckResult(BaseModel, ABC):
@@ -135,7 +135,7 @@ class Check(BaseModel, ABC):
         if self.check_type is None and hasattr(self.__class__, 'check_type'):
             self.check_type = self.__class__.check_type
 
-    @validator('check_type')
+    @field_validator('check_type')
     def set_check_type(cls, check_type: CheckType | str | None) -> str | None:  # noqa: N805
         """Set check_type to string if a CheckType was passed in. Capitalize the string."""
         if isinstance(check_type, CheckType):
@@ -155,7 +155,7 @@ class Check(BaseModel, ABC):
         return self.model_dump(exclude_defaults=True, exclude_none=True)
 
 
-class CheckRegistery:
+class CheckRegistry:
     """
     Registry sytem of 'checks' i.e. (subclasses) of Check. The registry system is used to
     dynamically create checks from a config (dictionary or yaml). Any user can register a new
@@ -163,7 +163,7 @@ class CheckRegistery:
     created from a dictionary by calling `create_instance` with the name of the check (registered
     with the decorator) and any parameters for the Check.
 
-    The CHECK_REGISTRY is a global instance of CheckRegistery that is used to create checks.
+    The CHECK_REGISTRY is a global instance of CheckRegistry that is used to create checks.
     """
 
     def __init__(self):
@@ -209,7 +209,7 @@ def register_check(check_type: CheckType | str) -> Check:
     return decorator
 
 
-CHECK_REGISTRY = CheckRegistery()
+CHECK_REGISTRY = CheckRegistry()
 
 
 @register_check(CheckType.MATCH_EXACT)
@@ -386,7 +386,10 @@ class PythonCodeBlocksRun(Check):
         default=None,
         description="Python code that is executed before the code blocks are executed.",
     )
-    functions: list[Callable[[list[str], str, dict], list[CheckResult]]] | None = Field(
+    functions: list[
+        str |
+        Callable[[list[str], str, dict], list[CheckResult]]
+        ] | None = Field(
         default=None,
         description="A list of callables. Each callable is passed the list of code blocks that were extracted from the response. The functions are executed in the same environment that the code blocks were executed in. The code blocks may or may not have executed successfully. The functions can test the enviroment or the code blocks.",  # noqa
     )

@@ -7,7 +7,7 @@ from llm_evals.checks import (
     MatchExactCheck,
     MatchRegexCheck,
     register_check,
-    CheckRegistery,
+    CheckRegistry,
     Check,
     CheckResult,
     CheckType,
@@ -41,7 +41,7 @@ class FakeParamCheck(Check):
 
 def test__register_check__success__str__ensure_creation():  # noqa
     """Test successful registration of a check."""
-    registry = CheckRegistery()
+    registry = CheckRegistry()
     registry.register('FakeCheck', FakeCheck)
     assert 'FakeCheck' in registry
 
@@ -109,7 +109,7 @@ def test__register_check__success__using_decorator():  # noqa
 
 def test__register_check__success__CheckType__ensure_creation():  # noqa
     """Test successful registration of a check."""
-    registry = CheckRegistery()
+    registry = CheckRegistry()
     registry.register(CheckType.MATCH_CONTAINS, FakeCheck)
     assert 'MATCH_CONTAINS' in registry
     assert CheckType.MATCH_CONTAINS in registry
@@ -151,7 +151,7 @@ def test__register_check__success__CheckType__ensure_creation():  # noqa
 
 def test__register_check__success__ensure_creation__with_required_params():  # noqa
     """Test successful registration of a check."""
-    registry = CheckRegistery()
+    registry = CheckRegistry()
     registry.register('FakeParamCheck', FakeParamCheck)
     assert 'FakeParamCheck' in registry
 
@@ -180,7 +180,7 @@ def test__register_check__success__ensure_creation__with_required_params():  # n
 
 def test__register_check_create_instance__case_insensitive():  # noqa
     """Test that the check name is case insensitive."""
-    registry = CheckRegistery()
+    registry = CheckRegistry()
     registry.register('FakeCheck', FakeCheck)
     assert 'fakecheck' in registry
     assert 'FAKECHECK' in registry
@@ -193,14 +193,14 @@ def test__register_check_create_instance__case_insensitive():  # noqa
 
 def test__register_check__duplicate__str__():  # noqa
     """Test registering a check with a duplicate name raises an error."""
-    registry = CheckRegistery()
+    registry = CheckRegistry()
     registry.register('FakeCheck', FakeCheck)
     with pytest.raises(ValueError):  # noqa: PT011
         registry.register('FakeCheck', FakeCheck)
 
 def test__register_check__duplicate__CheckType_and_str():  # noqa
     """Test registering a check with a duplicate name raises an error."""
-    registry = CheckRegistery()
+    registry = CheckRegistry()
     registry.register(CheckType.MATCH_EXACT, FakeCheck)
     with pytest.raises(ValueError):  # noqa: PT011
         registry.register(CheckType.MATCH_EXACT, FakeCheck)
@@ -209,7 +209,7 @@ def test__register_check__duplicate__CheckType_and_str():  # noqa
 
 def test__register_check__duplicate__str_and_CheckType():  # noqa
     """Test registering a check with a duplicate name raises an error."""
-    registry = CheckRegistery()
+    registry = CheckRegistry()
     registry.register(CheckType.MATCH_EXACT.name, FakeCheck)
     with pytest.raises(ValueError):  # noqa: PT011
         registry.register(CheckType.MATCH_EXACT, FakeCheck)

@@ -1,18 +1,22 @@
-"""TODO document."""
+"""Classes and functions to eval LLMs."""
 from textwrap import dedent, indent
 import time
-from typing import Any, Callable
-from pydantic import BaseModel, Field, root_validator
+from typing import Callable, ForwardRef
+from pydantic import BaseModel, Field, field_validator, root_validator
 import yaml
+
 from llm_evals.checks import (
     CHECK_REGISTRY,
-    CheckRegistery,
     Check,
     CheckType,
     CheckResult,
     PassFailResult,
 )
 from llm_evals.utilities.internal_utilities import extract_valid_parameters
+
+Eval = ForwardRef('Eval')
+EvalResult = ForwardRef('EvalResult')
+Candidate = ForwardRef('Candidate')
 
 
 class PromptTest(BaseModel):
@@ -106,7 +110,7 @@ class Candidate(BaseModel):
     system_info: dict | None = None
 
     @classmethod
-    def from_yaml(cls, path: str) -> 'Candidate':  # noqa: ANN102
+    def from_yaml(cls, path: str) -> Candidate:  # noqa: ANN102
         """
         Creates a Candidate object from a YAML file. This method requires the underlying model
         (callable) be registered with the ModelRegistry before calling this method.
@@ -131,7 +135,7 @@ class Candidate(BaseModel):
         """).strip()
 
 
-class Eval:
+class Eval(BaseModel):
     """
     An Eval defines a set of one or more prompts and tests that can be used to evaluate an LLM. If
     more than one prompt is provided, the intent is evaluate the the conversation and, therefore,
@@ -147,76 +151,43 @@ class Eval:
     responses (strings) and returns a TestResult object.
     """
 
-    def __init__(
-            self,
-            test_sequence: list[PromptTest],
-            metadata: dict | None = None,
-            uuid: str | None = None,
-            version: str | None = None,
-            ):
-        """
-        Args:
-            uuid: optional. Used to uniquely identify the Eval which is ultimately used to avoid
-                running the same Eval (against the same Candidate/llm) more than once.
-        """
-        self.metadata = metadata
-        self.test_sequence = test_sequence
-        self.uuid = uuid
-        self.version = version
-        self.result = None
+    test_sequence: list[PromptTest | dict] = Field(description='A list of prompts and tests to run against the LLM.')  # noqa
+    metadata: dict | None = Field(default=None, description='Metadata associated with the Eval.')
+    uuid: str | None = Field(default=None, description='Used to uniquely identify the Eval which is ultimately used to avoid running the same Eval (against the same Candidate/llm) more than once.')  # noqa
+    version: str | int | float | None = Field(default=None, description='Version of the Eval.')
+    result: EvalResult | None = Field(default=None, description='The result of evaluating the Eval.')  # noqa
+
+    @root_validator(pre=True)
+    def process_checks(cls, values):  # noqa
+        test_sequence = values.get('test_sequence', [])
+        tests_created = []
+        for test in test_sequence:
+            if isinstance(test, dict):
+                tests_created.append(PromptTest(**test))
+            elif isinstance(test, PromptTest):
+                tests_created.append(test)
+            else:
+                raise TypeError("test_sequence must be either a PromptTest instance or a dictionary")  # noqa
+        values['test_sequence'] = tests_created
+        return values
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the PromptTest."""
+        # return self.model_dump(exclude_defaults=True, exclude_none=True) doesn't seem to work
+        # recursively, there are a couple of inconsistencies
+        value = {'test_sequence': [t.to_dict() for t in self.test_sequence]}
+        if self.uuid:
+            value['uuid'] = self.uuid
+        if self.version:
+            value['version'] = self.version
+        if self.metadata:
+            value['metadata'] = self.metadata
+        if self.result:
+            value['result'] = self.result.to_dict()
+        return value
 
     @classmethod
-    def from_dict(
-            cls,  # noqa: ANN102
-            config: dict,
-            results: dict | None = None,
-            registry: CheckRegistery | None = None) -> 'Eval':
-        """
-        Creates an Eval object from a config/dictionary.
-
-        Any custom checks must be registered with the CheckRegistry before calling this
-        method.
-
-        For example:
-
-        ```
-        from llm_evals.checks import register_check
-
-        @register_check('my_custom_check)
-        class MyCheck(EvalCheck):
-            ...
-        ```
-        """
-        # prompts = [Scenario(**prompt) for prompt in config['test_sequence']]
-        # need to register the different types of tests
-        # tests = [EvalTest(**test) for test in config['tests']]
-        registry = registry or CHECK_REGISTRY
-
-        def create_checks(checks_data: list[dict]) -> list[Check]:
-            checks = []
-            for check_data in checks_data:
-                check_type = CheckType.to_enum(check_data.pop('type'))
-                check = registry.create_instance(check_type=check_type, params=check_data)
-                checks.append(check)
-            return checks
-
-        test_sequence = []
-        for test in config['test_sequence']:
-            checks = create_checks(test.pop('checks')) if 'checks' in test else None
-            test_sequence.append(PromptTest(**test, checks=checks))
-
-        obj = cls(
-            uuid=config['uuid'] if 'uuid' in config else None,
-            version=config['version'] if 'version' in config else None,
-            metadata=config['metadata'] if 'metadata' in config else {},
-            test_sequence=test_sequence,
-        )
-        if results is not None:
-            obj.result = EvalResult(**results)
-        return obj
-
-    @classmethod
-    def from_yaml(cls, path: str, results: dict | None = None) -> 'Eval':  # noqa: ANN102
+    def from_yaml(cls, path: str) -> Eval:  # noqa: ANN102
         """
         Creates an Eval object from a YAML file.
 
@@ -235,9 +206,9 @@ class Eval:
         import yaml
         with open(path) as f:
             config = yaml.safe_load(f)
-        return cls.from_dict(config, results)
+        return cls(**config)
 
-    def __call__(self, candidate: Candidate) -> 'EvalResult':
+    def __call__(self, candidate: Candidate) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         start = time.time()
         responses = [candidate.model(p.prompt) for p in self.test_sequence]
@@ -298,7 +269,7 @@ class Eval:
         """).strip()
 
 
-class EvalResult:
+class EvalResult(BaseModel):
     """
     An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
     using specific hardware. The hardware is not applicable for services like OpenAI's API, but
@@ -307,43 +278,71 @@ class EvalResult:
     but the speed of responses could.
     """
 
-    def __init__(
-            self,
-            eval_obj: 'Eval',
-            candidate_obj: Candidate,
-            responses: list[str],
-            total_time_seconds: float,
-            results: list[list[CheckResult]],
-            ) -> None:
-        self.eval_obj = eval_obj
-        self.candidate_obj = candidate_obj
-        self.responses = responses
-        self.total_time_seconds = total_time_seconds
-        self.response_characters = sum([len(r) for r in responses])
-        total_time_seconds += 1e-6  # prevent divide by zero
-        self.characters_per_second = sum([len(r) for r in responses]) / total_time_seconds
-        self.results = results
-        self.num_checks = sum([len(r) for r in results])
-        # Each item of the outer list is a list of CheckResults. Each item of the inner list is a
-        # CheckResult.
+    eval_obj: 'Eval'
+    candidate_obj: 'Candidate'
+    responses: list[str]
+    total_time_seconds: float
+    results: list[list['CheckResult']]
+
+    @property
+    def response_characters(self) -> int:
+        """Returns the number of characters across all responses."""
+        return sum(len(r) for r in self.responses)
+
+    @property
+    def characters_per_second(self) -> float:
+        """Returns the number of characters per second across all responses."""
+        # Adding a tiny value to prevent divide-by-zero error
+        return sum(len(r) for r in self.responses) / (self.total_time_seconds + 1e-6)
+
+    @property
+    def num_checks(self) -> int:
+        """Returns the number of checks."""
+        return sum(len(r) for r in self.results)
+
+    @field_validator('total_time_seconds')
+    def validate_total_time_seconds(cls, v: float) -> float:  # noqa: N805
+        """Validates the total_time_seconds field."""
+        if v <= 0:
+            raise ValueError("Total time must be greater than zero")
+        return v
+
+    @property
+    def num_pass_fail_checks(self) -> int:
+        """Returns the number of pass/fail checks."""
         pass_fail_results = [
-            result for prompt_test in results for result in prompt_test
+            result for prompt_test in self.results for result in prompt_test
             if isinstance(result, PassFailResult)
         ]
-        self.num_pass_fail_checks = len(pass_fail_results)
-        if self.num_pass_fail_checks == 0:
-            self.num_passing_checks = None
-            self.perc_passed_checks = None
-        else:
-            self.num_passing_checks = sum(r.success for r in pass_fail_results)
-            self.perc_passed_checks = self.num_passing_checks / self.num_pass_fail_checks
+        return len(pass_fail_results)
 
-    def all_results(self) -> list[CheckResult]:
-        """Returns a list of all CheckResults."""
+    @property
+    def num_passing_checks(self) -> int | None:
+        """Returns the number of passing checks. If there are no pass/fail checks, returns None."""
+        pass_fail_results = [
+            result for prompt_test in self.results for result in prompt_test
+            if isinstance(result, PassFailResult)
+        ]
+        if not pass_fail_results:
+            return None
+        return sum(r.success for r in pass_fail_results)
+
+    @property
+    def perc_passed_checks(self) -> float | None:
+        """
+        Returns the percentage of passing checks.
+        If there are no pass/fail checks, returns None.
+        """
+        num_passing = self.num_passing_checks
+        if num_passing is None:
+            return None
+        return num_passing / self.num_pass_fail_checks
+
+    def all_results(self) -> list['CheckResult']:
+        """Returns a (flattened) list of all CheckResults."""
         return [r for result in self.results for r in result]
 
     def __str__(self) -> str:
-        """Returns a string representation of the EvalResult."""
         return dedent(f"""
         EvalResult:
             # of Response Characters={self.response_characters}
@@ -354,6 +353,69 @@ class EvalResult:
             # of Passing Checks={self.num_passing_checks}
             % of Passing Checks={self.perc_passed_checks}
         """).strip()
+
+
+
+# class EvalResult:
+#     """
+#     An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
+#     using specific hardware. The hardware is not applicable for services like OpenAI's API, but
+#     would be applicable for running locally or against specific/configurable hardware like Hugging
+#     Face Endpoints or a custom server. The quality of responses might not change between hardware,
+#     but the speed of responses could.
+#     """
+
+#     def __init__(
+#             self,
+#             eval_obj: 'Eval',
+#             candidate_obj: Candidate,
+#             responses: list[str],
+#             total_time_seconds: float,
+#             results: list[list[CheckResult]],
+#             ) -> None:
+#         self.eval_obj = eval_obj
+#         self.candidate_obj = candidate_obj
+#         self.responses = responses
+#         self.total_time_seconds = total_time_seconds
+#         self.response_characters = sum([len(r) for r in responses])
+#         total_time_seconds += 1e-6  # prevent divide by zero
+#         self.characters_per_second = sum([len(r) for r in responses]) / total_time_seconds
+#         self.results = results
+#         self.num_checks = sum([len(r) for r in results])
+#         # Each item of the outer list is a list of CheckResults. Each item of the inner list is a
+#         # CheckResult.
+#         pass_fail_results = [
+#             result for prompt_test in results for result in prompt_test
+#             if isinstance(result, PassFailResult)
+#         ]
+#         self.num_pass_fail_checks = len(pass_fail_results)
+#         if self.num_pass_fail_checks == 0:
+#             self.num_passing_checks = None
+#             self.perc_passed_checks = None
+#         else:
+#             self.num_passing_checks = sum(r.success for r in pass_fail_results)
+#             self.perc_passed_checks = self.num_passing_checks / self.num_pass_fail_checks
+
+#     def all_results(self) -> list[CheckResult]:
+#         """Returns a list of all CheckResults."""
+#         return [r for result in self.results for r in result]
+
+#     def __str__(self) -> str:
+#         """Returns a string representation of the EvalResult."""
+#         return dedent(f"""
+#         EvalResult:
+#             # of Response Characters={self.response_characters}
+#             Total Time (seconds)={self.total_time_seconds}
+#             Characters per Second={self.characters_per_second}
+#             # of Checks={self.num_checks}
+#             # of Pass/Fail Checks={self.num_pass_fail_checks}
+#             # of Passing Checks={self.num_passing_checks}
+#             % of Passing Checks={self.perc_passed_checks}
+#         """).strip()
+
+
+
+Eval.model_rebuild()
 
 
 def summarizer(result: EvalResult) -> dict:

@@ -1,6 +1,6 @@
 """Tests for the evals module."""
-from llm_evals.checks import CheckType, MatchExactCheck
-from llm_evals.eval import PromptTest
+from llm_evals.checks import CheckType, MatchContainsCheck, MatchExactCheck
+from llm_evals.eval import Eval, PromptTest
 
 
 def test__PromptTest():  # noqa
@@ -33,3 +33,85 @@ def test__PromptTest():  # noqa
         'checks': [{'check_type': CheckType.MATCH_EXACT.name, 'value': 'test3'}],
     }
     assert PromptTest(**test_dict) == test
+
+    test = PromptTest(
+        prompt='test1',
+        ideal_response='test2',
+        checks = [MatchExactCheck(value='test3'), MatchExactCheck(value='test4')],
+    )
+    assert test.prompt == 'test1'
+    assert test.ideal_response == 'test2'
+    assert test.checks == [MatchExactCheck(value='test3'), MatchExactCheck(value='test4')]
+    assert str(test)
+    test_dict = test.to_dict()
+    assert test_dict == {
+        'prompt': 'test1',
+        'ideal_response': 'test2',
+        'checks': [
+            {'check_type': CheckType.MATCH_EXACT.name, 'value': 'test3'},
+            {'check_type': CheckType.MATCH_EXACT.name, 'value': 'test4'},
+        ],
+    }
+    assert PromptTest(**test_dict) == test
+
+def test__Eval__creation():  # noqa
+    eval_obj = Eval(
+        test_sequence=[
+            PromptTest(
+                prompt='test1',
+                ideal_response='test2',
+                checks = [MatchExactCheck(value='test3')],
+            ),
+            PromptTest(
+                prompt='test4',
+                ideal_response='test5',
+                checks = [
+                    MatchExactCheck(value='test6', metadata={'test': 'test7'}),
+                    MatchContainsCheck(value='test8'),
+                ],
+            ),
+        ],
+    )
+    assert eval_obj.test_sequence[0].prompt == 'test1'
+    assert eval_obj.test_sequence[0].ideal_response == 'test2'
+    assert eval_obj.test_sequence[0].checks == [MatchExactCheck(value='test3')]
+    assert eval_obj.test_sequence[1].prompt == 'test4'
+    assert eval_obj.test_sequence[1].ideal_response == 'test5'
+    assert eval_obj.test_sequence[1].checks == [
+        MatchExactCheck(value='test6', metadata={'test': 'test7'}),
+        MatchContainsCheck(value='test8'),
+    ]
+    assert str(eval_obj)
+
+    eval_dict = eval_obj.to_dict()
+    assert eval_dict == {
+        'test_sequence': [
+            {
+                'prompt': 'test1',
+                'ideal_response': 'test2',
+                'checks': [
+                    {
+                        'check_type': CheckType.MATCH_EXACT.name,
+                        'value': 'test3',
+                    },
+                ],
+            },
+            {
+                'prompt': 'test4',
+                'ideal_response': 'test5',
+                'checks': [
+                    {
+                        'metadata': {'test': 'test7'},
+                        'check_type': CheckType.MATCH_EXACT.name,
+                        'value': 'test6',
+                    },
+                    {
+                        'check_type': CheckType.MATCH_CONTAINS.name,
+                        'value': 'test8',
+                    },
+                ],
+            },
+        ],
+    }
+    assert Eval(**eval_dict) == eval_obj
+

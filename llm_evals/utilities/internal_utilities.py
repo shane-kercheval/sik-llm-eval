@@ -159,3 +159,29 @@ def extract_valid_parameters(func: callable, parameters: dict) -> dict:
     if 'kwargs' in valid_parameters:  # all parameters are valid
         return parameters
     return {p: parameters[p] for p in valid_parameters}
+
+
+def create_function_from_string(func_str: str) -> callable:
+    r"""
+    Takes a string containing a Python function definition and returns
+    a callable function object.
+
+    Args:
+        func_str: A string containing the full definition of a Python function.
+
+    Example:
+        func_string = "def multiply(x, y):\n    return x * y"
+        multiply_function = create_function_from_string(func_string)
+        result = multiply_function(2, 3) # Returns 6
+    """
+
+    # TODO: TEST
+
+
+    # Dictionary to hold the function definition
+    local_scope = {}
+    # Execute the function string within the local scope
+    exec(func_str, globals(), local_scope)
+    # Retrieve the function object from the local scope
+    # Assuming the function is the first and only item in the dictionary
+    return next(iter(local_scope.values()))

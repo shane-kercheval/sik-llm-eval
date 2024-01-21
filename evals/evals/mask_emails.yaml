@@ -43,13 +43,13 @@ test_sequence:
 
       This function uses a regular expression to identify email addresses in the input text. The `\b[A-Za-z0-9._%+-]+` part matches the local part of the email address, and the `@` ensures that the match occurs right before the domain part. The `re.sub` function replaces the local part with asterisks. You can adjust the number of asterisks or the replacement character as needed.
     checks:
-      - type: MATCH_CONTAINS
+      - check_type: MATCH_CONTAINS
         value: def mask_emails(
-      - type: MATCH_CONTAINS
+      - check_type: MATCH_CONTAINS
         value: re.sub(
-      - type: MATCH_REGEX
+      - check_type: MATCH_REGEX
         pattern: "def mask_email\\(\\s*[a-zA-Z_][a-zA-Z0-9_]*\\s*(\\s*:\\s*[a-zA-Z_][a-zA-Z0-9_]*\\s*)?\\)\\s*:"
-      - type: PYTHON_CODE_BLOCKS_PRESENT
+      - check_type: PYTHON_CODE_BLOCKS_PRESENT
   - prompt: Create a set of assertion statements that test the function.
     ideal_response: |
       To thoroughly test the mask_emails function, you should create a series of assertion statements that cover various scenarios, including normal cases, edge cases, and potentially unexpected inputs. Here's a set of assertions you can use:
@@ -81,10 +81,10 @@ test_sequence:
 
       These tests cover a variety of common scenarios and edge cases, ensuring that the function behaves as expected in different situations. If all assertions pass without raising an AssertionError, it indicates that the function is working correctly for these test cases.
     checks:
-      - type: MATCH_CONTAINS
+      - check_type: MATCH_CONTAINS
         value: assert mask_emails(
-      - type: PYTHON_CODE_BLOCKS_PRESENT
-      - type: PYTHON_CODE_BLOCKS_RUN
+      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+      - check_type: PYTHON_CODE_BLOCKS_RUN
         code_setup: |
           import re
         functions:
