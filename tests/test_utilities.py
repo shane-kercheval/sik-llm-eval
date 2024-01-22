@@ -8,9 +8,11 @@ from textwrap import dedent
 from llm_evals.utilities.exceptions import RequestError
 from llm_evals.llms.base import Document
 from llm_evals.utilities.internal_utilities import (
+    create_function,
     create_hash,
     execute_code_blocks,
     extract_code_blocks,
+    extract_valid_parameters,
     extract_variables,
     has_method,
     has_property,
@@ -690,3 +692,103 @@ def test__extract_variables():  # noqa
     text = 'Variable followed by other symbols @var_symbols?! should match.'
     results = extract_variables(text)
     assert results == {'var_symbols'}
+
+def test__extract_valid_parameters():  # noqa
+    def my_func(x, y):  # noqa
+        return x + y
+
+    possible_parameters = {'a': 1, 'b': 2, 'c': 3, 'x': 10, 'y': 20}
+    assert extract_valid_parameters(my_func, possible_parameters) == {'x': 10, 'y': 20}
+
+    possible_parameters = {'a': 1, 'b': 2, 'c': 3, 'x': 10}
+    assert extract_valid_parameters(my_func, possible_parameters) == {'x': 10}
+
+    possible_parameters = {'a': 1, 'b': 2, 'c': 3}
+    assert extract_valid_parameters(my_func, possible_parameters) == {}
+
+    possible_parameters = {}
+    assert extract_valid_parameters(my_func, possible_parameters) == {}
+
+    def my_func(**kwargs):  # noqa
+        print(kwargs)
+
+    # if kwargs is used, then all possible parameters are valid
+    possible_parameters = {'a': 1, 'b': 2}
+    assert extract_valid_parameters(my_func, possible_parameters) == {'a': 1, 'b': 2}
+    possible_parameters = {}
+    assert extract_valid_parameters(my_func, possible_parameters) == {}
+
+
+def test__create_function_from_string():  # noqa
+    # basic case
+    func = """
+    def sum_numbers(num1, num2):
+        return num1 + num2
+    """
+    func = create_function(func)
+    assert func(5, 3) == 8
+
+    func_string = "def multiply(x, y):\n    return x * y"
+    func = create_function(func_string)
+    result = func(2, 3)
+    assert result == 6
+
+    # test lambda (has to be assigned to a variable)
+    func_string = """
+    my_value = 5
+    my_lambda = lambda x: x + my_value
+    """
+    func = create_function(func_string)
+    result = func(10)
+    assert result == 15
+
+    # test lambda (has to be assigned to a variable)
+    func_string = """
+    my_value = 5
+    my_lambda = lambda x: x + my_value
+    another_lambda = lambda x: x * my_value
+    """
+    func = create_function(func_string, func_name='my_lambda')
+    result = func(10)
+    assert result == 15
+    func = create_function(func_string, func_name='another_lambda')
+    result = func(10)
+    assert result == 50
+
+    # testing dependency on another function
+    func_str = """
+    def my_func(x):
+        return x
+    def sum_numbers(num1, num2):
+        return my_func(num1) + num2
+    """
+    sum_func = create_function(func_str, func_name='sum_numbers')
+    assert sum_func(5, 3) == 8
+
+    # testing dependency on another function and value
+    func_str = """
+    my_value = 5
+    def add_my_value(x):
+        return x + my_value
+    def sum_numbers(num1, num2):
+        return add_my_value(num1) + num2
+    """
+    sum_func = create_function(func_str, func_name='sum_numbers')
+    assert sum_func(5, 3) == 8 + 5
+
+    # What happens if the function and/or value is already defined in the global namespace?
+    my_value = 100
+    def add_my_value(x):  # noqa
+        return x + my_value * 100
+    def sum_numbers(num1, num2):  # noqa
+        return add_my_value(num1) + num2 * 100
+    # now retest the same function string as above
+    func_str = """
+    my_value = 5
+    def add_my_value(x):
+        return x + my_value
+    def sum_numbers(num1, num2):
+        return add_my_value(num1) + num2
+    """
+    sum_func = create_function(func_str, func_name='sum_numbers')
+    assert sum_func(5, 3) == 8 + 5

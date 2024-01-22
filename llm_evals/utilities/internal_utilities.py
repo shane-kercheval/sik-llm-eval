@@ -3,11 +3,13 @@
 
 from inspect import signature, isfunction
 import datetime
+from types import FunctionType
 import hashlib
 from collections.abc import Callable
 import re
 import io
 import contextlib
+from textwrap import dedent
 import tenacity
 
 
@@ -145,10 +147,6 @@ def extract_variables(value: str) -> set[str]:
 
 def extract_valid_parameters(func: callable, parameters: dict) -> dict:
     """
-
-    TODO: TEST. test both functions and classes e.g. obj.__call__
-
-
     Given a dictionary of possible parameters to pass a function `func`, returns a dictionary
     containing only the parameters that are valid for `func`.
 
@@ -158,30 +156,48 @@ def extract_valid_parameters(func: callable, parameters: dict) -> dict:
     valid_parameters = list(signature(func).parameters.keys())
     if 'kwargs' in valid_parameters:  # all parameters are valid
         return parameters
-    return {p: parameters[p] for p in valid_parameters}
+    return {p: parameters[p] for p in valid_parameters if p in parameters}
 
 
-def create_function_from_string(func_str: str) -> callable:
+def create_function(func_str: str, func_name: str | None = None) -> callable:
     r"""
-    Takes a string containing a Python function definition and returns
-    a callable function object.
+    Create a function from a string containing a Python function definition.
 
-    Args:
-        func_str: A string containing the full definition of a Python function.
+    NOTE: lambda functions are not directly supported. However, a lambda function assigned to a
+    variable can be used.
 
     Example:
         func_string = "def multiply(x, y):\n    return x * y"
-        multiply_function = create_function_from_string(func_string)
-        result = multiply_function(2, 3) # Returns 6
+        func = create_function(func_string)
+        result = func(2, 3)
+        assert result == 6
+
+        func_string = '''
+        my_value = 5
+        my_lambda = lambda x: x + my_value
+        another_lambda = lambda x: x * my_value
+        '''
+        func = create_function(func_string, func_name='my_lambda')
+        result = func(10)
+        assert result == 15
+        func = create_function(func_string, func_name='another_lambda')
+        result = func(10)
+        assert result == 50
+
+    Args:
+        func_str:
+            A string containing the full definition of a Python function.
+        func_name:
+            The name of the function to return. If None, the first function defined in the string
+            is returned.
     """
-
-    # TODO: TEST
-
-
-    # Dictionary to hold the function definition
+    # Dictionary to hold local scope which will contain the function definition
     local_scope = {}
     # Execute the function string within the local scope
-    exec(func_str, globals(), local_scope)
-    # Retrieve the function object from the local scope
-    # Assuming the function is the first and only item in the dictionary
-    return next(iter(local_scope.values()))
+    exec(dedent(func_str), local_scope, local_scope)
+    # Filter out non-user-defined functions
+    user_defined_functions = {k: v for k, v in local_scope.items() if isinstance(v, FunctionType)}
+    # Retrieve the function object from the user defined functions
+    if func_name:
+        return user_defined_functions.get(func_name)
+    return next(iter(user_defined_functions.values()), None)

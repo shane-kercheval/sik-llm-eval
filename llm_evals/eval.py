@@ -109,6 +109,10 @@ class Candidate(BaseModel):
     parameters: dict | None = None
     system_info: dict | None = None
 
+    def __call__(self, prompt: str) -> str:
+        """Returns a response (string) given a prompt (string)."""
+        return self.model(prompt)
+
     @classmethod
     def from_yaml(cls, path: str) -> Candidate:  # noqa: ANN102
         """
@@ -151,14 +155,29 @@ class Eval(BaseModel):
     responses (strings) and returns a TestResult object.
     """
 
-    test_sequence: list[PromptTest | dict] = Field(description='A list of prompts and tests to run against the LLM.')  # noqa
-    metadata: dict | None = Field(default=None, description='Metadata associated with the Eval.')
-    uuid: str | None = Field(default=None, description='Used to uniquely identify the Eval which is ultimately used to avoid running the same Eval (against the same Candidate/llm) more than once.')  # noqa
-    version: str | int | float | None = Field(default=None, description='Version of the Eval.')
-    result: EvalResult | None = Field(default=None, description='The result of evaluating the Eval.')  # noqa
+    test_sequence: list[PromptTest | dict] = Field(
+        description='A list of prompts and tests to run against the LLM.',
+    )
+    metadata: dict | None = Field(
+        default=None,
+        description='Metadata associated with the Eval.',
+    )
+    uuid: str | None = Field(
+        default=None,
+        description='Used to uniquely identify the Eval which is ultimately used to avoid running the same Eval (against the same Candidate/llm) more than once.',  # noqa
+        )
+    version: str | int | float | None = Field(
+        default=None,
+        description='Version of the Eval.',
+    )
+    result: EvalResult | None = Field(
+        default=None,
+        description='The result of evaluating the Eval.',
+    )
 
     @root_validator(pre=True)
-    def process_checks(cls, values):  # noqa
+    def process_tests(cls, values: dict) -> dict:  # noqa: N805
+        """Converts test_sequence to a list of PromptTest objects."""
         test_sequence = values.get('test_sequence', [])
         tests_created = []
         for test in test_sequence:
@@ -208,12 +227,11 @@ class Eval(BaseModel):
             config = yaml.safe_load(f)
         return cls(**config)
 
-    def __call__(self, candidate: Candidate) -> EvalResult:
+    def __call__(self, candidate: Candidate | callable) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         start = time.time()
-        responses = [candidate.model(p.prompt) for p in self.test_sequence]
+        responses = [candidate(p.prompt) for p in self.test_sequence]
         end = time.time()
-        self._duration = end - start
         results = []
         for test, response in zip(self.test_sequence, responses):
             check_results = []
@@ -231,6 +249,7 @@ class Eval(BaseModel):
             # needs to register the the check which knows how to run them and which language they
             # are, but i do need to distract them
             code_blocks = []  # TODO: extract_code_blocks()
+            
             parameters = {
                 'prompt': test.prompt,
                 'ideal_response': test.ideal_response,
@@ -247,7 +266,7 @@ class Eval(BaseModel):
             candidate_obj=candidate,
             responses=responses,
             results=results,
-            total_time_seconds=self._duration,
+            total_time_seconds=end - start,
         )
         return self.result
 
