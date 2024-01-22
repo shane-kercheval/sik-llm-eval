@@ -155,7 +155,7 @@ class Eval(BaseModel):
     responses (strings) and returns a TestResult object.
     """
 
-    test_sequence: list[PromptTest | dict] = Field(
+    test_sequence: list[PromptTest | dict] | dict | PromptTest = Field(
         description='A list of prompts and tests to run against the LLM.',
     )
     metadata: dict | None = Field(
@@ -179,6 +179,8 @@ class Eval(BaseModel):
     def process_tests(cls, values: dict) -> dict:  # noqa: N805
         """Converts test_sequence to a list of PromptTest objects."""
         test_sequence = values.get('test_sequence', [])
+        if isinstance(test_sequence, (dict, PromptTest)):
+            test_sequence = [test_sequence]
         tests_created = []
         for test in test_sequence:
             if isinstance(test, dict):
@@ -297,11 +299,11 @@ class EvalResult(BaseModel):
     but the speed of responses could.
     """
 
-    eval_obj: 'Eval'
-    candidate_obj: 'Candidate'
+    eval_obj: Eval
+    candidate_obj: Candidate | Callable
     responses: list[str]
     total_time_seconds: float
-    results: list[list['CheckResult']]
+    results: list[list[CheckResult]]
 
     @property
     def response_characters(self) -> int:
@@ -357,7 +359,7 @@ class EvalResult(BaseModel):
             return None
         return num_passing / self.num_pass_fail_checks
 
-    def all_results(self) -> list['CheckResult']:
+    def all_results(self) -> list[CheckResult]:
         """Returns a (flattened) list of all CheckResults."""
         return [r for result in self.results for r in result]
 

@@ -11,15 +11,15 @@ from enum import Enum, auto
 import re
 from textwrap import dedent
 from typing import Any, Callable, Type
-from pydantic import BaseModel, Field, root_validator, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class CheckType(Enum):
     """Provides a typesafe representation of the built-in types of Checks."""
 
-    MATCH_EXACT = auto()
-    MATCH_CONTAINS = auto()
-    MATCH_REGEX = auto()
+    MATCH = auto()
+    CONTAINS = auto()
+    REGEX = auto()
     PYTHON_FUNCTION = auto()
     PYTHON_CODE_BLOCKS_PRESENT = auto()
     PYTHON_CODE_BLOCKS_RUN = auto()
@@ -212,8 +212,8 @@ def register_check(check_type: CheckType | str) -> Check:
 CHECK_REGISTRY = CheckRegistry()
 
 
-@register_check(CheckType.MATCH_EXACT)
-class MatchExactCheck(Check):
+@register_check(CheckType.MATCH)
+class MatchCheck(Check):
     """Checks if the LLM response exactly matches the provided value."""
 
     value: str = Field(description="The value to match the LLM response against.")
@@ -234,8 +234,8 @@ class MatchExactCheck(Check):
         return f"{self.__class__.__name__}(value={self.value}, metadata={self.metadata})"
 
 
-@register_check(CheckType.MATCH_CONTAINS)
-class MatchContainsCheck(Check):
+@register_check(CheckType.CONTAINS)
+class ContainsCheck(Check):
     """
     Checks if the LLM response contains the provided value (i.e. the value is found anywhere in the
     response).
@@ -259,8 +259,8 @@ class MatchContainsCheck(Check):
         return f"{self.__class__.__name__}(value='{self.value}', metadata={self.metadata})"
 
 
-@register_check(CheckType.MATCH_REGEX)
-class MatchRegexCheck(Check):
+@register_check(CheckType.REGEX)
+class RegexCheck(Check):
     """Checks if the a given regular expression matches the LLM response."""
 
     pattern: str = Field(description="The regular expression to match the LLM response against.")

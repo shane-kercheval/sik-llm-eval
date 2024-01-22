@@ -78,7 +78,7 @@ prompts:
 
       The last test case, which checks for non-integer input, will raise a TypeError since the function is not designed to handle this type of input. This test case is included to ensure that the function behaves as expected when encountering invalid input types.
 checks:
-  - type: MATCH_CONTAINS
+  - type: CONTAINS
     values:
       - "def fib(n: int) -> list[int]:"
       - null

@@ -1,5 +1,5 @@
 """Tests for the evals module."""
-from llm_evals.checks import CheckType, MatchContainsCheck, MatchExactCheck
+from llm_evals.checks import CheckType, ContainsCheck, MatchCheck
 from llm_evals.eval import Eval, PromptTest
 
 
@@ -20,36 +20,36 @@ def test__PromptTest():  # noqa
     test = PromptTest(
         prompt='test1',
         ideal_response='test2',
-        checks = [MatchExactCheck(value='test3')],
+        checks = [MatchCheck(value='test3')],
     )
     assert test.prompt == 'test1'
     assert test.ideal_response == 'test2'
-    assert test.checks == [MatchExactCheck(value='test3')]
+    assert test.checks == [MatchCheck(value='test3')]
     assert str(test)
     test_dict = test.to_dict()
     assert test_dict == {
         'prompt': 'test1',
         'ideal_response': 'test2',
-        'checks': [{'check_type': CheckType.MATCH_EXACT.name, 'value': 'test3'}],
+        'checks': [{'check_type': CheckType.MATCH.name, 'value': 'test3'}],
     }
     assert PromptTest(**test_dict) == test
 
     test = PromptTest(
         prompt='test1',
         ideal_response='test2',
-        checks = [MatchExactCheck(value='test3'), MatchExactCheck(value='test4')],
+        checks = [MatchCheck(value='test3'), MatchCheck(value='test4')],
     )
     assert test.prompt == 'test1'
     assert test.ideal_response == 'test2'
-    assert test.checks == [MatchExactCheck(value='test3'), MatchExactCheck(value='test4')]
+    assert test.checks == [MatchCheck(value='test3'), MatchCheck(value='test4')]
     assert str(test)
     test_dict = test.to_dict()
     assert test_dict == {
         'prompt': 'test1',
         'ideal_response': 'test2',
         'checks': [
-            {'check_type': CheckType.MATCH_EXACT.name, 'value': 'test3'},
-            {'check_type': CheckType.MATCH_EXACT.name, 'value': 'test4'},
+            {'check_type': CheckType.MATCH.name, 'value': 'test3'},
+            {'check_type': CheckType.MATCH.name, 'value': 'test4'},
         ],
     }
     assert PromptTest(**test_dict) == test
@@ -60,26 +60,26 @@ def test__Eval__creation():  # noqa
             PromptTest(
                 prompt='test1',
                 ideal_response='test2',
-                checks = [MatchExactCheck(value='test3')],
+                checks = [MatchCheck(value='test3')],
             ),
             PromptTest(
                 prompt='test4',
                 ideal_response='test5',
                 checks = [
-                    MatchExactCheck(value='test6', metadata={'test': 'test7'}),
-                    MatchContainsCheck(value='test8'),
+                    MatchCheck(value='test6', metadata={'test': 'test7'}),
+                    ContainsCheck(value='test8'),
                 ],
             ),
         ],
     )
     assert eval_obj.test_sequence[0].prompt == 'test1'
     assert eval_obj.test_sequence[0].ideal_response == 'test2'
-    assert eval_obj.test_sequence[0].checks == [MatchExactCheck(value='test3')]
+    assert eval_obj.test_sequence[0].checks == [MatchCheck(value='test3')]
     assert eval_obj.test_sequence[1].prompt == 'test4'
     assert eval_obj.test_sequence[1].ideal_response == 'test5'
     assert eval_obj.test_sequence[1].checks == [
-        MatchExactCheck(value='test6', metadata={'test': 'test7'}),
-        MatchContainsCheck(value='test8'),
+        MatchCheck(value='test6', metadata={'test': 'test7'}),
+        ContainsCheck(value='test8'),
     ]
     assert str(eval_obj)
 
@@ -91,7 +91,7 @@ def test__Eval__creation():  # noqa
                 'ideal_response': 'test2',
                 'checks': [
                     {
-                        'check_type': CheckType.MATCH_EXACT.name,
+                        'check_type': CheckType.MATCH.name,
                         'value': 'test3',
                     },
                 ],
@@ -102,11 +102,11 @@ def test__Eval__creation():  # noqa
                 'checks': [
                     {
                         'metadata': {'test': 'test7'},
-                        'check_type': CheckType.MATCH_EXACT.name,
+                        'check_type': CheckType.MATCH.name,
                         'value': 'test6',
                     },
                     {
-                        'check_type': CheckType.MATCH_CONTAINS.name,
+                        'check_type': CheckType.CONTAINS.name,
                         'value': 'test8',
                     },
                 ],
