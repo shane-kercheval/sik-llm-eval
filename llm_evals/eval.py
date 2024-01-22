@@ -28,8 +28,9 @@ class PromptTest(BaseModel):
     (e.g. characters per second) as well as responses (which can be visually/subjectively compared
     against either the ideal response or the responses from other LLMs).
 
-    A PromptTest only contains information, it is not directly callable. The reason for this is so
-    that all PromptTests can be evaluated sequentially, in order to accurately measure performance.
+    A PromptTest only contains information, it is not directly callable. An Eval object is
+    responsible for calling the PromptTest(s), executing the checks, and returning a TestResult
+    object.
     """
 
     prompt: str
