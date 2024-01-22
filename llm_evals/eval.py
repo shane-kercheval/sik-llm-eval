@@ -227,7 +227,7 @@ class Eval(BaseModel):
             config = yaml.safe_load(f)
         return cls(**config)
 
-    def __call__(self, candidate: Candidate | callable) -> EvalResult:
+    def __call__(self, candidate: Candidate | Callable) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         start = time.time()
         responses = [candidate(p.prompt) for p in self.test_sequence]
@@ -249,7 +249,7 @@ class Eval(BaseModel):
             # needs to register the the check which knows how to run them and which language they
             # are, but i do need to distract them
             code_blocks = []  # TODO: extract_code_blocks()
-            
+
             parameters = {
                 'prompt': test.prompt,
                 'ideal_response': test.ideal_response,

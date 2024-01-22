@@ -718,7 +718,6 @@ def test__extract_valid_parameters():  # noqa
     possible_parameters = {}
     assert extract_valid_parameters(my_func, possible_parameters) == {}
 
-
 def test__create_function_from_string():  # noqa
     # basic case
     func = """
