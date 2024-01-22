@@ -4,9 +4,13 @@ description: Llama-2-7b-chat running on HuggingFace Endpoints with 1 NVIDIA A10G
 type: HUGGING_FACE_ENDPOINT
 parameters:
   endpoint_url: https://api-inference.huggingface.co/models/llama-2-7b-chat
-  system_message: You are a helpful assistant.
-  temperature: 0.1
+  system_message:
+    - Aasdfasdf
+  temperature:
+    - 0.2
   max_tokens: 2048
+  special_tokens: <INST>....
+  seed: 42  # optional
 system_info:
   platform: Huggingface Endpoints
   quantization: None

@@ -55,6 +55,12 @@ def test__PromptTest():  # noqa
     assert PromptTest(**test_dict) == test
 
 def test__Eval__creation():  # noqa
+    eval_obj = Eval(test_sequence=PromptTest(prompt='test'))
+    eval_dict = eval_obj.to_dict()
+    assert eval_dict == {'test_sequence': [{'prompt': 'test'}]}
+    assert Eval(**eval_dict) == eval_obj
+    assert str(eval_obj)
+
     eval_obj = Eval(
         test_sequence=[
             PromptTest(
@@ -114,4 +120,7 @@ def test__Eval__creation():  # noqa
         ],
     }
     assert Eval(**eval_dict) == eval_obj
+
+# def test__Eval__call():
+
 

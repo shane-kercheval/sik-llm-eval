@@ -394,7 +394,7 @@ class PythonCodeBlocksRun(Check):
         description="A list of callables. Each callable is passed the list of code blocks that were extracted from the response. The functions are executed in the same environment that the code blocks were executed in. The code blocks may or may not have executed successfully. The functions can test the enviroment or the code blocks.",  # noqa
     )
 
-    def __call__(self, code_blocks: list[str]) -> list[CheckResult]:
+    def __call__(self, code_blocks: list[str]) -> ScoreResult:
         """TODO document."""
 
         # run code blocks and any setup code
