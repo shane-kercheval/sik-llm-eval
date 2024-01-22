@@ -12,7 +12,7 @@ from llm_evals.checks import (
     CheckResult,
     PassFailResult,
 )
-from llm_evals.utilities.internal_utilities import extract_valid_parameters
+from llm_evals.utilities.internal_utilities import extract_valid_parameters, get_callable_info
 
 Eval = ForwardRef('Eval')
 EvalResult = ForwardRef('EvalResult')
@@ -41,14 +41,11 @@ class PromptTest(BaseModel):
 
     @root_validator(pre=True)
     def process_checks(cls, values):  # noqa
-        checks = values.get('checks', None)
-
-        if checks is None:
-            return values
-
+        checks = values.get('checks', []) or []
         checks_created = []
         for check in checks:
             if isinstance(check, dict):
+                check = check.copy()  # noqa: PLW2901
                 check_type = check.pop('check_type')
                 assert check_type, "Check dictionary must contain a 'check_type' key"
                 check_instance = CHECK_REGISTRY.create_instance(check_type=check_type, params=check)
@@ -57,7 +54,6 @@ class PromptTest(BaseModel):
                 checks_created.append(check)
             else:
                 raise TypeError("Checks must be either a Check instance or a dictionary")
-
         values['checks'] = checks_created
         return values
 
@@ -102,10 +98,10 @@ class Candidate(BaseModel):
     hardware.
     """
 
-    model: Callable[[str], str]
     uuid: str | None = None
-    name: str | None = None
-    description: str | None = None
+    model: Callable[[str], str] | None = None
+    model_type: str | None = None
+    metadata: dict | None = None
     parameters: dict | None = None
     system_info: dict | None = None
 
@@ -121,7 +117,7 @@ class Candidate(BaseModel):
         """
         with open(path) as f:
             config = yaml.safe_load(f)
-        model_type = config.pop('type')
+        model_type = config.pop('model_type')
         # lookup model registry based on type
         config['model'] = lambda x: x
         return cls(**config)
@@ -133,10 +129,32 @@ class Candidate(BaseModel):
         return dedent(f"""
         {self.__class__.__name__}(
             uuid={self.uuid},
-            name={self.name},
+            metadata={self.metadata},
             description={self.description},{parameters}{system_info}
         )
         """).strip()
+
+    # override equals operator to ignore model (callable) when comparing candidates
+    def __eq__(self, other: object) -> bool:
+        """Returns True if the two Candidates are equal."""
+        if not isinstance(other, Candidate):
+            return False
+        return self.to_dict() == other.to_dict()
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the Candidate."""
+        value = {}
+        if self.uuid:
+            value['uuid'] = self.uuid
+        if self.model_type:
+            value['model_type'] = self.model_type
+        if self.metadata:
+            value['metadata'] = self.metadata
+        if self.parameters:
+            value['parameters'] = self.parameters
+        if self.system_info:
+            value['system_info'] = self.system_info
+        return value
 
 
 class Eval(BaseModel):
@@ -170,10 +188,6 @@ class Eval(BaseModel):
         default=None,
         description='Version of the Eval.',
     )
-    result: EvalResult | None = Field(
-        default=None,
-        description='The result of evaluating the Eval.',
-    )
 
     @root_validator(pre=True)
     def process_tests(cls, values: dict) -> dict:  # noqa: N805
@@ -203,8 +217,6 @@ class Eval(BaseModel):
             value['version'] = self.version
         if self.metadata:
             value['metadata'] = self.metadata
-        if self.result:
-            value['result'] = self.result.to_dict()
         return value
 
     @classmethod
@@ -231,6 +243,12 @@ class Eval(BaseModel):
 
     def __call__(self, candidate: Candidate | Callable) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
+        if isinstance(candidate, Callable):
+            candidate = Candidate(
+                model=candidate,
+                metadata={'function': get_callable_info(candidate)},
+            )
+
         start = time.time()
         responses = [candidate(p.prompt) for p in self.test_sequence]
         end = time.time()
@@ -251,7 +269,6 @@ class Eval(BaseModel):
             # needs to register the the check which knows how to run them and which language they
             # are, but i do need to distract them
             code_blocks = []  # TODO: extract_code_blocks()
-
             parameters = {
                 'prompt': test.prompt,
                 'ideal_response': test.ideal_response,
@@ -263,14 +280,13 @@ class Eval(BaseModel):
                 check_results.append(check(**valid_parameters))
             results.append(check_results)
 
-        self.result = EvalResult(
+        return EvalResult(
             eval_obj=self,
             candidate_obj=candidate,
             responses=responses,
             results=results,
             total_time_seconds=end - start,
         )
-        return self.result
 
     def __str__(self) -> str:
         """Returns a string representation of the Eval."""
@@ -300,7 +316,7 @@ class EvalResult(BaseModel):
     """
 
     eval_obj: Eval
-    candidate_obj: Candidate | Callable
+    candidate_obj: Candidate
     responses: list[str]
     total_time_seconds: float
     results: list[list[CheckResult]]
@@ -375,65 +391,15 @@ class EvalResult(BaseModel):
             % of Passing Checks={self.perc_passed_checks}
         """).strip()
 
-
-
-# class EvalResult:
-#     """
-#     An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
-#     using specific hardware. The hardware is not applicable for services like OpenAI's API, but
-#     would be applicable for running locally or against specific/configurable hardware like Hugging
-#     Face Endpoints or a custom server. The quality of responses might not change between hardware,
-#     but the speed of responses could.
-#     """
-
-#     def __init__(
-#             self,
-#             eval_obj: 'Eval',
-#             candidate_obj: Candidate,
-#             responses: list[str],
-#             total_time_seconds: float,
-#             results: list[list[CheckResult]],
-#             ) -> None:
-#         self.eval_obj = eval_obj
-#         self.candidate_obj = candidate_obj
-#         self.responses = responses
-#         self.total_time_seconds = total_time_seconds
-#         self.response_characters = sum([len(r) for r in responses])
-#         total_time_seconds += 1e-6  # prevent divide by zero
-#         self.characters_per_second = sum([len(r) for r in responses]) / total_time_seconds
-#         self.results = results
-#         self.num_checks = sum([len(r) for r in results])
-#         # Each item of the outer list is a list of CheckResults. Each item of the inner list is a
-#         # CheckResult.
-#         pass_fail_results = [
-#             result for prompt_test in results for result in prompt_test
-#             if isinstance(result, PassFailResult)
-#         ]
-#         self.num_pass_fail_checks = len(pass_fail_results)
-#         if self.num_pass_fail_checks == 0:
-#             self.num_passing_checks = None
-#             self.perc_passed_checks = None
-#         else:
-#             self.num_passing_checks = sum(r.success for r in pass_fail_results)
-#             self.perc_passed_checks = self.num_passing_checks / self.num_pass_fail_checks
-
-#     def all_results(self) -> list[CheckResult]:
-#         """Returns a list of all CheckResults."""
-#         return [r for result in self.results for r in result]
-
-#     def __str__(self) -> str:
-#         """Returns a string representation of the EvalResult."""
-#         return dedent(f"""
-#         EvalResult:
-#             # of Response Characters={self.response_characters}
-#             Total Time (seconds)={self.total_time_seconds}
-#             Characters per Second={self.characters_per_second}
-#             # of Checks={self.num_checks}
-#             # of Pass/Fail Checks={self.num_pass_fail_checks}
-#             # of Passing Checks={self.num_passing_checks}
-#             % of Passing Checks={self.perc_passed_checks}
-#         """).strip()
-
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the EvalResult."""
+        return {
+            'eval_obj': self.eval_obj.to_dict(),
+            'candidate_obj': self.candidate_obj.to_dict(),
+            'responses': self.responses,
+            'total_time_seconds': self.total_time_seconds,
+            'results': [[r.to_dict() for r in result] for result in self.results],
+        }
 
 
 Eval.model_rebuild()

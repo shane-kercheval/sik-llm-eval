@@ -1,6 +1,6 @@
 """Tests for the evals module."""
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck
-from llm_evals.eval import Eval, PromptTest
+from llm_evals.eval import Candidate, Eval, EvalResult, PromptTest
 
 
 def test__PromptTest():  # noqa
@@ -11,11 +11,24 @@ def test__PromptTest():  # noqa
     )
     assert test.prompt == 'test'
     assert test.ideal_response is None
-    assert test.checks is None
+    assert test.checks == []
     assert str(test)
     test_dict = test.to_dict()
-    assert test_dict == {'prompt': 'test'}
     assert PromptTest(**test_dict) == test
+    assert test_dict == {'prompt': 'test'}
+
+    test = PromptTest(
+        prompt='test',
+        ideal_response = None,
+        checks = [],
+    )
+    assert test.prompt == 'test'
+    assert test.ideal_response is None
+    assert test.checks == []
+    assert str(test)
+    test_dict = test.to_dict()
+    assert PromptTest(**test_dict) == test
+    assert test_dict == {'prompt': 'test'}
 
     test = PromptTest(
         prompt='test1',
@@ -27,12 +40,12 @@ def test__PromptTest():  # noqa
     assert test.checks == [MatchCheck(value='test3')]
     assert str(test)
     test_dict = test.to_dict()
+    assert PromptTest(**test_dict) == test
     assert test_dict == {
         'prompt': 'test1',
         'ideal_response': 'test2',
         'checks': [{'check_type': CheckType.MATCH.name, 'value': 'test3'}],
     }
-    assert PromptTest(**test_dict) == test
 
     test = PromptTest(
         prompt='test1',
@@ -44,6 +57,7 @@ def test__PromptTest():  # noqa
     assert test.checks == [MatchCheck(value='test3'), MatchCheck(value='test4')]
     assert str(test)
     test_dict = test.to_dict()
+    assert PromptTest(**test_dict) == test
     assert test_dict == {
         'prompt': 'test1',
         'ideal_response': 'test2',
@@ -52,7 +66,39 @@ def test__PromptTest():  # noqa
             {'check_type': CheckType.MATCH.name, 'value': 'test4'},
         ],
     }
-    assert PromptTest(**test_dict) == test
+
+def test__candidate__creation():  # noqa
+    assert Candidate().to_dict() == {}
+    assert Candidate(**Candidate().to_dict()) == Candidate()
+
+    candidate = Candidate(model=lambda x: x)
+    candidate_dict = candidate.to_dict()
+    assert candidate_dict == {}
+    assert Candidate(**candidate_dict) == candidate
+    assert candidate('test') == 'test'
+
+    candidate = Candidate(model=lambda x: x, metadata={'test': 'test'})
+    candidate_dict = candidate.to_dict()
+    assert candidate_dict == {'metadata': {'test': 'test'}}
+    assert Candidate(**candidate_dict) == candidate
+
+    candidate = Candidate(
+        uuid='test_uuid',
+        model=lambda x: x,
+        metadata={'test': 'test'},
+        model_type='TEST_MODEL_TYPE',
+        parameters={'param_1': 'param_a'},
+        system_info={'system_1': 'system_a'},
+    )
+    candidate_dict = candidate.to_dict()
+    assert candidate_dict == {
+        'uuid': 'test_uuid',
+        'metadata': {'test': 'test'},
+        'model_type': 'TEST_MODEL_TYPE',
+        'parameters': {'param_1': 'param_a'},
+        'system_info': {'system_1': 'system_a'},
+    }
+    assert Candidate(**candidate_dict) == candidate
 
 def test__Eval__creation():  # noqa
     eval_obj = Eval(test_sequence=PromptTest(prompt='test'))
@@ -121,6 +167,20 @@ def test__Eval__creation():  # noqa
     }
     assert Eval(**eval_dict) == eval_obj
 
-# def test__Eval__call():
+def test__Eval__call__result__to_from_dict():  # noqa
+    eval_obj = Eval(test_sequence=PromptTest(prompt='test'))
+    # dict before call should be the same as after call
+    assert eval_obj.to_dict() == {'test_sequence': [{'prompt': 'test'}]}
+    assert Eval(**eval_obj.to_dict()) == eval_obj
+    result = eval_obj(lambda x: f'response: {x}')
+    assert result.response_characters == len('response: test')
+    assert eval_obj.to_dict() == {'test_sequence': [{'prompt': 'test'}]}
+    assert Eval(**eval_obj.to_dict()) == eval_obj
 
+    result_dict = result.to_dict()
+    assert result_dict['eval_obj'] == eval_obj.to_dict()
+    assert result_dict['candidate_obj'] == {'metadata': {'function': 'def <lambda>(x)'}}
+    assert Eval(**result_dict['eval_obj']) == eval_obj
+    assert EvalResult(**result_dict) == result
+    assert EvalResult(**result_dict).to_dict() == result.to_dict()
 

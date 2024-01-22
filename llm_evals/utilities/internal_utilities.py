@@ -1,7 +1,7 @@
 
 """Helper functions and classes that are not intended to be used externally."""
 
-from inspect import signature, isfunction
+from inspect import isclass, ismethod, signature, isfunction
 import datetime
 from types import FunctionType
 import hashlib
@@ -201,3 +201,23 @@ def create_function(func_str: str, func_name: str | None = None) -> callable:
     if func_name:
         return user_defined_functions.get(func_name)
     return next(iter(user_defined_functions.values()), None)
+
+
+def get_callable_info(callable_obj: Callable) -> str:
+    """Takes a callable object and returns a string containing the signature."""
+    if isfunction(callable_obj) or ismethod(callable_obj):
+        # Function or method
+        name = callable_obj.__name__
+        params = str(signature(callable_obj))
+        return f"def {name}{params}"
+    if isclass(callable_obj):
+        # Class
+        name = callable_obj.__name__
+        constructor = callable_obj.__init__
+        params = str(signature(constructor))
+        return f"class {name}{params}"
+    if callable(callable_obj):
+        # Lambda or other callable objects without a __name__ attribute
+        params = str(signature(callable_obj))
+        return f"lambda {params}"
+    raise ValueError(f"Unsupported callable object: {callable_obj}")
