@@ -10,8 +10,10 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 import re
 from textwrap import dedent
-from typing import Any, Callable, Type
+from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, Field, field_validator
+
+from llm_evals.utilities.internal_utilities import Registry
 
 
 class CheckType(Enum):
@@ -60,7 +62,7 @@ class CheckResult(BaseModel, ABC):
     value: bool | int | float | Any
     success: bool | None = None
     metadata: dict[str, Any] = {}
-    result_type: str
+    # result_type: str
 
     def __str__(self) -> str:
         return dedent(f"""
@@ -83,13 +85,12 @@ class CheckResult(BaseModel, ABC):
 class PassFailResult(CheckResult):
     """Represents a pass/fail (True/False) result."""
 
-    result_type: str = Field(default='PASS_FAIL')
+    # result_type: str = Field(default='PASS_FAIL')
 
     def __init__(self, **data):  # noqa: ANN003
         super().__init__(**data)
         # definition of success is simply the value
         self.success = self.value
-
 
 
 class ScoreResult(CheckResult):
@@ -100,7 +101,7 @@ class ScoreResult(CheckResult):
     """
 
     success_threshold: int | float | None = None
-    result_type: str = Field(default='SCORE')
+    # result_type: str = Field(default='SCORE')
 
     def __init__(self, **data):  # noqa: ANN003
         super().__init__(**data)
@@ -126,26 +127,43 @@ class Check(BaseModel, ABC):
     the prompt. The intent of the check can range from simple matching (i.e. does the LLM response
     exactly match the expected value provided) to using custom logic (e.g. using an LLM to evaluate
     the response).
-
-    `check_type` is set by registry.
     """
 
+    registry: ClassVar[Registry] = Registry()
     metadata: dict[str, Any] = {}
-    check_type: CheckType | str | None = None
 
-    def __init__(self, **data):  # noqa: ANN003
-        super().__init__(**data)
-        # the `check_type` is set by the registry, as a class variable (since we don't have an
-        # instance); so if it exists, set `check_type
-        if self.check_type is None and hasattr(self.__class__, 'check_type'):
-            self.check_type = self.__class__.check_type
+    @classmethod
+    def register(cls, check_type: str | CheckType):  # noqa: ANN102
+        """Register a subclass of Check."""
+        def decorator(subclass: Type[Check]) -> Type[Check]:
+            assert issubclass(subclass, Check), \
+                f"Check '{check_type}' ({subclass.__name__}) must extend Check"
+            cls.registry.register(type_name=check_type, item=subclass)
+            return subclass
+        return decorator
 
-    @field_validator('check_type')
-    def set_check_type(cls, check_type: CheckType | str | None) -> str | None:  # noqa: N805
-        """Set check_type to string if a CheckType was passed in. Capitalize the string."""
-        if isinstance(check_type, CheckType):
-            check_type = check_type.name
-        return None if check_type is None else check_type.upper()
+    @classmethod
+    def from_dict(cls, data: dict):  # noqa: ANN102
+        """
+        Create a Check object from a dictionary. This method requires that the Check subclass has
+        been registered with the `register_subclass` decorator.
+        """
+        check_type = data.get('check_type', '')
+        if check_type in cls.registry:
+            return cls.registry.create_instance(type_name=check_type, **data)
+        raise ValueError(f"Unknown type {check_type}")
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the Check."""
+        value = self.model_dump(exclude_defaults=True, exclude_none=True)
+        if self.check_type:
+            value['check_type'] = self.check_type.upper()
+        return value
+
+    @property
+    def check_type(self) -> str:
+        """The type of check."""
+        return self.__class__._type_name.upper()
 
     @abstractmethod
     def __call__(self, response: str) -> CheckResult:
@@ -155,69 +173,69 @@ class Check(BaseModel, ABC):
         """String representation of the Check."""
         return f"{self.__class__.__name__}(metadata={self.metadata})"
 
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the Check."""
-        return self.model_dump(exclude_defaults=True, exclude_none=True)
+    # def to_dict(self) -> dict:
+    #     """Return a dictionary representation of the Check."""
+    #     return self.model_dump(exclude_defaults=True, exclude_none=True)
 
 
-class CheckRegistry:
-    """
-    Registry sytem of 'checks' i.e. (subclasses) of Check. The registry system is used to
-    dynamically create checks from a config (dictionary or yaml). Any user can register a new
-    check by decorating a class with the `register_check` decorator. A Check object can then be
-    created from a dictionary by calling `create_instance` with the name of the check (registered
-    with the decorator) and any parameters for the Check.
+# class CheckRegistry:
+#     """
+#     Registry sytem of 'checks' i.e. (subclasses) of Check. The registry system is used to
+#     dynamically create checks from a config (dictionary or yaml). Any user can register a new
+#     check by decorating a class with the `register_check` decorator. A Check object can then be
+#     created from a dictionary by calling `create_instance` with the name of the check (registered
+#     with the decorator) and any parameters for the Check.
 
-    The CHECK_REGISTRY is a global instance of CheckRegistry that is used to create checks.
-    """
+#     The CHECK_REGISTRY is a global instance of CheckRegistry that is used to create checks.
+#     """
 
-    def __init__(self):
-        self.registered: dict[str, Type[Check]] = {}
+#     def __init__(self):
+#         self.registered: dict[str, Type[Check]] = {}
 
-    def register(self, check_type: str | CheckType, check_class: Type[Check]) -> None:
-        """Register an Check with the registry."""
-        if isinstance(check_type, CheckType):
-            check_type = check_type.name
-        check_type = check_type.upper()
-        if check_type in self.registered:
-            raise ValueError(f"An Check with name '{check_type}' is already registered.")
-        check_class.check_type = check_type
-        self.registered[check_type] = check_class
+#     def register(self, check_type: str | CheckType, check_class: Type[Check]) -> None:
+#         """Register an Check with the registry."""
+#         if isinstance(check_type, CheckType):
+#             check_type = check_type.name
+#         check_type = check_type.upper()
+#         if check_type in self.registered:
+#             raise ValueError(f"An Check with name '{check_type}' is already registered.")
+#         check_class.check_type = check_type
+#         self.registered[check_type] = check_class
 
-    def create_instance(self, check_type: CheckType | str, params: dict | None = None) -> Check:
-        """Create a test from a config."""
-        if isinstance(check_type, CheckType):
-            check_type = check_type.name
-        check_type = check_type.upper()
-        if check_type not in self.registered:
-            raise ValueError(f"CheckType '{check_type}' not found in registry.")
-        if params is None:
-            params = {}
-        return self.registered[check_type](**params)
+#     def create_instance(self, check_type: CheckType | str, params: dict | None = None) -> Check:
+#         """Create a test from a config."""
+#         if isinstance(check_type, CheckType):
+#             check_type = check_type.name
+#         check_type = check_type.upper()
+#         if check_type not in self.registered:
+#             raise ValueError(f"CheckType '{check_type}' not found in registry.")
+#         if params is None:
+#             params = {}
+#         return self.registered[check_type](**params)
 
-    def __contains__(self, check_type: CheckType | str) -> bool:
-        """Return true if the CheckType is registered."""
-        if isinstance(check_type, CheckType):
-            check_type = check_type.name
-        return check_type.upper() in self.registered
-
-
-def register_check(check_type: CheckType | str) -> Check:
-    """Decorator to register a Check with CHECK_REGISTRY."""
-    def decorator(cls: Check) -> Check:
-        assert issubclass(cls, Check), \
-            f"Test '{check_type}' ({cls.__name__}) must extend CheckType"
-        assert (check_type not in CHECK_REGISTRY), \
-            f"Test '{check_type}' already registered."
-        CHECK_REGISTRY.register(check_type, cls)
-        return cls
-    return decorator
+#     def __contains__(self, check_type: CheckType | str) -> bool:
+#         """Return true if the CheckType is registered."""
+#         if isinstance(check_type, CheckType):
+#             check_type = check_type.name
+#         return check_type.upper() in self.registered
 
 
-CHECK_REGISTRY = CheckRegistry()
+# def register_check(check_type: CheckType | str) -> Check:
+#     """Decorator to register a Check with CHECK_REGISTRY."""
+#     def decorator(cls: Check) -> Check:
+#         assert issubclass(cls, Check), \
+#             f"Test '{check_type}' ({cls.__name__}) must extend CheckType"
+#         assert (check_type not in CHECK_REGISTRY), \
+#             f"Test '{check_type}' already registered."
+#         CHECK_REGISTRY.register(check_type, cls)
+#         return cls
+#     return decorator
 
 
-@register_check(CheckType.MATCH)
+# CHECK_REGISTRY = CheckRegistry()
+
+
+@Check.register(CheckType.MATCH)
 class MatchCheck(Check):
     """Checks if the LLM response exactly matches the provided value."""
 
@@ -239,7 +257,7 @@ class MatchCheck(Check):
         return f"{self.__class__.__name__}(value={self.value}, metadata={self.metadata})"
 
 
-@register_check(CheckType.CONTAINS)
+@Check.register(CheckType.CONTAINS)
 class ContainsCheck(Check):
     """
     Checks if the LLM response contains the provided value (i.e. the value is found anywhere in the
@@ -264,7 +282,7 @@ class ContainsCheck(Check):
         return f"{self.__class__.__name__}(value='{self.value}', metadata={self.metadata})"
 
 
-@register_check(CheckType.REGEX)
+@Check.register(CheckType.REGEX)
 class RegexCheck(Check):
     """Checks if the a given regular expression matches the LLM response."""
 
@@ -286,7 +304,7 @@ class RegexCheck(Check):
         return f"{self.__class__.__name__}(pattern='{self.pattern}', metadata={self.metadata})"
 
 
-@register_check(CheckType.PYTHON_FUNCTION)
+@Check.register(CheckType.PYTHON_FUNCTION)
 class PythonFunctionCheck(Check):
     """
     Runs a Python function (using the LLM response as input). A Python function is either
@@ -331,7 +349,7 @@ class PythonFunctionCheck(Check):
         return self._function(**kwargs)
 
 
-@register_check(CheckType.PYTHON_CODE_BLOCKS_PRESENT)
+@Check.register(CheckType.PYTHON_CODE_BLOCKS_PRESENT)
 class PythonCodeBlocksPresent(Check):
     """
     Checks that the response contains code blocks. The code blocks do not necessary need to run
@@ -365,7 +383,7 @@ class PythonCodeBlocksPresent(Check):
         return f"{self.__class__.__name__}(min_code_blocks={self.min_code_blocks}, metadata={self.metadata})"  # noqa
 
 
-@register_check(CheckType.PYTHON_CODE_BLOCKS_RUN)
+@Check.register(CheckType.PYTHON_CODE_BLOCKS_RUN)
 class PythonCodeBlocksRun(Check):
     """
     Unlike other checks, this check aggregates several metrics into a single result.

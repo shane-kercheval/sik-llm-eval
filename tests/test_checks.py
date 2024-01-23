@@ -2,12 +2,12 @@
 from pydantic import ValidationError
 import pytest
 from llm_evals.checks import (
-    CHECK_REGISTRY,
+    # CHECK_REGISTRY,
     ContainsCheck,
     MatchCheck,
     RegexCheck,
-    register_check,
-    CheckRegistry,
+    # register_check,
+    # CheckRegistry,
     Check,
     CheckResult,
     CheckType,
@@ -16,205 +16,139 @@ from llm_evals.checks import (
 )
 
 
-class FakeCheck(Check):
-    """Mock test for testing."""
-
-    def __call__(self, response: str) -> CheckResult:  # noqa: D102
-        return PassFailResult(
-            check_type=CheckType.PASS_FAIL,
-            passed=response is not None,
-            metadata=self.metadata,
-        )
-
-class FakeParamCheck(Check):
-    """Mock test for testing."""
-
-    required_field: str
-
-    def __call__(self, response: str) -> CheckResult:  # noqa: D102
-        return PassFailResult(
-            check_type=CheckType.PASS_FAIL,
-            passed=response is not None,
-            metadata=self.metadata,
-        )
-
-
 def test__register_check__success__str__ensure_creation():  # noqa
     """Test successful registration of a check."""
-    registry = CheckRegistry()
-    registry.register('FakeCheck', FakeCheck)
-    assert 'FakeCheck' in registry
+    @Check.register('FakeCheck')
+    class FakeCheck(Check):
+        """Mock test for testing."""
 
-    # check_type should be set (via register()) whether or not we call create_instance()
-    instance = FakeCheck()
-    assert instance.check_type == 'FAKECHECK'
-
-    instance = registry.create_instance('FakeCheck')
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-    assert instance.check_type == 'FAKECHECK'
-
-    instance = registry.create_instance('FakeCheck', params=None)
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-    assert instance.check_type == 'FAKECHECK'
-
-    instance = registry.create_instance('FakeCheck', params={})
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-    assert instance.check_type == 'FAKECHECK'
-
-    instance = registry.create_instance('FakeCheck', params={'metadata': {'foo': 'bar'}})
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {'foo': 'bar'}
-    assert instance.check_type == 'FAKECHECK'
-
-def test__register_check__success__using_decorator():  # noqa
-    """Test successful registration of a check using a decorator."""
-    assert 'test' not in CHECK_REGISTRY
-
-    @register_check('test')
-    class TestCheck(Check):
         def __call__(self, response: str) -> CheckResult:
-            return PassFailResult(value=True, metadata={'response': response})
+            return PassFailResult(
+                value=response is not None,
+                metadata=self.metadata,
+            )
 
-    assert 'test' in CHECK_REGISTRY
-    assert 'TEST' in CHECK_REGISTRY
+    assert 'FAKECHECK' in Check.registry
+    assert 'fakecheck' in Check.registry
 
-    # check_type should be set (via register()) whether or not we call create_instance()
-    instance = TestCheck()
-    assert instance.check_type == 'TEST'
-
-
-    obj = CHECK_REGISTRY.create_instance('test')
-    assert isinstance(obj, TestCheck)
-    assert obj.check_type == 'TEST'
-    assert obj.metadata == {}
-    result = obj('foo')
-    assert isinstance(result, PassFailResult)
+    check_instance = Check.from_dict({'check_type': 'fakecheck'})
+    assert isinstance(check_instance, FakeCheck)
+    assert check_instance.check_type == 'FAKECHECK'
+    assert Check.from_dict(check_instance.to_dict()) == check_instance
+    result = check_instance(response='foo')
     assert result.success
-    assert result.metadata == {'response': 'foo'}
+    assert result.value
+    assert result.metadata == {}
+
+    check_instance = Check.from_dict({'check_type': 'FAKECHECK'})
+    assert isinstance(check_instance, FakeCheck)
+    assert check_instance.check_type == 'FAKECHECK'
+    assert Check.from_dict(check_instance.to_dict()) == check_instance
+    result = check_instance(response='foo')
+    assert result.success
+    assert result.value
+    assert result.metadata == {}
+
+    check_instance = Check.from_dict({'check_type': 'FAKECHECK', 'metadata': {'foo': 'bar'}})
+    assert isinstance(check_instance, FakeCheck)
+    assert check_instance.check_type == 'FAKECHECK'
+    assert check_instance.metadata == {'foo': 'bar'}
+    assert Check.from_dict(check_instance.to_dict()) == check_instance
+    result = check_instance(response='foo')
+    assert result.success
+    assert result.value
+    assert result.metadata == {'foo': 'bar'}
+
+    check_instance = Check.from_dict({'check_type': 'FAKECHECK', 'metadata': {}})
+    assert isinstance(check_instance, FakeCheck)
+    assert check_instance.check_type == 'FAKECHECK'
+    assert check_instance.metadata == {}
+    assert Check.from_dict(check_instance.to_dict()) == check_instance
+    result = check_instance(response='foo')
+    assert result.success
+    assert result.value
+    assert result.metadata == {}
+
     # We should not be able to register a check with the same type
     with pytest.raises(AssertionError):
-        @register_check('TEST')
+        @Check.register('fakecheck')
         class TestCheck2(Check):
             def __call__(self, response: str) -> CheckResult:
                 return PassFailResult(value=True, metadata={'response': response})
     # We should not be able to register a check that isn't a Check object
     with pytest.raises(AssertionError):
-        @register_check('test2')
+        @Check.register('test2')
         class TestCheck3:
             def __call__(self, response: str) -> CheckResult:
                 return PassFailResult(value=True, metadata={'response': response})
 
-def test__register_check__success__CheckType__ensure_creation():  # noqa
-    """Test successful registration of a check."""
-    registry = CheckRegistry()
-    registry.register(CheckType.CONTAINS, FakeCheck)
-    assert CheckType.CONTAINS.name in registry
-    assert CheckType.CONTAINS in registry
-
-    instance = registry.create_instance(CheckType.CONTAINS.name)
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-
-    instance = registry.create_instance(CheckType.CONTAINS.name, params=None)
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-
-    instance = registry.create_instance(CheckType.CONTAINS.name, params={})
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-
-    instance = registry.create_instance(CheckType.CONTAINS.name, params={'metadata': {'foo': 'bar'}})
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {'foo': 'bar'}
-
-    instance = registry.create_instance(CheckType.CONTAINS)
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-
-    instance = registry.create_instance(CheckType.CONTAINS, params=None)
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-
-    instance = registry.create_instance(CheckType.CONTAINS, params={})
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {}
-
-    instance = registry.create_instance(
-        CheckType.CONTAINS,
-        params={'metadata': {'foo': 'bar'}},
-    )
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {'foo': 'bar'}
-
 def test__register_check__success__ensure_creation__with_required_params():  # noqa
     """Test successful registration of a check."""
-    registry = CheckRegistry()
-    registry.register('FakeParamCheck', FakeParamCheck)
-    assert 'FakeParamCheck' in registry
+
+    @Check.register('FakeParamCheck')
+    class FakeParamCheck(Check):
+        """Mock test for testing."""
+
+        required_field: str
+
+        def __call__(self, response: str) -> CheckResult:
+            return PassFailResult(
+                check_type=CheckType.PASS_FAIL,
+                passed=response is not None,
+                metadata=self.metadata,
+            )
+
+    assert 'FAKEPARAMCHECK' in Check.registry
+    assert 'fakeparamcheck' in Check.registry
 
     # if we don't pass the required param, we should get an error
     with pytest.raises(ValidationError):
-        _ = registry.create_instance('FakeParamCheck')
+        _ = Check.from_dict({'check_type': 'FakeParamCheck'})
     with pytest.raises(ValidationError):
-        _ = registry.create_instance('FakeParamCheck', params=None)
-    with pytest.raises(ValidationError):
-        _ = registry.create_instance('FakeParamCheck', params={})
-    with pytest.raises(ValidationError):
-        _ = registry.create_instance('FakeParamCheck', params={'metadata': {'foo': 'bar'}})
+        _ = Check.from_dict({'check_type': 'FakeParamCheck', 'metadata': {'foo': 'bar'}})
 
-    instance = registry.create_instance('FakeParamCheck', params={'required_field': 'foo'})
+    instance = Check.from_dict({'check_type': 'FakeParamCheck', 'required_field': 'foo'})
     assert isinstance(instance, FakeParamCheck)
     assert instance.metadata == {}
     assert instance.required_field == 'foo'
 
-    instance = registry.create_instance(
-        'FakeParamCheck',
-        params={'required_field': 'foo', 'metadata': {'foo': 'bar'}},
-    )
+    instance = Check.from_dict({
+        'check_type': 'FakeParamCheck',
+        'required_field': 'foo',
+        'metadata': {'foo': 'bar'},
+    })
     assert isinstance(instance, FakeParamCheck)
     assert instance.metadata == {'foo': 'bar'}
     assert instance.required_field == 'foo'
 
-def test__register_check_create_instance__case_insensitive():  # noqa
-    """Test that the check name is case insensitive."""
-    registry = CheckRegistry()
-    registry.register('FakeCheck', FakeCheck)
-    assert 'fakecheck' in registry
-    assert 'FAKECHECK' in registry
-    instance = registry.create_instance('fakecheck', params={'metadata': {'foo': 'bar'}})
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {'foo': 'bar'}
-    instance = registry.create_instance('FAKECHECK', params={'metadata': {'foo': 'bar'}})
-    assert isinstance(instance, FakeCheck)
-    assert instance.metadata == {'foo': 'bar'}
-
 def test__register_check__duplicate__str__():  # noqa
     """Test registering a check with a duplicate name raises an error."""
-    registry = CheckRegistry()
-    registry.register('FakeCheck', FakeCheck)
-    with pytest.raises(ValueError):  # noqa: PT011
-        registry.register('FakeCheck', FakeCheck)
+    with pytest.raises(AssertionError):
+        @Check.register(CheckType.MATCH.name)
+        class FakeCheck(Check):
+            """Mock test for testing."""
 
-def test__register_check__duplicate__CheckType_and_str():  # noqa
-    """Test registering a check with a duplicate name raises an error."""
-    registry = CheckRegistry()
-    registry.register(CheckType.MATCH, FakeCheck)
-    with pytest.raises(ValueError):  # noqa: PT011
-        registry.register(CheckType.MATCH, FakeCheck)
-    with pytest.raises(ValueError):  # noqa: PT011
-        registry.register(CheckType.MATCH.name, FakeCheck)
+            def __call__(self, response: str) -> CheckResult:
+                return response
 
-def test__register_check__duplicate__str_and_CheckType():  # noqa
+
+    with pytest.raises(AssertionError):
+        @Check.register(CheckType.MATCH.name.lower())
+        class FakeCheck(Check):  # noqa: F811
+            """Mock test for testing."""
+
+            def __call__(self, response: str) -> CheckResult:
+                return response
+
+def test__register_check__duplicate__CheckType():  # noqa
     """Test registering a check with a duplicate name raises an error."""
-    registry = CheckRegistry()
-    registry.register(CheckType.MATCH.name, FakeCheck)
-    with pytest.raises(ValueError):  # noqa: PT011
-        registry.register(CheckType.MATCH, FakeCheck)
-    with pytest.raises(ValueError):  # noqa: PT011
-        registry.register(CheckType.MATCH.name, FakeCheck)
+    with pytest.raises(AssertionError):
+        @Check.register(CheckType.MATCH)
+        class FakeCheck(Check):
+            """Mock test for testing."""
+
+            def __call__(self, response: str) -> CheckResult:
+                return response
 
 def test__CheckType():  # noqa
     assert CheckType.MATCH.name == 'MATCH'
@@ -358,11 +292,15 @@ def test__MatchExactCheck__has_check_type():  # noqa
     assert MatchCheck(**check_dict) == check
 
 def test__MatchExactCheck():  # noqa
+    assert CheckType.MATCH.name in Check.registry
+    assert CheckType.MATCH in Check.registry
+
     # this should fail because we didn't pass the required param
     with pytest.raises(ValidationError):
-        CHECK_REGISTRY.create_instance(CheckType.MATCH)
+        Check.from_dict({'check_type': CheckType.MATCH})
 
-    check = CHECK_REGISTRY.create_instance(CheckType.MATCH, params={'value': 'foo'})
+    # check check_type with Enum
+    check = Check.from_dict({'check_type': CheckType.MATCH, 'value': 'foo'})
     assert check.value == 'foo'
     assert check.check_type == CheckType.MATCH.name
     assert check.metadata == {}
@@ -372,6 +310,19 @@ def test__MatchExactCheck():  # noqa
         'check_type': CheckType.MATCH.name,
         'value': 'foo',
         # 'metadata': {},
+    }
+    assert MatchCheck(**check_dict) == check
+
+    # check check_type with lower case
+    check = Check.from_dict({'check_type': CheckType.MATCH.name.lower(), 'value': 'foo'})
+    assert check.value == 'foo'
+    assert check.check_type == CheckType.MATCH.name
+    assert check.metadata == {}
+    assert str(check)
+    check_dict = check.to_dict()
+    assert check_dict == {
+        'check_type': CheckType.MATCH.name,
+        'value': 'foo',
     }
     assert MatchCheck(**check_dict) == check
 
@@ -394,10 +345,11 @@ def test__MatchExactCheck():  # noqa
     }
     assert PassFailResult(**result_dict) == result
 
-    check = CHECK_REGISTRY.create_instance(
-        CheckType.MATCH,
-        params={'value': 'bar', 'metadata': {'bar': 'foo'}},
-    )
+    check = Check.from_dict({
+        'check_type': CheckType.MATCH.name.lower(),
+        'value': 'bar',
+        'metadata': {'bar': 'foo'},
+    })
     assert check.value == 'bar'
     assert check.check_type == CheckType.MATCH.name
     assert check.metadata == {'bar': 'foo'}
@@ -443,11 +395,29 @@ def test__MatchContainsCheck__has_check_type():  # noqa
     assert ContainsCheck(**check_dict) == check
 
 def test__MatchContainsCheck():  # noqa
+    assert CheckType.CONTAINS.name in Check.registry
+    assert CheckType.CONTAINS in Check.registry
+
     # this should fail because we didn't pass the required param
     with pytest.raises(ValidationError):
-        CHECK_REGISTRY.create_instance(CheckType.CONTAINS)
+        Check.from_dict({'check_type': CheckType.CONTAINS})
 
-    check = CHECK_REGISTRY.create_instance(CheckType.CONTAINS, params={'value': 'o ba'})
+    # check check_type with Enum
+    check = Check.from_dict({'check_type': CheckType.CONTAINS, 'value': 'o ba'})
+    assert check.value == 'o ba'
+    assert check.check_type == CheckType.CONTAINS.name
+    assert check.metadata == {}
+    assert str(check)
+    check_dict = check.to_dict()
+    assert check_dict == {
+        'check_type': CheckType.CONTAINS.name,
+        'value': 'o ba',
+        # 'metadata': {},
+    }
+    assert ContainsCheck(**check_dict) == check
+
+    # check check_type with lower case
+    check = Check.from_dict({'check_type': CheckType.CONTAINS.name.lower(), 'value': 'o ba'})
     assert check.value == 'o ba'
     assert check.check_type == CheckType.CONTAINS.name
     assert check.metadata == {}
@@ -479,10 +449,11 @@ def test__MatchContainsCheck():  # noqa
         },
     }
 
-    check = CHECK_REGISTRY.create_instance(
-        CheckType.CONTAINS,
-        params={'value': 'o ba', 'metadata': {'bar': 'foo'}},
-    )
+    check = Check.from_dict({
+        'check_type': CheckType.CONTAINS.name.lower(),
+        'value': 'o ba',
+        'metadata': {'bar': 'foo'},
+    })
     assert check.value == 'o ba'
     assert check.check_type == CheckType.CONTAINS.name
     assert check.metadata == {'bar': 'foo'}
@@ -530,13 +501,16 @@ def test__MatchRegexCheck__has_check_type():  # noqa
     assert RegexCheck(**check_dict) == check
 
 def test__MatchRegexCheck():  # noqa
+    assert CheckType.REGEX.name in Check.registry
+    assert CheckType.REGEX in Check.registry
+
     # this should fail because we didn't pass the required param
     with pytest.raises(ValidationError):
-        CHECK_REGISTRY.create_instance(CheckType.REGEX)
+        Check.from_dict({'check_type': CheckType.REGEX})
 
     # example of regex to test
     regex = r'^[a-z]+$'  # this regex matches any string that is all lowercase letters
-    check = CHECK_REGISTRY.create_instance(CheckType.REGEX, params={'pattern': regex})
+    check = Check.from_dict({'check_type': CheckType.REGEX, 'pattern': regex})
     assert check.pattern == regex
     assert check.check_type == CheckType.REGEX.name
     assert check.metadata == {}
@@ -569,10 +543,11 @@ def test__MatchRegexCheck():  # noqa
     }
     assert PassFailResult(**result_dict) == result
 
-    check = CHECK_REGISTRY.create_instance(
-        CheckType.REGEX,
-        params={'pattern': regex, 'metadata': {'bar': 'foo'}},
-    )
+    check = Check.from_dict({
+        'check_type': CheckType.REGEX.name.lower(),
+        'pattern': regex,
+        'metadata': {'bar': 'foo'},
+    })
     assert check.pattern == regex
     assert check.check_type == CheckType.REGEX.name
     assert check.metadata == {'bar': 'foo'}

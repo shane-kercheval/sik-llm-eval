@@ -1,6 +1,7 @@
 
 """Helper functions and classes that are not intended to be used externally."""
 
+from enum import Enum
 from inspect import isclass, ismethod, signature, isfunction
 import datetime
 from types import FunctionType
@@ -10,6 +11,7 @@ import re
 import io
 import contextlib
 from textwrap import dedent
+from typing import Type, TypeVar
 import tenacity
 
 
@@ -221,3 +223,71 @@ def get_callable_info(callable_obj: Callable) -> str:
         params = str(signature(callable_obj))
         return f"lambda {params}"
     raise ValueError(f"Unsupported callable object: {callable_obj}")
+
+
+
+T = TypeVar('T')
+
+
+class Registry:
+    """
+    A registry for managing different types of classes.
+    Allows for registering classes with a type name and creating instances of these classes.
+    The registry is case-insensitive for type names.
+    """
+
+    def __init__(self):
+        """Initialize the registry with an empty dictionary."""
+        self._registry: dict[str, Type[T]] = {}
+
+    def register(self, type_name: str | Enum, item: Type[T]) -> None:
+        """
+        Register a class with a specified type name.
+
+        Args:
+            type_name: The type name to be associated with the class.
+            item: The class to be registered.
+        """
+        if isinstance(type_name, Enum):
+            type_name = type_name.name
+        type_name = type_name.upper()
+        assert type_name not in self._registry, f"Type '{type_name}' already registered."
+        item._type_name = type_name
+        self._registry[type_name] = item
+
+    def get(self, type_name: str) -> Type[T]:
+        """
+        Get the class associated with the given type name.
+
+        Args:
+            type_name: The type name of the class to retrieve.
+        """
+        return self._registry[type_name.upper()]
+
+    def __contains__(self, type_name: str | Enum) -> bool:
+        """
+        Check if a type name is registered in the registry (case insensitive).
+
+        Args:
+            type_name: The type name to check.
+        """
+        if isinstance(type_name, Enum):
+            type_name = type_name.name
+        return type_name.upper() in self._registry
+
+    def create_instance(self, type_name: str | Enum, **data: dict) -> T:
+        """
+        Create an instance of the class associated with the given type name.
+
+        Args:
+            type_name (str): The type name of the class to instantiate.
+            data: Keyword arguments to be passed to the class constructor.
+
+        Raises:
+            ValueError: If the type name is not registered in the registry.
+        """
+        if isinstance(type_name, Enum):
+            type_name = type_name.name
+        if type_name.upper() not in self._registry:
+            raise ValueError(f"Unknown type {type_name}")
+        return self._registry[type_name.upper()](**data)

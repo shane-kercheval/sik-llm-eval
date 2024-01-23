@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator, root_validator
 import yaml
 
 from llm_evals.checks import (
-    CHECK_REGISTRY,
+    # CHECK_REGISTRY,
     Check,
     CheckType,
     CheckResult,
