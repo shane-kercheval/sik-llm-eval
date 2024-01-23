@@ -95,8 +95,8 @@ class PromptTest(BaseModel):
 
 class Candidate(BaseModel):
     """
-    A Candidate describes an LLM that may optionally be associated with specific parameters or
-    hardware.
+    A Candidate describes an LLM (or specific implementation of an LLM interface (e.g.
+    history/context management)) along wiht optional parameters or hardware.
     """
 
     uuid: str | None = None
