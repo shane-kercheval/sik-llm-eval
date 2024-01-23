@@ -28,7 +28,6 @@ def test__CheckType__mixin_behaviors():  # noqa
     with pytest.raises(ValueError):  # noqa: PT011
         CheckType.to_enum('foo')
 
-
 def test__register_check__success__str__ensure_creation():  # noqa
     """Test successful registration of a check."""
     @Check.register('FakeCheck')

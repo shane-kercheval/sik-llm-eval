@@ -41,14 +41,16 @@ class PromptTest(BaseModel):
 
     @root_validator(pre=True)
     def process_checks(cls, values):  # noqa
+        """
+        If checks are provided as dictionaries (e.g. loading from yaml), convert them to Check
+        objects.
+        """
         checks = values.get('checks', []) or []
         checks_created = []
         for check in checks:
             if isinstance(check, dict):
                 assert 'check_type' in check, "Check dictionary must contain a 'check_type' key"
-                check = check.copy()  # noqa: PLW2901
-                check_instance = Check.from_dict(check)
-                checks_created.append(check_instance)
+                checks_created.append(Check.from_dict(check.copy()))
             elif isinstance(check, Check):
                 checks_created.append(check)
             else:
@@ -318,7 +320,31 @@ class EvalResult(BaseModel):
     candidate_obj: Candidate
     responses: list[str]
     total_time_seconds: float
-    results: list[list[CheckResult]]
+    results: list[list[CheckResult | dict]]
+
+    @root_validator(pre=True)
+    def process_results(cls, values):  # noqa
+        """
+        If results are provided as dictionaries (e.g. loading from yaml), convert them to
+        CheckResult objects.
+        """
+        results = values.get('results', []) or []
+        results_created = []
+        # results is a list of lists of CheckResults (each list corresponds to a prompt/test)
+        for tests in results:
+            test_results_created = []  # maintain list of lists
+            for r in tests:
+                if isinstance(r, dict):
+                    assert 'result_type' in r, \
+                        "CheckResult dictionary must contain a 'result_type' key"
+                    test_results_created.append(CheckResult.from_dict(r.copy()))
+                elif isinstance(r, CheckResult):
+                    test_results_created.append(r)
+                else:
+                    raise TypeError("results must be either a CheckResult instance or a dictionary")
+            results_created.append(test_results_created)
+        values['results'] = results_created
+        return values
 
     @property
     def prompts(self) -> list[str]:
