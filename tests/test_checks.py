@@ -159,6 +159,12 @@ def test__CheckType():  # noqa
     with pytest.raises(ValueError):  # noqa: PT011
         CheckType.to_enum('foo')
 
+def test__CheckResult__registration():  # noqa
+    assert 'PASS_FAIL' in CheckResult.registry
+    assert 'pass_fail' in CheckResult.registry
+    assert 'SCORE' in CheckResult.registry
+    assert 'score' in CheckResult.registry
+
 def test__PassFailResult():  # noqa
     assert not PassFailResult(value=False).success
     assert PassFailResult(value=False).metadata == {}
@@ -179,8 +185,13 @@ def test__PassFailResult__serialize():  # noqa
     assert result_dict == {
         'value': True,
         'success': True,
+        'result_type': 'PASS_FAIL',
     }
     assert PassFailResult(**result_dict) == result
+    recreated = CheckResult.from_dict(result_dict)
+    assert isinstance(recreated, PassFailResult)
+    assert recreated == result
+
     result = PassFailResult(value=False, metadata={'foo': 'bar'})
     result_dict = result.to_dict()
     assert result_dict == {
