@@ -184,3 +184,43 @@ def test__Eval__call__result__to_from_dict():  # noqa
     assert EvalResult(**result_dict) == result
     assert EvalResult(**result_dict).to_dict() == result.to_dict()
 
+def test_EVAL_(fake_eval_8f9fbf37: dict):  # noqa
+    eval_dict = fake_eval_8f9fbf37.copy()
+    eval_obj = Eval(**eval_dict)
+    assert eval_obj.to_dict() == eval_dict
+
+    responses = [
+        "This is the first response",
+        "This is a response with code blocks\n```python\nprint('hello world')\n```",
+    ]
+    def mock_llm():  # noqa
+        yield from responses
+    mock_llm_instance = mock_llm()
+    result = eval_obj(lambda _: next(mock_llm_instance))
+    assert result.responses == responses
+    assert result.prompts == [test.prompt for test in eval_obj.test_sequence]
+    assert result.ideal_responses == [test.ideal_response for test in eval_obj.test_sequence]
+    assert result.eval_obj.to_dict() == eval_dict
+
+    result_dict = result.to_dict()
+    assert result_dict['eval_obj'] == eval_dict
+    assert Eval(**result_dict['eval_obj']) == eval_obj
+    assert result_dict['candidate_obj'] == {'metadata': {'function': 'def <lambda>(_)'}}
+    assert result.total_time_seconds > 0
+    assert EvalResult(**result_dict).to_dict() == result.to_dict()
+    recreated_eval = EvalResult(**result_dict)
+    assert recreated_eval.eval_obj == result.eval_obj
+    assert recreated_eval.candidate_obj == result.candidate_obj
+
+    assert recreated_eval.results == result.results
+
+    flatted_checks = [r for test in eval_obj.test_sequence for r in test.checks]
+    for c, r in zip(flatted_checks, result.all_checks_results(), strict=True):
+        assert c.check_type == r.metadata['check_type']
+
+
+    result.save_yaml('test.yaml')
+
+    # save results to yaml
+    
+

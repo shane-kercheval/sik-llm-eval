@@ -323,6 +323,16 @@ class EvalResult(BaseModel):
     results: list[list[CheckResult]]
 
     @property
+    def prompts(self) -> list[str]:
+        """Returns a list of prompts."""
+        return [p.prompt for p in self.eval_obj.test_sequence]
+
+    @property
+    def ideal_responses(self) -> list[str | None]:
+        """Returns a list of ideal responses."""
+        return [p.ideal_response for p in self.eval_obj.test_sequence]
+
+    @property
     def response_characters(self) -> int:
         """Returns the number of characters across all responses."""
         return sum(len(r) for r in self.responses)
@@ -376,7 +386,7 @@ class EvalResult(BaseModel):
             return None
         return num_passing / self.num_pass_fail_checks
 
-    def all_results(self) -> list[CheckResult]:
+    def all_checks_results(self) -> list[CheckResult]:
         """Returns a (flattened) list of all CheckResults."""
         return [r for result in self.results for r in result]
 
@@ -402,6 +412,11 @@ class EvalResult(BaseModel):
             'results': [[r.to_dict() for r in result] for result in self.results],
         }
 
+    def save_yaml(self, file_path: str) -> None:
+        """Saves the EvalResult to a YAML file."""
+        with open(file_path, 'w') as f:
+            yaml.dump(self.to_dict(), f)
+
 
 Eval.model_rebuild()
 
@@ -409,7 +424,7 @@ Eval.model_rebuild()
 def summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
     code_run_checks = [
-        r for r in result.all_results()
+        r for r in result.all_checks()
         if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
     ]
     summary = {}

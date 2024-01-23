@@ -60,6 +60,7 @@ class CheckResult(BaseModel, ABC):
     value: bool | int | float | Any
     success: bool | None = None
     metadata: dict[str, Any] = {}
+    result_type: str
 
     def __str__(self) -> str:
         return dedent(f"""
@@ -82,10 +83,13 @@ class CheckResult(BaseModel, ABC):
 class PassFailResult(CheckResult):
     """Represents a pass/fail (True/False) result."""
 
+    result_type: str = Field(default='PASS_FAIL')
+
     def __init__(self, **data):  # noqa: ANN003
         super().__init__(**data)
         # definition of success is simply the value
         self.success = self.value
+
 
 
 class ScoreResult(CheckResult):
@@ -96,6 +100,7 @@ class ScoreResult(CheckResult):
     """
 
     success_threshold: int | float | None = None
+    result_type: str = Field(default='SCORE')
 
     def __init__(self, **data):  # noqa: ANN003
         super().__init__(**data)

@@ -291,3 +291,10 @@ def conversation_sum() -> dict:
     """Returns a mock llm conversation for summing numbers."""
     with open('tests/fake_data/fake_conversation__sum_function.yml') as f:
         return yaml.safe_load(f)
+
+
+@pytest.fixture()
+def fake_eval_8f9fbf37() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_eval_8F9FBF37.yaml') as f:
+        return yaml.safe_load(f)
