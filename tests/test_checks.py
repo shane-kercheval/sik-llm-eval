@@ -3,6 +3,7 @@ from pydantic import ValidationError
 import pytest
 from llm_evals.checks import (
     # CHECK_REGISTRY,
+    CheckResultsType,
     ContainsCheck,
     MatchCheck,
     RegexCheck,
@@ -14,6 +15,18 @@ from llm_evals.checks import (
     PassFailResult,
     ScoreResult,
 )
+
+
+def test__CheckType__mixin_behaviors():  # noqa
+    assert CheckType.MATCH == 'MATCH'
+    assert CheckType.MATCH == 'match'
+    assert CheckType.MATCH != 1
+    assert CheckType.MATCH != 0
+    assert CheckType.to_enum('CONTAINS') == CheckType.CONTAINS
+    assert CheckType.to_enum('contains') == CheckType.CONTAINS
+    assert CheckType.to_enum(CheckType.MATCH) == CheckType.MATCH
+    with pytest.raises(ValueError):  # noqa: PT011
+        CheckType.to_enum('foo')
 
 
 def test__register_check__success__str__ensure_creation():  # noqa
@@ -160,10 +173,12 @@ def test__CheckType():  # noqa
         CheckType.to_enum('foo')
 
 def test__CheckResult__registration():  # noqa
-    assert 'PASS_FAIL' in CheckResult.registry
-    assert 'pass_fail' in CheckResult.registry
-    assert 'SCORE' in CheckResult.registry
-    assert 'score' in CheckResult.registry
+    assert CheckResultsType.PASS_FAIL in CheckResult.registry  # enum
+    assert CheckResultsType.PASS_FAIL.name in CheckResult.registry  # string upper
+    assert CheckResultsType.PASS_FAIL.name.lower() in CheckResult.registry  # string lower
+    assert CheckResultsType.SCORE in CheckResult.registry  # enum
+    assert CheckResultsType.SCORE.name in CheckResult.registry  # string upper
+    assert CheckResultsType.SCORE.name.lower() in CheckResult.registry  # string lower
 
 def test__PassFailResult():  # noqa
     assert not PassFailResult(value=False).success
@@ -185,7 +200,7 @@ def test__PassFailResult__serialize():  # noqa
     assert result_dict == {
         'value': True,
         'success': True,
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     recreated = CheckResult.from_dict(result_dict)
@@ -198,7 +213,7 @@ def test__PassFailResult__serialize():  # noqa
         'value': False,
         'success': False,
         'metadata': {'foo': 'bar'},
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     recreated = CheckResult.from_dict(result_dict)
@@ -211,7 +226,7 @@ def test__PassFailResult__serialize():  # noqa
         'value': True,
         'success': True,
         'metadata': {'bar': 'foo'},
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     recreated = CheckResult.from_dict(result_dict)
@@ -266,7 +281,7 @@ def test__ScoreResult__serialize():  # noqa
     assert result_dict == {
         'value': 0.5,
         'success': None,
-        'result_type': 'SCORE',
+        'result_type': CheckResultsType.SCORE.name,
     }
     assert ScoreResult(**result_dict) == result
     result = ScoreResult(value=0.5, metadata={'foo': 'bar'})
@@ -275,7 +290,7 @@ def test__ScoreResult__serialize():  # noqa
         'value': 0.5,
         'success': None,
         'metadata': {'foo': 'bar'},
-        'result_type': 'SCORE',
+        'result_type': CheckResultsType.SCORE.name,
     }
     assert ScoreResult(**result_dict) == result
     recreated = CheckResult.from_dict(result_dict)
@@ -289,7 +304,7 @@ def test__ScoreResult__serialize():  # noqa
         'success_threshold': 0.5,
         'success': True,
         'metadata': {'foo': 'bar'},
-        'result_type': 'SCORE',
+        'result_type': CheckResultsType.SCORE.name,
     }
     assert ScoreResult(**result_dict) == result
     recreated = CheckResult.from_dict(result_dict)
@@ -303,7 +318,7 @@ def test__ScoreResult__serialize():  # noqa
         'success_threshold': 0.51,
         'success': False,
         'metadata': {'bar': 'foo'},
-        'result_type': 'SCORE',
+        'result_type': CheckResultsType.SCORE.name,
     }
     assert ScoreResult(**result_dict) == result
     recreated = CheckResult.from_dict(result_dict)
@@ -375,7 +390,7 @@ def test__MatchExactCheck():  # noqa
             'check_value': 'foo',
             'check_metadata': {},
         },
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
@@ -413,7 +428,7 @@ def test__MatchExactCheck():  # noqa
             'check_value': 'bar',
             'check_metadata': {'bar': 'foo'},
         },
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
@@ -485,7 +500,7 @@ def test__MatchContainsCheck():  # noqa
             'check_value': 'o ba',
             'check_metadata': {},
         },
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
@@ -524,7 +539,7 @@ def test__MatchContainsCheck():  # noqa
             'check_value': 'o ba',
             'check_metadata': {'bar': 'foo'},
         },
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
@@ -583,7 +598,7 @@ def test__MatchRegexCheck():  # noqa
             'check_pattern': regex,
             'check_metadata': {},
         },
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
@@ -622,7 +637,7 @@ def test__MatchRegexCheck():  # noqa
             'check_pattern': regex,
             'check_metadata': {'bar': 'foo'},
         },
-        'result_type': 'PASS_FAIL',
+        'result_type': CheckResultsType.PASS_FAIL.name,
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result

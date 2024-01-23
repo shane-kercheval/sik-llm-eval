@@ -225,9 +225,7 @@ def get_callable_info(callable_obj: Callable) -> str:
     raise ValueError(f"Unsupported callable object: {callable_obj}")
 
 
-
 T = TypeVar('T')
-
 
 class Registry:
     """
@@ -291,3 +289,28 @@ class Registry:
         if type_name.upper() not in self._registry:
             raise ValueError(f"Unknown type {type_name}")
         return self._registry[type_name.upper()](**data)
+
+
+class EnumMixin:
+    """
+    Mixin class for enums that provides a string-to-enum (`to_enum`) method and string (case
+    insensitive) equality operater.
+    """
+
+    @classmethod
+    def to_enum(cls, name: str) -> 'Enum':  # noqa: ANN102
+        """Get an Enum member from its string name (case-insensitive)."""
+        if isinstance(name, cls):
+            return name
+        try:
+            return cls[name.upper()]
+        except KeyError:
+            raise ValueError(f"{name.upper()} is not a valid name for a {cls.__name__} member")
+
+    def __eq__(self, other: Enum | str | object) -> bool:
+        """Check if the Enum is equal to a string (case-insensitive)."""
+        if isinstance(other, self.__class__):
+            return super(Enum, self).__eq__(other)
+        if isinstance(other, str):
+            return other.upper() == self.name.upper()
+        return False

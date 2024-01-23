@@ -13,11 +13,11 @@ from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, Field
 
-from llm_evals.utilities.internal_utilities import Registry
+from llm_evals.utilities.internal_utilities import EnumMixin, Registry
 
 
-class CheckType(Enum):
-    """Provides a typesafe representation of the built-in types of Checks."""
+class CheckType(EnumMixin, Enum):
+    """Provides a typesafe representation of the built-in types of Check classes."""
 
     MATCH = auto()
     CONTAINS = auto()
@@ -26,23 +26,12 @@ class CheckType(Enum):
     PYTHON_CODE_BLOCKS_PRESENT = auto()
     PYTHON_CODE_BLOCKS_RUN = auto()
 
-    @staticmethod
-    def to_enum(name: str) -> 'CheckType':
-        """Get a CheckType from its string name (case-insensitive)."""
-        if isinstance(name, CheckType):
-            return name
-        try:
-            return CheckType[name.upper()]
-        except KeyError:
-            raise ValueError(f"{name.upper()} is not a valid name for a CheckType member")
 
-    def __eq__(self, other: str) -> bool:
-        """Check if the CheckType is equal to a string (case-insensitive)."""
-        if isinstance(other, CheckType):
-            return super().__eq__(other)
-        if isinstance(other, str):
-            return other.upper() == self.name.upper()
-        return False
+class CheckResultsType(EnumMixin, Enum):
+    """Provides a typesafe representation of the built-in types of CheckReturn classes."""
+
+    PASS_FAIL = auto()
+    SCORE = auto()
 
 
 class CheckResult(BaseModel, ABC):
@@ -75,8 +64,9 @@ class CheckResult(BaseModel, ABC):
         """).strip()
 
     @classmethod
-    def register(cls, result_type: str):  # noqa: ANN102
+    def register(cls, result_type: str | Enum):  # noqa: ANN102
         """Register a subclass of Check."""
+
         def decorator(subclass: Type[CheckResult]) -> Type[CheckResult]:
             assert issubclass(subclass, CheckResult), \
                 f"CheckResult '{result_type}' ({subclass.__name__}) must extend CheckResult"
@@ -110,7 +100,7 @@ class CheckResult(BaseModel, ABC):
         return self.__class__._type_name.upper()
 
 
-@CheckResult.register('PASS_FAIL')
+@CheckResult.register(CheckResultsType.PASS_FAIL)
 class PassFailResult(CheckResult):
     """Represents a pass/fail (True/False) result."""
 
@@ -120,7 +110,7 @@ class PassFailResult(CheckResult):
         self.success = self.value
 
 
-@CheckResult.register('SCORE')
+@CheckResult.register(CheckResultsType.SCORE)
 class ScoreResult(CheckResult):
     """
     Represents a result that has a score (e.g. int/float) and, optionally, a threshold for success.
@@ -172,7 +162,7 @@ class Check(BaseModel, ABC):
         """Invokes the check on the response and returns a single result."""
 
     @classmethod
-    def register(cls, check_type: str | CheckType):  # noqa: ANN102
+    def register(cls, check_type: str | Enum):  # noqa: ANN102
         """Register a subclass of Check."""
         def decorator(subclass: Type[Check]) -> Type[Check]:
             assert issubclass(subclass, Check), \
