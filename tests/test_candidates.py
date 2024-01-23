@@ -1,7 +1,6 @@
 """Tests for the candidates module."""
-from typing import Callable
-from pydantic import root_validator
-from llm_evals.candidates import Candidate
+import pytest
+from llm_evals.candidates import CallableCandidate, Candidate, CandidateType
 
 
 class MockLMM:
@@ -21,14 +20,26 @@ class MockLMM:
 class MockCandidate(Candidate):
     """Mock class representing a Candidate."""
 
-    @root_validator(pre=True)
-    def create_model(cls, values: dict) -> dict:  # noqa: N805
-        """Creates the model from the parameters."""
-        parameters = values.get('parameters')
+    def __init__(self, **kwargs: dict) -> None:
+        """Initialize a MockCandidate object."""
+        uuid = kwargs.pop('uuid', None)
+        metadata = kwargs.pop('metadata', None)
+        parameters = kwargs.pop('parameters', None)
+        system_info = kwargs.pop('system_info', None)
+        super().__init__(parameters=parameters, metadata=metadata, uuid=uuid, system_info=system_info)  # noqa
+        self.model = None
         if parameters is not None:
-            values['model'] = MockLMM(**parameters)
-        return values
+            self.model = MockLMM(**parameters)
 
+    def __call__(self, prompt: str) -> str:
+        """Invokes the underlying model with the prompt and returns the response."""
+        return self.model(prompt)
+
+
+def test__CallableCandidate():  # noqa
+    candidate = CallableCandidate(model=lambda x: x)
+    assert candidate('test') == 'test'
+    assert candidate.to_dict() == {'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name}
 
 def test__candidate__registration():  # noqa
     assert 'MOCK_MODEL' in Candidate.registry
@@ -69,10 +80,16 @@ def test__candidate__to_from_dict():  # noqa
         'parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
         'system_info': {'system_1': 'system_a', 'system_2': 'system_b'},
     }
-    candidate = MockCandidate(**candidate_dict)
+    candidate_dict_no_type = candidate_dict.copy()
+    candidate_dict_no_type.pop('candidate_type')
+
+    candidate = MockCandidate(**candidate_dict_no_type)
     assert candidate.to_dict() == candidate_dict
     assert candidate == Candidate.from_dict(candidate_dict)
     assert candidate == Candidate.from_dict(candidate.to_dict())
+    with pytest.raises(ValueError):  # noqa: PT011
+        Candidate.from_dict(candidate_dict_no_type)
+
     assert isinstance(candidate.model, MockLMM)
     assert candidate.model.llm_parameters == {'param_1': 'param_a', 'param_2': 'param_b'}
     response = candidate('test')

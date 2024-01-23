@@ -1,6 +1,7 @@
 
 """Helper functions and classes that are not intended to be used externally."""
 
+from abc import abstractmethod
 from enum import Enum
 from inspect import isclass, ismethod, signature, isfunction
 import datetime
@@ -314,3 +315,17 @@ class EnumMixin:
         if isinstance(other, str):
             return other.upper() == self.name.upper()
         return False
+
+
+class DictionaryEqualsMixin:
+    """Mixin to compare dictionaries."""
+
+    @abstractmethod
+    def to_dict(self) -> dict:
+        """Returns a dictionary representation of the object."""
+
+    def __eq__(self, other: object) -> bool:
+        """Returns True if the dictionaries are equal."""
+        if not isinstance(other, self.__class__):
+            return False
+        return self.to_dict() == other.to_dict()

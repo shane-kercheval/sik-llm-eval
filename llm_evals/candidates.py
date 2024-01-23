@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
 from typing import Callable, ClassVar, ForwardRef, Type
-from pydantic import BaseModel
 import yaml
 from llm_evals.llms.openai import OpenAIChat
 
@@ -23,9 +22,10 @@ class CandidateType(EnumMixin, Enum):
     HUGGING_FACE_ENDPOINT = auto()
     LLAMA_CPP_SERVER = auto()
     API = auto()
+    CALLABLE_NO_SERIALIZE = auto()
 
 
-class Candidate(BaseModel):
+class Candidate(ABC):
     """
     A Candidate describes an LLM (or specific implementation of an LLM interface (e.g.
     history/context management)) along wiht optional parameters or hardware.
@@ -56,18 +56,31 @@ class Candidate(BaseModel):
                 values['_model'] = MockLMM(**parameters)
             return values
     """
+    registry = Registry()
 
-    registry: ClassVar[Registry] = Registry()
+    def __init__(
+        self,
+        uuid: str | None = None,
+        metadata: dict | None = None,
+        parameters: dict | None = None,
+        system_info: dict | None = None) -> None:
+        """
+        Initialize a Candidate object.
 
-    uuid: str | None = None
-    metadata: dict | None = None
-    parameters: dict | None = None
-    system_info: dict | None = None
-    model: Callable | None = None
+        Args:
+            uuid: A unique identifier for the Candidate.
+            metadata: A dictionary of metadata about the Candidate.
+            parameters: A dictionary of parameters for the Candidate.
+            system_info: A dictionary of system information about the Candidate.
+        """
+        self.uuid = uuid
+        self.metadata = metadata
+        self.parameters = parameters
+        self.system_info = system_info
 
+    @abstractmethod
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
-        return self.model(prompt)
 
     @classmethod
     def register(cls, candidate_type: str | Enum):  # noqa: ANN102
@@ -85,17 +98,26 @@ class Candidate(BaseModel):
         Create a Candidate object from a dictionary. This method requires that the Candidate
         subclass has been registered with the `register` decorator.
         """
-        candidate_type = data.get('candidate_type', '')
+        data_copy = data.copy()
+        candidate_type = data_copy.pop('candidate_type', '')
         if candidate_type in cls.registry:
-            return cls.registry.create_instance(type_name=candidate_type, **data)
+            return cls.registry.create_instance(type_name=candidate_type, **data_copy)
         raise ValueError(f"Unknown type {candidate_type}")
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
-        value = self.model_dump(exclude_defaults=True, exclude_none=True)
+        # value = self.model_dump(exclude_defaults=True, exclude_none=True)
+        value = {}
+        if self.uuid:
+            value['uuid'] = self.uuid
+        if self.metadata:
+            value['metadata'] = self.metadata
+        if self.parameters:
+            value['parameters'] = self.parameters
+        if self.system_info:
+            value['system_info'] = self.system_info
         if self.candidate_type:
             value['candidate_type'] = self.candidate_type.upper()
-        value.pop('model', None)  # do not include model object in dict, if it exists
         return value
 
     @property
@@ -140,11 +162,52 @@ class Candidate(BaseModel):
         """
         Returns a copy of the Candidate with the same state but with a different instance of the
         underlying model (e.g. same parameters but reset history/context).
+
+        Reques
         """
         return self.from_dict(self.to_dict().copy())
 
 
-Candidate.model_rebuild()
+# Candidate.model_rebuild()
+
+@Candidate.register(CandidateType.CALLABLE_NO_SERIALIZE)
+class CallableCandidate(Candidate):
+    """
+    Candidate for a simple callable model. This is useful for simple use-cases, stateless models,
+    and for testing.
+
+    NOTE: This class is with the Candidate registry and can be created from a dictionary using
+    `Candidate.from_dict(...)`. However, since the model is a callable, it cannot be serialized
+    and is not included in the dict representation of the Candidate. When creating a
+    CallableCandidate from a dictionary, the `model` field will be `None`. Therefore, it can
+    be reloded from a dictionary but will not be able to run evaluations.
+    """
+
+    def __init__(
+            self,
+            model: Callable | None = None,
+            uuid: str | None = None,
+            metadata: dict | None = None,
+            parameters: dict | None = None,
+            system_info: dict | None = None) -> None:
+        """
+        Initialize a CallableCandidate object.
+
+        Args:
+            model: The callable model.
+            uuid: A unique identifier for the Candidate.
+            metadata: A dictionary of metadata about the Candidate.
+            parameters: A dictionary of parameters for the Candidate.
+            system_info: A dictionary of system information about the Candidate.
+        """
+        super().__init__(uuid, metadata, parameters, system_info)
+        self.model = model
+
+    def __call__(self, prompt: str) -> str:
+        """Invokes the underlying model with the prompt and returns the response."""
+        return self.model(prompt)
+
+
 
 # @Candidate.register(CandidateType.OPENAI)
 # class OpenAICandidate(Candidate):

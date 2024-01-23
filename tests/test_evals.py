@@ -1,4 +1,5 @@
 """Tests for the evals module."""
+from llm_evals.candidates import Candidate, CandidateType
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck
 from llm_evals.eval import Eval, EvalResult, PromptTest, eval_result_summarizer
 
@@ -150,12 +151,16 @@ def test__Eval__call__result__to_from_dict():  # noqa
 
     result_dict = result.to_dict()
     assert result_dict['eval_obj'] == eval_obj.to_dict()
-    assert result_dict['candidate_obj'] == {'metadata': {'function': 'def <lambda>(x)'}}
+    assert result_dict['candidate_obj'] == {
+        'metadata': {'function': 'def <lambda>(x)'},
+        'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name,
+        }
     assert Eval(**result_dict['eval_obj']) == eval_obj
+    assert Candidate.from_dict(result_dict['candidate_obj']) == result.candidate_obj
     assert EvalResult(**result_dict) == result
     assert EvalResult(**result_dict).to_dict() == result.to_dict()
 
-def test_EVAL_(fake_eval_8f9fbf37: dict):  # noqa
+def test_Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  # noqa
     eval_dict = fake_eval_8f9fbf37.copy()
     eval_obj = Eval(**eval_dict)
     assert eval_obj.to_dict() == eval_dict
@@ -179,7 +184,10 @@ def test_EVAL_(fake_eval_8f9fbf37: dict):  # noqa
     # been converted to a string; we can't serialize the underlying model/llm)
     assert eval_result_dict['eval_obj'] == eval_dict
     assert Eval(**eval_result_dict['eval_obj']) == eval_obj
-    assert eval_result_dict['candidate_obj'] == {'metadata': {'function': 'def <lambda>(_)'}}
+    assert eval_result_dict['candidate_obj'] == {
+        'metadata': {'function': 'def <lambda>(_)'},
+        'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name,
+    }
     # check that the check result dicts match
     flatted_check_results = [r for tests in eval_result_dict['results'] for r in tests]
     assert flatted_check_results == [r.to_dict() for r in eval_result.all_checks_results()]

@@ -1,35 +1,23 @@
 """Classes and functions to eval LLMs."""
-from abc import abstractmethod
 from textwrap import dedent, indent
 import time
 from typing import Callable, ForwardRef
 import yaml
-from llm_evals.candidates import Candidate
-
+from llm_evals.candidates import CallableCandidate, Candidate
 from llm_evals.checks import (
     Check,
     CheckType,
     CheckResult,
     PassFailResult,
 )
-from llm_evals.utilities.internal_utilities import extract_valid_parameters, get_callable_info
+from llm_evals.utilities.internal_utilities import (
+    DictionaryEqualsMixin,
+    extract_valid_parameters,
+    get_callable_info,
+)
 
 Eval = ForwardRef('Eval')
 EvalResult = ForwardRef('EvalResult')
-
-
-class DictionaryEqualsMixin:
-    """Mixin to compare dictionaries."""
-
-    @abstractmethod
-    def to_dict(self) -> dict:
-        """Returns a dictionary representation of the object."""
-
-    def __eq__(self, other: object) -> bool:
-        """Returns True if the dictionaries are equal."""
-        if not isinstance(other, self.__class__):
-            return False
-        return self.to_dict() == other.to_dict()
 
 
 class PromptTest(DictionaryEqualsMixin):
@@ -103,8 +91,6 @@ class PromptTest(DictionaryEqualsMixin):
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the PromptTest."""
-        # model_dump doesn't include `value` on Check objects unless called directly?
-        # return self.model_dump(exclude_defaults=True, exclude_none=True)
         value = {'prompt': self.prompt}
         if self.ideal_response:
             value['ideal_response'] = self.ideal_response
@@ -169,8 +155,6 @@ class Eval(DictionaryEqualsMixin):
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the PromptTest."""
-        # return self.model_dump(exclude_defaults=True, exclude_none=True) doesn't seem to work
-        # recursively, there are a couple of inconsistencies
         value = {'test_sequence': [t.to_dict() for t in self.test_sequence]}
         if self.uuid:
             value['uuid'] = self.uuid
@@ -205,7 +189,7 @@ class Eval(DictionaryEqualsMixin):
     def __call__(self, candidate: Candidate | Callable) -> EvalResult:
         """Evaluates the model against the prompts and tests."""
         if isinstance(candidate, Callable):
-            candidate = Candidate(
+            candidate = CallableCandidate(
                 model=candidate,
                 metadata={'function': get_callable_info(candidate)},
             )
