@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field, field_validator, root_validator
 import yaml
 
 from llm_evals.checks import (
-    # CHECK_REGISTRY,
     Check,
     CheckType,
     CheckResult,
@@ -46,10 +45,9 @@ class PromptTest(BaseModel):
         checks_created = []
         for check in checks:
             if isinstance(check, dict):
+                assert 'check_type' in check, "Check dictionary must contain a 'check_type' key"
                 check = check.copy()  # noqa: PLW2901
-                check_type = check.pop('check_type')
-                assert check_type, "Check dictionary must contain a 'check_type' key"
-                check_instance = CHECK_REGISTRY.create_instance(check_type=check_type, params=check)
+                check_instance = Check.from_dict(check)
                 checks_created.append(check_instance)
             elif isinstance(check, Check):
                 checks_created.append(check)
