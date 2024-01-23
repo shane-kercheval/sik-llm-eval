@@ -1,6 +1,6 @@
 """Tests for the evals module."""
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck
-from llm_evals.eval import Candidate, Eval, EvalResult, PromptTest
+from llm_evals.eval import Candidate, Eval, EvalResult, PromptTest, eval_result_summarizer
 
 
 def test__PromptTest():  # noqa
@@ -86,7 +86,7 @@ def test__candidate__creation():  # noqa
         uuid='test_uuid',
         model=lambda x: x,
         metadata={'test': 'test'},
-        model_type='TEST_MODEL_TYPE',
+        candidate_type='TEST_MODEL_TYPE',
         parameters={'param_1': 'param_a'},
         system_info={'system_1': 'system_a'},
     )
@@ -94,7 +94,7 @@ def test__candidate__creation():  # noqa
     assert candidate_dict == {
         'uuid': 'test_uuid',
         'metadata': {'test': 'test'},
-        'model_type': 'TEST_MODEL_TYPE',
+        'candidate_type': 'TEST_MODEL_TYPE',
         'parameters': {'param_1': 'param_a'},
         'system_info': {'system_1': 'system_a'},
     }
@@ -227,3 +227,5 @@ def test_EVAL_(fake_eval_8f9fbf37: dict):  # noqa
     flatted_checks = [r for test in eval_obj.test_sequence for r in test.checks]
     for c, r in zip(flatted_checks, eval_result.all_checks_results(), strict=True):
         assert c.check_type == r.metadata['check_type']
+
+    assert eval_result_summarizer(eval_result)

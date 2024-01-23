@@ -101,7 +101,7 @@ class Candidate(BaseModel):
 
     uuid: str | None = None
     model: Callable[[str], str] | None = None
-    model_type: str | None = None
+    candidate_type: str | None = None
     metadata: dict | None = None
     parameters: dict | None = None
     system_info: dict | None = None
@@ -118,7 +118,7 @@ class Candidate(BaseModel):
         """
         with open(path) as f:
             config = yaml.safe_load(f)
-        model_type = config.pop('model_type')
+        candidate_type = config.pop('candidate_type')
         # lookup model registry based on type
         config['model'] = lambda x: x
         return cls(**config)
@@ -131,7 +131,7 @@ class Candidate(BaseModel):
         {self.__class__.__name__}(
             uuid={self.uuid},
             metadata={self.metadata},
-            description={self.description},{parameters}{system_info}
+            {parameters}{system_info}
         )
         """).strip()
 
@@ -147,8 +147,8 @@ class Candidate(BaseModel):
         value = {}
         if self.uuid:
             value['uuid'] = self.uuid
-        if self.model_type:
-            value['model_type'] = self.model_type
+        if self.candidate_type:
+            value['candidate_type'] = self.candidate_type
         if self.metadata:
             value['metadata'] = self.metadata
         if self.parameters:
@@ -445,10 +445,10 @@ class EvalResult(BaseModel):
 Eval.model_rebuild()
 
 
-def summarizer(result: EvalResult) -> dict:
+def eval_result_summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
     code_run_checks = [
-        r for r in result.all_checks()
+        r for r in result.all_checks_results()
         if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
     ]
     summary = {}
