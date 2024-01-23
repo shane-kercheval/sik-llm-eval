@@ -1,6 +1,7 @@
 """Tests for the candidates module."""
+import os
 import pytest
-from llm_evals.candidates import CallableCandidate, Candidate, CandidateType
+from llm_evals.candidates import CallableCandidate, Candidate, CandidateType, OpenAICandidate
 
 
 class MockLMM:
@@ -138,7 +139,33 @@ def test__candidate__clone():  #noqa
     assert candidate.model.prompts == ['test']
 
 def test__OpenAI():
-    pass
+    assert 'OPENAI_API_KEY' in os.environ, "Environment variable 'OPENAI_API_KEY' is not set."
+    candidate = OpenAICandidate()
+    response = candidate("What is the capital of France?")
+    assert 'Paris' in response
+
+    assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name}
+    recreated_candidate = Candidate.from_dict(candidate.to_dict())
+    assert candidate == recreated_candidate
+    # ensure that the recreated candidate doesn't share history with the original
+    assert len(candidate.model.history()) == 1
+    assert len(recreated_candidate.model.history()) == 0
+    response = recreated_candidate("What is the capital of Spain?")
+    assert 'Madrid' in response
+    assert len(candidate.model.history()) == 1
+    assert len(recreated_candidate.model.history()) == 1
+    # ensure that the cloned candidate doesn't share history with the original
+    cloned_candidate = recreated_candidate.clone()
+    assert cloned_candidate == recreated_candidate
+    assert len(cloned_candidate.model.history()) == 0
+    response = cloned_candidate("What is the capital of Germany?")
+    assert 'Berlin' in response
+    assert len(candidate.model.history()) == 1
+    assert len(recreated_candidate.model.history()) == 1
+    assert len(cloned_candidate.model.history()) == 1
+
+    
+
 
 
 # def test__candidate__creation():  # noqa

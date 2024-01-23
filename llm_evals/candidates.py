@@ -35,26 +35,6 @@ class Candidate(ABC):
     sequentially building on each other). This means that the candidate should be able to
     maintain state between prompts (e.g. history/context) and a single Candidate object should
     be created for a single Eval object, and not reused across multiple Eval objects.
-
-    NOTE: The `model` field is not included in the dict representation of the Candidate. This is
-    because the model is a callable and cannot be serialized. The `model` field is also not
-    included in the equality check between two Candidates.
-
-    The `model` should be created with the `root_validator` decorator. For example:
-
-    @Candidate.register('MOCK_MODEL')
-    class MockCandidate(Candidate):
-        ''''Mock class representing a Candidate.''''
-
-        _model: Callable | None = None
-
-        @root_validator(pre=True)
-        def create_model(cls, values: dict) -> dict:  # noqa: N805
-            '''Creates the model from the parameters.'''
-            parameters = values.get('parameters')
-            if parameters is not None:
-                values['_model'] = MockLMM(**parameters)
-            return values
     """
     registry = Registry()
 
@@ -168,8 +148,6 @@ class Candidate(ABC):
         return self.from_dict(self.to_dict().copy())
 
 
-# Candidate.model_rebuild()
-
 @Candidate.register(CandidateType.CALLABLE_NO_SERIALIZE)
 class CallableCandidate(Candidate):
     """
@@ -208,43 +186,31 @@ class CallableCandidate(Candidate):
         return self.model(prompt)
 
 
+@Candidate.register(CandidateType.OPENAI)
+class OpenAICandidate(Candidate):
+    """
+    Wrapper around OpenAI API.
 
-# @Candidate.register(CandidateType.OPENAI)
-# class OpenAICandidate(Candidate):
-#     """Wrapper around OpenAI API."""
-    
-#     model: OpenAIChat = Field(default_factory=) 
+    NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
+    """
 
-#     def __call__(self, prompt: str) -> str:
-#         """Invokes the underlying model with the prompt and returns the response."""
-        
+    def __init__(self,
+        uuid: str | None = None,
+        metadata: dict | None = None,
+        parameters: dict | None = None) -> None:
+        """
+        Initialize a OpenAICandidate object.
 
+        Args:
+            uuid: A unique identifier for the Candidate.
+            metadata: A dictionary of metadata about the Candidate.
+            parameters: A dictionary of parameters passed to OpenAI.
+        """
+        super().__init__(uuid=uuid, metadata=metadata, parameters=parameters, system_info=None)
+        if parameters is None:
+            parameters = {}
+        self.model = OpenAIChat(**parameters)
 
-
-
-
-
-
-
-    # # override equals operator to ignore model (callable) when comparing candidates
-    # def __eq__(self, other: object) -> bool:
-    #     """Returns True if the two Candidates are equal."""
-    #     if not isinstance(other, Candidate):
-    #         return False
-    #     return self.to_dict() == other.to_dict()
-
-    # def to_dict(self) -> dict:
-    #     """Return a dictionary representation of the Candidate."""
-    #     value = {}
-    #     if self.uuid:
-    #         value['uuid'] = self.uuid
-    #     if self.candidate_type:
-    #         value['candidate_type'] = self.candidate_type
-    #     if self.metadata:
-    #         value['metadata'] = self.metadata
-    #     if self.parameters:
-    #         value['parameters'] = self.parameters
-    #     if self.system_info:
-    #         value['system_info'] = self.system_info
-    #     return value
-
+    def __call__(self, prompt: str) -> str:
+        """Invokes the underlying model with the prompt and returns the response."""
+        return self.model(prompt)
