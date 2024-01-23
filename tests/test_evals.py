@@ -1,6 +1,6 @@
 """Tests for the evals module."""
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck
-from llm_evals.eval import Candidate, Eval, EvalResult, PromptTest, eval_result_summarizer
+from llm_evals.eval import Eval, EvalResult, PromptTest, eval_result_summarizer
 
 
 def test__PromptTest():  # noqa

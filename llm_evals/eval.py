@@ -1,8 +1,8 @@
 """Classes and functions to eval LLMs."""
+from abc import abstractmethod
 from textwrap import dedent, indent
 import time
 from typing import Callable, ForwardRef
-from pydantic import BaseModel, Field, field_validator, root_validator
 import yaml
 from llm_evals.candidates import Candidate
 
@@ -18,7 +18,21 @@ Eval = ForwardRef('Eval')
 EvalResult = ForwardRef('EvalResult')
 
 
-class PromptTest(BaseModel):
+class DictionaryEqualsMixin:
+    """Mixin to compare dictionaries."""
+
+    @abstractmethod
+    def to_dict(self) -> dict:
+        """Returns a dictionary representation of the object."""
+
+    def __eq__(self, other: object) -> bool:
+        """Returns True if the dictionaries are equal."""
+        if not isinstance(other, self.__class__):
+            return False
+        return self.to_dict() == other.to_dict()
+
+
+class PromptTest(DictionaryEqualsMixin):
     """
     A PromptTest represents a prompt, an optional ideal response, and a list of checks to run
     against the response.
@@ -32,20 +46,27 @@ class PromptTest(BaseModel):
     object.
     """
 
-    prompt: str
-    ideal_response: str | None = None
-    checks: list[Check | dict] | None = Field(
-        default=None,
-        description='A list of checks to run against the response. If a dictionary is provided, the checks need to be registered with the CHECK_REGISTRY. The dictionary needs a `check_type` key with the registration value.',  # noqa
-    )
+    def __init__(
+            self,
+            prompt: str,
+            ideal_response: str | None = None,
+            checks: list[Check | dict] | None = None) -> None:
+        """
+        Initializes the PromptTest.
 
-    @root_validator(pre=True)
-    def process_checks(cls, values):  # noqa
+        Args:
+            prompt:
+                The prompt to send to the LLM.
+            ideal_response:
+                The ideal response to compare against the LLM's response.
+            checks:
+                'A list of checks to run against the response. If a dictionary is provided, the
+                Check subclasses need to be registered via `Check.register(...)`.
+                The dictionary needs a `check_type` key with the registration value.
         """
-        If checks are provided as dictionaries (e.g. loading from yaml), convert them to Check
-        objects.
-        """
-        checks = values.get('checks', []) or []
+        self.prompt = prompt
+        self.ideal_response = ideal_response
+        checks = checks or []
         checks_created = []
         for check in checks:
             if isinstance(check, dict):
@@ -55,8 +76,7 @@ class PromptTest(BaseModel):
                 checks_created.append(check)
             else:
                 raise TypeError("Checks must be either a Check instance or a dictionary")
-        values['checks'] = checks_created
-        return values
+        self.checks = checks_created
 
     def __str__(self) -> str:
         """Returns a string representation of the PromptTest."""
@@ -93,7 +113,7 @@ class PromptTest(BaseModel):
         return value
 
 
-class Eval(BaseModel):
+class Eval(DictionaryEqualsMixin):
     """
     An Eval defines a set of one or more prompts and tests that can be used to evaluate an LLM. If
     more than one prompt is provided, the intent is evaluate the the conversation and, therefore,
@@ -109,26 +129,31 @@ class Eval(BaseModel):
     responses (strings) and returns a TestResult object.
     """
 
-    test_sequence: list[PromptTest | dict] | dict | PromptTest = Field(
-        description='A list of prompts and tests to run against the LLM.',
-    )
-    metadata: dict | None = Field(
-        default=None,
-        description='Metadata associated with the Eval.',
-    )
-    uuid: str | None = Field(
-        default=None,
-        description='Used to uniquely identify the Eval which is ultimately used to avoid running the same Eval (against the same Candidate/llm) more than once.',  # noqa
-        )
-    version: str | int | float | None = Field(
-        default=None,
-        description='Version of the Eval.',
-    )
+    def __init__(
+            self,
+            test_sequence: list[PromptTest | dict] | dict | PromptTest,
+            metadata: dict | None = None,
+            uuid: str | None = None,
+            version: str | int | float | None = None) -> None:
+        """
+        Initializes the Eval.
 
-    @root_validator(pre=True)
-    def process_tests(cls, values: dict) -> dict:  # noqa: N805
-        """Converts test_sequence to a list of PromptTest objects."""
-        test_sequence = values.get('test_sequence', [])
+        Args:
+            test_sequence:
+                A list of prompts and tests to run against the LLM.
+            metadata:
+                Metadata associated with the Eval.
+            uuid:
+                Used to uniquely identify the Eval which is ultimately used to avoid running the
+                same Eval (against the same Candidate/llm) more than once.
+            version:
+                Version of the Eval.
+        """
+        self.metadata = metadata
+        self.uuid = uuid
+        self.version = version
+
+        test_sequence = test_sequence or []
         if isinstance(test_sequence, (dict, PromptTest)):
             test_sequence = [test_sequence]
         tests_created = []
@@ -139,8 +164,8 @@ class Eval(BaseModel):
                 tests_created.append(test)
             else:
                 raise TypeError("test_sequence must be either a PromptTest instance or a dictionary")  # noqa
-        values['test_sequence'] = tests_created
-        return values
+        self.test_sequence = tests_created
+
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the PromptTest."""
@@ -242,7 +267,7 @@ class Eval(BaseModel):
         """).strip()
 
 
-class EvalResult(BaseModel):
+class EvalResult(DictionaryEqualsMixin):
     """
     An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
     using specific hardware. The hardware is not applicable for services like OpenAI's API, but
@@ -251,21 +276,49 @@ class EvalResult(BaseModel):
     but the speed of responses could.
     """
 
-    eval_obj: Eval
-    candidate_obj: Candidate
-    responses: list[str]
-    total_time_seconds: float
-    results: list[list[CheckResult | dict]]
+    def __init__(
+        self,
+        eval_obj: Eval | dict,
+        candidate_obj: Candidate | dict,
+        responses: list[str],
+        total_time_seconds: float,
+        results: list[list[CheckResult | dict]]) -> None:
+        """
+        Initializes the EvalResult.
 
-    @root_validator(pre=True)
-    def process_results(cls, values):  # noqa
+        Args:
+            eval_obj:
+                The Eval object that was evaluated.
+            candidate_obj:
+                The Candidate object that was evaluated. If the Candidate is a dictionary, the
+                Candidate subclasses need to be registered via `Candidate.register(...)`.
+                The dictionary needs a `candidate_type` key with the registration value.
+            responses:
+                A list of responses (strings) from the LLM.
+            total_time_seconds:
+                The total time (in seconds) it took to run the Eval.
+            results:
+                A list of lists of CheckResult objects.
         """
-        If results are provided as dictionaries (e.g. loading from yaml), convert them to
-        CheckResult objects.
-        """
-        results = values.get('results', []) or []
+        self.eval_obj = eval_obj if isinstance(eval_obj, Eval) else Eval(**eval_obj)
+        if isinstance(candidate_obj, Candidate):
+            self.candidate_obj = candidate_obj
+        elif isinstance(candidate_obj, dict):
+            if 'candidate_type' in candidate_obj:
+                # loads the Candidate subclass from the registry
+                self.candidate_obj = Candidate.from_dict(candidate_obj.copy())
+            else:
+                self.candidate_obj = Candidate(**candidate_obj)
+        else:
+            raise TypeError("candidate_obj must be either a Candidate instance or a dictionary")
+        self.responses = responses
+        if total_time_seconds <= 0:
+            raise ValueError("Total time must be greater than zero")
+        self.total_time_seconds = total_time_seconds
+        results = results or []
         results_created = []
         # results is a list of lists of CheckResults (each list corresponds to a prompt/test)
+        # convert dictionaries to CheckResults
         for tests in results:
             test_results_created = []  # maintain list of lists
             for r in tests:
@@ -278,8 +331,7 @@ class EvalResult(BaseModel):
                 else:
                     raise TypeError("results must be either a CheckResult instance or a dictionary")
             results_created.append(test_results_created)
-        values['results'] = results_created
-        return values
+        self.results = results_created
 
     @property
     def prompts(self) -> list[str]:
@@ -306,13 +358,6 @@ class EvalResult(BaseModel):
     def num_checks(self) -> int:
         """Returns the number of checks."""
         return sum(len(r) for r in self.results)
-
-    @field_validator('total_time_seconds')
-    def validate_total_time_seconds(cls, v: float) -> float:  # noqa: N805
-        """Validates the total_time_seconds field."""
-        if v <= 0:
-            raise ValueError("Total time must be greater than zero")
-        return v
 
     @property
     def num_pass_fail_checks(self) -> int:
@@ -377,39 +422,6 @@ class EvalResult(BaseModel):
             yaml.dump(self.to_dict(), f)
 
 
-Eval.model_rebuild()
-
-
-class EvalHarness:
-    """
-    An EvalHarness provides a interface for evaluating a list of Evals against a list of
-    Candidates.
-
-    The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
-    collection of EvalResults.
-
-    TODO: for OpenAI, it's probably fine to launch many tasks async and not effect individual
-    performance. For hugging face, it might be better to launch same eval across different
-    endpoints. For local, it might be better to run one at a time to avoid performance issues.
-
-    TODO: A single Candidate object should ONLY be used on an individual Eval object and not
-    reused. For Evals that contain multiple prompts (i.e. PromptTest objects), the assumption is
-    that the prompts sequentially build on eachother and the Candidate's should maintain
-    state/history).
-    """
-
-    def __init__(self, evals: list[Eval]):
-        """Initializes the EvalHarness."""
-        self.evals = evals
-
-    def __call__(self, candidates: list[Candidate | Callable]) -> list[EvalResult]:
-        """Evaluates the Eval against a list of Candidates."""
-        results = []
-        for candidate in candidates:
-            results.append(self.evals(candidate))
-        return results
-
-
 def eval_result_summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
     code_run_checks = [
@@ -437,3 +449,38 @@ def eval_result_summarizer(result: EvalResult) -> dict:
         summary['num_code_blocks_successful'] = sum(r.metadata['num_code_blocks_successful'] for r in code_run_checks)  # noqa
         summary['perc_code_blocks_successful'] = summary['num_code_blocks_successful'] / summary['num_code_blocks']  # noqa
     return summary
+
+
+# Eval.model_rebuild()
+
+
+# class EvalHarness:
+#     """
+#     An EvalHarness provides a interface for evaluating a list of Evals against a list of
+#     Candidates.
+
+#     The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
+#     collection of EvalResults.
+
+#     TODO: for OpenAI, it's probably fine to launch many tasks async and not effect individual
+#     performance. For hugging face, it might be better to launch same eval across different
+#     endpoints. For local, it might be better to run one at a time to avoid performance issues.
+
+#     TODO: A single Candidate object should ONLY be used on an individual Eval object and not
+#     reused. For Evals that contain multiple prompts (i.e. PromptTest objects), the assumption is
+#     that the prompts sequentially build on eachother and the Candidate's should maintain
+#     state/history).
+#     """
+
+#     def __init__(self, evals: list[Eval]):
+#         """Initializes the EvalHarness."""
+#         self.evals = evals
+
+#     def __call__(self, candidates: list[Candidate | Callable]) -> list[EvalResult]:
+#         """Evaluates the Eval against a list of Candidates."""
+#         results = []
+#         for candidate in candidates:
+#             results.append(self.evals(candidate))
+#         return results
+
+
