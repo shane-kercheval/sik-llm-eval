@@ -66,7 +66,6 @@ class CheckResult(BaseModel, ABC):
     @classmethod
     def register(cls, result_type: str | Enum):  # noqa: ANN102
         """Register a subclass of Check."""
-
         def decorator(subclass: Type[CheckResult]) -> Type[CheckResult]:
             assert issubclass(subclass, CheckResult), \
                 f"CheckResult '{result_type}' ({subclass.__name__}) must extend CheckResult"
@@ -406,7 +405,6 @@ class PythonCodeBlocksRun(Check):
                 # check_results.append(func(code_blocks, response, environment))
                 pass
             # return CodeBlocksRunResult(
-                
             # )
         num_code_blocks = len(code_blocks)
         num_code_blocks_successful = len([e for e in code_block_errors if e is None])

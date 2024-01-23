@@ -1,6 +1,158 @@
+"""Tests for the candidates module."""
+from typing import Callable
+from pydantic import root_validator
+from llm_evals.candidates import Candidate
 
 
-def test_register_candidate_success(registry):  # noqa
-    """Test successful registration of a candidate."""
-    registry.register('FakeTest', FakeTest)
-    assert 'FakeTest' in registry.registered()
+class MockLMM:
+    """Mock class representing an LLM."""
+
+    def __init__(self, **kwargs: dict):
+        self.llm_parameters = kwargs
+        self.prompts = []
+
+    def __call__(self, prompt: str) -> str:
+        """Caches prompts for unit tests."""
+        self.prompts.append(prompt)
+        return prompt
+
+
+@Candidate.register('MOCK_MODEL')
+class MockCandidate(Candidate):
+    """Mock class representing a Candidate."""
+
+    @root_validator(pre=True)
+    def create_model(cls, values: dict) -> dict:  # noqa: N805
+        """Creates the model from the parameters."""
+        parameters = values.get('parameters')
+        if parameters is not None:
+            values['model'] = MockLMM(**parameters)
+        return values
+
+
+def test__candidate__registration():  # noqa
+    assert 'MOCK_MODEL' in Candidate.registry
+    assert 'mock_model' in Candidate.registry
+
+    assert MockCandidate().model is None  # only create model when called with parameters
+    assert MockCandidate() == Candidate.from_dict({'candidate_type': 'MOCK_MODEL'})
+    assert MockCandidate().to_dict() == {'candidate_type': 'MOCK_MODEL'}
+
+    candidate = MockCandidate(parameters={'param_1': 'param_a'}, metadata={'test': 'test'})
+    candidate.parameters == {'param_1': 'param_a'}
+    candidate.metadata == {'test': 'test'}
+    assert isinstance(candidate.model, MockLMM)
+    assert candidate.model.llm_parameters == {'param_1': 'param_a'}
+
+    # test underlying call mechanism so that we can cache prompts and ensure a new model is created
+    # for each new candidate instance
+    response = candidate('test_1')
+    assert response == 'test_1'
+    response = candidate('test_2')
+    assert response == 'test_2'
+    assert candidate.model.prompts == ['test_1', 'test_2']
+
+    candidate_2 = MockCandidate(parameters={'param_1': 'param_b'})
+    assert candidate_2.model.llm_parameters == {'param_1': 'param_b'}
+    assert candidate.model.llm_parameters == {'param_1': 'param_a'}
+    assert candidate.model.prompts == ['test_1', 'test_2']
+
+    response = candidate_2('test_3')
+    assert response == 'test_3'
+    assert candidate.model.prompts == ['test_1', 'test_2']
+
+def test__candidate__to_from_dict():  # noqa
+    candidate_dict = {
+        'candidate_type': 'MOCK_MODEL',
+        'uuid': 'test_uuid',
+        'metadata': {'name': 'test name'},
+        'parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
+        'system_info': {'system_1': 'system_a', 'system_2': 'system_b'},
+    }
+    candidate = MockCandidate(**candidate_dict)
+    assert candidate.to_dict() == candidate_dict
+    assert candidate == Candidate.from_dict(candidate_dict)
+    assert candidate == Candidate.from_dict(candidate.to_dict())
+    assert isinstance(candidate.model, MockLMM)
+    assert candidate.model.llm_parameters == {'param_1': 'param_a', 'param_2': 'param_b'}
+    response = candidate('test')
+    assert response == 'test'
+    assert candidate.model.prompts == ['test']
+    # make sure there is no shared state between candidates
+    another_candidate = Candidate.from_dict(candidate_dict)
+    assert another_candidate == candidate
+    assert another_candidate.model.llm_parameters == candidate.model.llm_parameters
+    assert another_candidate.model.prompts != candidate.model.prompts
+    response = another_candidate('test_another')
+    assert response == 'test_another'
+    assert another_candidate.model.prompts == ['test_another']
+    assert candidate.model.prompts == ['test']
+
+def test__candidate__clone():  #noqa
+    candidate_dict = {
+        'candidate_type': 'MOCK_MODEL',
+        'uuid': 'test_uuid',
+        'metadata': {'name': 'test name'},
+        'parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
+        'system_info': {'system_1': 'system_a', 'system_2': 'system_b'},
+    }
+    candidate = Candidate.from_dict(candidate_dict)
+    response = candidate('test')
+    assert response == 'test'
+    assert candidate.model.prompts == ['test']
+
+    clone = candidate.clone()
+    assert candidate.clone() == candidate
+    assert candidate.to_dict() == clone.to_dict()
+    # the "objects" i.e. dictionaries should match but the model objects should not
+    assert candidate.model.prompts == ['test']
+    assert clone.model.prompts == []
+    # ensure that changing values on the clone doesn't affect the original
+    clone.uuid = 'test_uuid_2'
+    clone.metadata['name'] = 'test name 2'
+    clone.parameters['param_1'] = 'param_a_2'
+    clone.system_info['system_1'] = 'system_a_2'
+    assert clone.to_dict() != candidate.to_dict()
+    assert candidate.to_dict() == candidate_dict
+    # ensure that using the clone doesn't affect the original
+    response = clone('test another')
+    assert response == 'test another'
+    assert clone.model.prompts == ['test another']
+    assert candidate.model.prompts == ['test']
+
+def test__OpenAI():
+    pass
+
+
+# def test__candidate__creation():  # noqa
+#     assert Candidate().to_dict() == {}
+#     assert Candidate(**Candidate().to_dict()) == Candidate()
+
+#     candidate = Candidate(model=lambda x: x)
+#     candidate_dict = candidate.to_dict()
+#     assert candidate_dict == {}
+#     assert Candidate(**candidate_dict) == candidate
+#     assert candidate('test') == 'test'
+
+#     candidate = Candidate(model=lambda x: x, metadata={'test': 'test'})
+#     candidate_dict = candidate.to_dict()
+#     assert candidate_dict == {'metadata': {'test': 'test'}}
+#     assert Candidate(**candidate_dict) == candidate
+
+#     candidate = Candidate(
+#         uuid='test_uuid',
+#         model=lambda x: x,
+#         metadata={'test': 'test'},
+#         candidate_type='TEST_MODEL_TYPE',
+#         parameters={'param_1': 'param_a'},
+#         system_info={'system_1': 'system_a'},
+#     )
+#     candidate_dict = candidate.to_dict()
+#     assert candidate_dict == {
+#         'uuid': 'test_uuid',
+#         'metadata': {'test': 'test'},
+#         'candidate_type': 'TEST_MODEL_TYPE',
+#         'parameters': {'param_1': 'param_a'},
+#         'system_info': {'system_1': 'system_a'},
+#     }
+#     assert Candidate(**candidate_dict) == candidate

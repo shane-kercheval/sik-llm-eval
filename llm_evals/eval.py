@@ -4,6 +4,7 @@ import time
 from typing import Callable, ForwardRef
 from pydantic import BaseModel, Field, field_validator, root_validator
 import yaml
+from llm_evals.candidates import Candidate
 
 from llm_evals.checks import (
     Check,
@@ -15,7 +16,6 @@ from llm_evals.utilities.internal_utilities import extract_valid_parameters, get
 
 Eval = ForwardRef('Eval')
 EvalResult = ForwardRef('EvalResult')
-Candidate = ForwardRef('Candidate')
 
 
 class PromptTest(BaseModel):
@@ -90,71 +90,6 @@ class PromptTest(BaseModel):
             value['ideal_response'] = self.ideal_response
         if self.checks:
             value['checks'] = [c.to_dict() for c in self.checks]
-        return value
-
-
-class Candidate(BaseModel):
-    """
-    A Candidate describes an LLM (or specific implementation of an LLM interface (e.g.
-    history/context management)) along wiht optional parameters or hardware.
-    """
-
-    uuid: str | None = None
-    model: Callable[[str], str] | None = None
-    candidate_type: str | None = None
-    metadata: dict | None = None
-    parameters: dict | None = None
-    system_info: dict | None = None
-
-    def __call__(self, prompt: str) -> str:
-        """Returns a response (string) given a prompt (string)."""
-        return self.model(prompt)
-
-    @classmethod
-    def from_yaml(cls, path: str) -> Candidate:  # noqa: ANN102
-        """
-        Creates a Candidate object from a YAML file. This method requires the underlying model
-        (callable) be registered with the ModelRegistry before calling this method.
-        """
-        with open(path) as f:
-            config = yaml.safe_load(f)
-        candidate_type = config.pop('candidate_type')
-        # lookup model registry based on type
-        config['model'] = lambda x: x
-        return cls(**config)
-
-    def __str__(self) -> str:
-        """Returns a string representation of the Candidate."""
-        parameters = '' if not self.parameters else f'\n            parameters={self.parameters},'
-        system_info = '' if not self.system_info else f'\n            system_info={self.system_info},'  # noqa
-        return dedent(f"""
-        {self.__class__.__name__}(
-            uuid={self.uuid},
-            metadata={self.metadata},
-            {parameters}{system_info}
-        )
-        """).strip()
-
-    # override equals operator to ignore model (callable) when comparing candidates
-    def __eq__(self, other: object) -> bool:
-        """Returns True if the two Candidates are equal."""
-        if not isinstance(other, Candidate):
-            return False
-        return self.to_dict() == other.to_dict()
-
-    def to_dict(self) -> dict:
-        """Return a dictionary representation of the Candidate."""
-        value = {}
-        if self.uuid:
-            value['uuid'] = self.uuid
-        if self.candidate_type:
-            value['candidate_type'] = self.candidate_type
-        if self.metadata:
-            value['metadata'] = self.metadata
-        if self.parameters:
-            value['parameters'] = self.parameters
-        if self.system_info:
-            value['system_info'] = self.system_info
         return value
 
 
@@ -443,6 +378,36 @@ class EvalResult(BaseModel):
 
 
 Eval.model_rebuild()
+
+
+class EvalHarness:
+    """
+    An EvalHarness provides a interface for evaluating a list of Evals against a list of
+    Candidates.
+
+    The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
+    collection of EvalResults.
+
+    TODO: for OpenAI, it's probably fine to launch many tasks async and not effect individual
+    performance. For hugging face, it might be better to launch same eval across different
+    endpoints. For local, it might be better to run one at a time to avoid performance issues.
+
+    TODO: A single Candidate object should ONLY be used on an individual Eval object and not
+    reused. For Evals that contain multiple prompts (i.e. PromptTest objects), the assumption is
+    that the prompts sequentially build on eachother and the Candidate's should maintain
+    state/history).
+    """
+
+    def __init__(self, evals: list[Eval]):
+        """Initializes the EvalHarness."""
+        self.evals = evals
+
+    def __call__(self, candidates: list[Candidate | Callable]) -> list[EvalResult]:
+        """Evaluates the Eval against a list of Candidates."""
+        results = []
+        for candidate in candidates:
+            results.append(self.evals(candidate))
+        return results
 
 
 def eval_result_summarizer(result: EvalResult) -> dict:

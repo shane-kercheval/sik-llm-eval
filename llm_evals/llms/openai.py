@@ -165,6 +165,7 @@ class OpenAIChat(ChatModel):
     def __init__(
             self,
             model_name: str = 'gpt-3.5-turbo-1106',
+            # TODO: refactor to paramters dict
             temperature: float = 0,
             max_tokens: int = 2000,
             system_message: str = 'You are a helpful AI assistant.',

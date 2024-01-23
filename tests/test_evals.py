@@ -67,39 +67,6 @@ def test__PromptTest():  # noqa
         ],
     }
 
-def test__candidate__creation():  # noqa
-    assert Candidate().to_dict() == {}
-    assert Candidate(**Candidate().to_dict()) == Candidate()
-
-    candidate = Candidate(model=lambda x: x)
-    candidate_dict = candidate.to_dict()
-    assert candidate_dict == {}
-    assert Candidate(**candidate_dict) == candidate
-    assert candidate('test') == 'test'
-
-    candidate = Candidate(model=lambda x: x, metadata={'test': 'test'})
-    candidate_dict = candidate.to_dict()
-    assert candidate_dict == {'metadata': {'test': 'test'}}
-    assert Candidate(**candidate_dict) == candidate
-
-    candidate = Candidate(
-        uuid='test_uuid',
-        model=lambda x: x,
-        metadata={'test': 'test'},
-        candidate_type='TEST_MODEL_TYPE',
-        parameters={'param_1': 'param_a'},
-        system_info={'system_1': 'system_a'},
-    )
-    candidate_dict = candidate.to_dict()
-    assert candidate_dict == {
-        'uuid': 'test_uuid',
-        'metadata': {'test': 'test'},
-        'candidate_type': 'TEST_MODEL_TYPE',
-        'parameters': {'param_1': 'param_a'},
-        'system_info': {'system_1': 'system_a'},
-    }
-    assert Candidate(**candidate_dict) == candidate
-
 def test__Eval__creation():  # noqa
     eval_obj = Eval(test_sequence=PromptTest(prompt='test'))
     eval_dict = eval_obj.to_dict()
