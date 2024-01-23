@@ -198,8 +198,12 @@ def test__PassFailResult__serialize():  # noqa
         'value': False,
         'success': False,
         'metadata': {'foo': 'bar'},
+        'result_type': 'PASS_FAIL',
     }
     assert PassFailResult(**result_dict) == result
+    recreated = CheckResult.from_dict(result_dict)
+    assert isinstance(recreated, PassFailResult)
+    assert recreated == result
 
     result = PassFailResult(value=True, metadata={'bar': 'foo'})
     result_dict = result.to_dict()
@@ -207,8 +211,12 @@ def test__PassFailResult__serialize():  # noqa
         'value': True,
         'success': True,
         'metadata': {'bar': 'foo'},
+        'result_type': 'PASS_FAIL',
     }
     assert PassFailResult(**result_dict) == result
+    recreated = CheckResult.from_dict(result_dict)
+    assert isinstance(recreated, PassFailResult)
+    assert recreated == result
 
 def test__ScoreResult():  # noqa
     assert ScoreResult(value=0.5).value == 0.5
@@ -258,6 +266,7 @@ def test__ScoreResult__serialize():  # noqa
     assert result_dict == {
         'value': 0.5,
         'success': None,
+        'result_type': 'SCORE',
     }
     assert ScoreResult(**result_dict) == result
     result = ScoreResult(value=0.5, metadata={'foo': 'bar'})
@@ -266,8 +275,12 @@ def test__ScoreResult__serialize():  # noqa
         'value': 0.5,
         'success': None,
         'metadata': {'foo': 'bar'},
+        'result_type': 'SCORE',
     }
     assert ScoreResult(**result_dict) == result
+    recreated = CheckResult.from_dict(result_dict)
+    assert isinstance(recreated, ScoreResult)
+    assert recreated == result
 
     result = ScoreResult(value=0.5, success_threshold=0.5, metadata={'foo': 'bar'})
     result_dict = result.to_dict()
@@ -276,8 +289,12 @@ def test__ScoreResult__serialize():  # noqa
         'success_threshold': 0.5,
         'success': True,
         'metadata': {'foo': 'bar'},
+        'result_type': 'SCORE',
     }
     assert ScoreResult(**result_dict) == result
+    recreated = CheckResult.from_dict(result_dict)
+    assert isinstance(recreated, ScoreResult)
+    assert recreated == result
 
     result = ScoreResult(value=0.5, success_threshold=0.51, metadata={'bar': 'foo'})
     result_dict = result.to_dict()
@@ -286,7 +303,12 @@ def test__ScoreResult__serialize():  # noqa
         'success_threshold': 0.51,
         'success': False,
         'metadata': {'bar': 'foo'},
+        'result_type': 'SCORE',
     }
+    assert ScoreResult(**result_dict) == result
+    recreated = CheckResult.from_dict(result_dict)
+    assert isinstance(recreated, ScoreResult)
+    assert recreated == result
 
 def test__MatchExactCheck__has_check_type():  # noqa
     """
@@ -353,8 +375,10 @@ def test__MatchExactCheck():  # noqa
             'check_value': 'foo',
             'check_metadata': {},
         },
+        'result_type': 'PASS_FAIL',
     }
     assert PassFailResult(**result_dict) == result
+    assert CheckResult.from_dict(result_dict) == result
 
     check = Check.from_dict({
         'check_type': CheckType.MATCH.name.lower(),
@@ -389,7 +413,10 @@ def test__MatchExactCheck():  # noqa
             'check_value': 'bar',
             'check_metadata': {'bar': 'foo'},
         },
+        'result_type': 'PASS_FAIL',
     }
+    assert PassFailResult(**result_dict) == result
+    assert CheckResult.from_dict(result_dict) == result
 
 def test__MatchContainsCheck__has_check_type():  # noqa
     """
@@ -458,7 +485,10 @@ def test__MatchContainsCheck():  # noqa
             'check_value': 'o ba',
             'check_metadata': {},
         },
+        'result_type': 'PASS_FAIL',
     }
+    assert PassFailResult(**result_dict) == result
+    assert CheckResult.from_dict(result_dict) == result
 
     check = Check.from_dict({
         'check_type': CheckType.CONTAINS.name.lower(),
@@ -494,8 +524,10 @@ def test__MatchContainsCheck():  # noqa
             'check_value': 'o ba',
             'check_metadata': {'bar': 'foo'},
         },
+        'result_type': 'PASS_FAIL',
     }
     assert PassFailResult(**result_dict) == result
+    assert CheckResult.from_dict(result_dict) == result
 
 def test__MatchRegexCheck__has_check_type():  # noqa
     """
@@ -551,8 +583,10 @@ def test__MatchRegexCheck():  # noqa
             'check_pattern': regex,
             'check_metadata': {},
         },
+        'result_type': 'PASS_FAIL',
     }
     assert PassFailResult(**result_dict) == result
+    assert CheckResult.from_dict(result_dict) == result
 
     check = Check.from_dict({
         'check_type': CheckType.REGEX.name.lower(),
@@ -588,8 +622,10 @@ def test__MatchRegexCheck():  # noqa
             'check_pattern': regex,
             'check_metadata': {'bar': 'foo'},
         },
+        'result_type': 'PASS_FAIL',
     }
     assert PassFailResult(**result_dict) == result
+    assert CheckResult.from_dict(result_dict) == result
 
     assert check(response='foo').success
     assert not check(response='foo123').success
