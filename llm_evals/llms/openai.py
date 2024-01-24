@@ -165,9 +165,7 @@ class OpenAIChat(ChatModel):
     def __init__(
             self,
             model_name: str = 'gpt-3.5-turbo-1106',
-            # TODO: refactor to paramters dict
-            temperature: float = 0,
-            max_tokens: int = 2000,
+            model_parameters: dict | None = None,
             system_message: str = 'You are a helpful AI assistant.',
             streaming_callback: Callable[[StreamingEvent], None] | None = None,
             memory_manager: MemoryManager | None = None,
@@ -178,14 +176,14 @@ class OpenAIChat(ChatModel):
         Args:
             model_name:
                 e.g. 'gpt-3.5-turbo-1106'
-            temperature:
-                "What sampling temperature to use, between 0 and 2. Higher values like 0.8 will
-                make the output more random, while lower values like 0.2 will make it more focused
-                and deterministic."
-            max_tokens:
-                The maximum number of tokens to generate in the chat completion.
-                The total length of input tokens and generated tokens is limited by the model's
-                context length.
+            model_parameters:
+                A dictionary of parameters to send to the model. For example:
+                ```
+                {
+                    'temperature': 0.01,
+                    'max_tokens': 4096,
+                }
+                ```
             system_message:
                 The content of the message associated with the "system" `role`.
             streaming_callback:
@@ -220,8 +218,7 @@ class OpenAIChat(ChatModel):
             memory_manager=memory_manager,
         )
         self.model_name = model_name
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+        self.model_parameters = model_parameters or {}
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed
@@ -244,11 +241,10 @@ class OpenAIChat(ChatModel):
                 client.chat.completions.create,
                 model=self.model_name,
                 messages=messages,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
                 timeout=self.timeout,
                 stream=True,
                 seed=self.seed,
+                **self.model_parameters,
             )
             # extract the content/token from the streaming response and send to the callback
             # build up the message so that we can calculate usage/costs and send back the same
@@ -266,17 +262,15 @@ class OpenAIChat(ChatModel):
                 client.chat.completions.create,
                 model=self.model_name,
                 messages=messages,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
                 timeout=self.timeout,
                 seed=self.seed,
+                **self.model_parameters,
             )
             response_message = response.choices[0].message.content
 
         metadata = {
             'model_name': self.model_name,
-            'temperature': self.temperature,
-            'max_tokens': self.max_tokens,
+            'model_parameters': self.model_parameters,
             'timeout': self.timeout,
         }
         return response_message, metadata

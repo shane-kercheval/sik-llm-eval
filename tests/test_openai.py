@@ -1,7 +1,7 @@
 """Test the OpenAI Model classes."""
 
 import os
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 import pytest
 from llm_evals.llms.base import Document, EmbeddingRecord, ExchangeRecord, StreamingEvent
 from llm_evals.llms.memory import (
@@ -210,6 +210,43 @@ def test_OpenAIChat():  # noqa
     assert model.total_tokens == previous_total_tokens + message.total_tokens
     assert model.input_tokens == previous_input_tokens + message.input_tokens
     assert model.response_tokens == previous_response_tokens + message.response_tokens
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test_OpenAIChat__with_parameters():  # noqa
+    # test valid parameters for non-streaming
+    model_parameters = {'temperature': 0.01, 'max_tokens': 4096}
+    model = OpenAIChat(model_parameters=model_parameters)
+    assert model.model_parameters == model_parameters
+    response = model("What is the capital of France?")
+    assert 'Paris' in response
+    assert model.history()[-1].metadata['model_parameters'] == model_parameters
+
+    # test valid parameters for streaming
+    callback_response = ''
+    def streaming_callback(record: StreamingEvent) -> None:
+        nonlocal callback_response
+        callback_response += record.response
+
+    model = OpenAIChat(streaming_callback=streaming_callback, model_parameters=model_parameters)
+    assert model.model_parameters == model_parameters
+    response = model("What is the capital of France?")
+    assert 'Paris' in response
+    assert response == callback_response
+    assert model.history()[-1].metadata['model_parameters'] == model_parameters  
+
+    # test invalid parameters so that we know we're actually sending them
+    model_parameters = {'temperature': -10}
+    model = OpenAIChat(model_parameters=model_parameters)
+    assert model.model_parameters == model_parameters
+    with pytest.raises(BadRequestError):
+        _ = model("What is the capital of France?")
+
+    # test invalid parameters for streaming
+    model_parameters = {'temperature': -10}
+    model = OpenAIChat(streaming_callback=streaming_callback, model_parameters=model_parameters)
+    assert model.model_parameters == model_parameters
+    with pytest.raises(BadRequestError):
+        _ = model("What is the capital of France?")
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test_OpenAIChat_streaming():  # noqa
