@@ -163,25 +163,17 @@ class OpenAIChat(ChatModel):
     def __init__(
             self,
             model_name: str = 'gpt-3.5-turbo-1106',
-            model_parameters: dict | None = None,
             system_message: str = 'You are a helpful AI assistant.',
             streaming_callback: Callable[[StreamingEvent], None] | None = None,
             memory_manager: MemoryManager | None = None,
             timeout: int = 30,
             seed: int | None = None,
+            **model_kwargs: dict,
             ) -> None:
         """
         Args:
             model_name:
                 e.g. 'gpt-3.5-turbo-1106'
-            model_parameters:
-                A dictionary of parameters to send to the model. For example:
-                ```
-                {
-                    'temperature': 0.01,
-                    'max_tokens': 4096,
-                }
-                ```
             system_message:
                 The content of the message associated with the "system" `role`.
             streaming_callback:
@@ -195,7 +187,15 @@ class OpenAIChat(ChatModel):
                 timeout value passed to OpenAI model.
             seed:
                 seed value passed to OpenAI model.
-        """
+            model_kwargs:
+                Additional keyword arguments that are forwarded to the OpenAI model. For example:
+                ```
+                **{
+                    'temperature': 0.01,
+                    'max_tokens': 4096,
+                }
+                ```
+        """  # noqa
         def cost_calculator(input_tokens: int, response_tokens: int) -> float:
             model_costs = MODEL_COST_PER_TOKEN[self.model_name]
             return (input_tokens * model_costs['input']) + \
@@ -216,7 +216,7 @@ class OpenAIChat(ChatModel):
             memory_manager=memory_manager,
         )
         self.model_name = model_name
-        self.model_parameters = model_parameters or {}
+        self.model_parameters = model_kwargs or {}
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed

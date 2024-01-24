@@ -96,7 +96,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
         message_formatter=llama_message_formatter,
-        model_parameters=model_parameters,
+        **model_parameters,
     )
     assert model.model_parameters == model_parameters
     response = model("What is the capital of France?")
@@ -113,7 +113,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
         endpoint_url=hugging_face_endpoint,
         message_formatter=llama_message_formatter,
         streaming_callback=streaming_callback,
-        model_parameters=model_parameters,
+        **model_parameters,
     )
     assert model.model_parameters == model_parameters
     response = model("What is the capital of France?")
@@ -126,7 +126,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
         message_formatter=llama_message_formatter,
-        model_parameters=model_parameters,
+        **model_parameters,
     )
     assert model.model_parameters == model_parameters
     with pytest.raises(HuggingFaceRequestError) as exception:
@@ -141,7 +141,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
         endpoint_url=hugging_face_endpoint,
         message_formatter=llama_message_formatter,
         streaming_callback=streaming_callback,
-        model_parameters=model_parameters,
+        **model_parameters,
     )
     assert model.model_parameters == model_parameters
     with pytest.raises(HuggingFaceRequestError) as exception:

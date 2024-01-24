@@ -215,7 +215,7 @@ def test_OpenAIChat():  # noqa
 def test_OpenAIChat__with_parameters():  # noqa
     # test valid parameters for non-streaming
     model_parameters = {'temperature': 0.01, 'max_tokens': 4096}
-    model = OpenAIChat(model_parameters=model_parameters)
+    model = OpenAIChat(**model_parameters)
     assert model.model_parameters == model_parameters
     response = model("What is the capital of France?")
     assert 'Paris' in response
@@ -227,7 +227,7 @@ def test_OpenAIChat__with_parameters():  # noqa
         nonlocal callback_response
         callback_response += record.response
 
-    model = OpenAIChat(streaming_callback=streaming_callback, model_parameters=model_parameters)
+    model = OpenAIChat(streaming_callback=streaming_callback, **model_parameters)
     assert model.model_parameters == model_parameters
     response = model("What is the capital of France?")
     assert 'Paris' in response
@@ -236,14 +236,14 @@ def test_OpenAIChat__with_parameters():  # noqa
 
     # test invalid parameters so that we know we're actually sending them
     model_parameters = {'temperature': -10}
-    model = OpenAIChat(model_parameters=model_parameters)
+    model = OpenAIChat(**model_parameters)
     assert model.model_parameters == model_parameters
     with pytest.raises(BadRequestError):
         _ = model("What is the capital of France?")
 
     # test invalid parameters for streaming
     model_parameters = {'temperature': -10}
-    model = OpenAIChat(streaming_callback=streaming_callback, model_parameters=model_parameters)
+    model = OpenAIChat(streaming_callback=streaming_callback, **model_parameters)
     assert model.model_parameters == model_parameters
     with pytest.raises(BadRequestError):
         _ = model("What is the capital of France?")

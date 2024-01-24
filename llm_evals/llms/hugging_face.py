@@ -82,7 +82,6 @@ def num_tokens(
     return len(tokens['input_ids'][0])
 
 
-# create error message for hugging face request
 class HuggingFaceRequestError(Exception):
     """An exception raised when there is an error with a Hugging Face request."""
 
@@ -115,12 +114,12 @@ class HuggingFaceEndpointChat(ChatModel):
             endpoint_url: str,
             message_formatter: Callable[[str, list[ExchangeRecord]], str],
             system_message: str = 'You are a helpful AI assistant.',
-            model_parameters: dict | None = None,
             token_calculator: Callable[[str], int] = len,
             memory_manager: Callable[[list[ExchangeRecord]], list[str]] | None = None,
             streaming_callback: Callable[[StreamingEvent], None] | None = None,
             max_streaming_tokens: int = 10,
             timeout: int = 30,
+            **model_kwargs: dict,
             ) -> None:
         """
         Args:
@@ -132,14 +131,6 @@ class HuggingFaceEndpointChat(ChatModel):
             message_formatter:
                 A callable that takes the system message, the history of messages, and the prompt
                 and returns a list of messages to send to the model.
-            model_parameters:
-                A dictionary of parameters to send to the model. For example:
-                ```
-                {
-                    'max_new_tokens': 1000,
-                    'temperature': 0.01,
-                }
-                ```
             token_calculator:
                 A callable that takes a string and returns the number of tokens in the string.
                 Defaults to `len` which returns the number of characters rather than "tokens".
@@ -154,7 +145,15 @@ class HuggingFaceEndpointChat(ChatModel):
                 streaming.
             timeout:
                 The maximum number of seconds to wait for a response from the model.
-        """
+            model_kwargs:
+                Keyword arguments of parameters to send to the model. For example:
+                **```
+                {
+                    'max_new_tokens': 1000,
+                    'temperature': 0.01,
+                }
+                ```
+        """  # noqa
         super().__init__(
             system_message=system_message,
             message_formatter=message_formatter,
@@ -164,7 +163,7 @@ class HuggingFaceEndpointChat(ChatModel):
         )
         self.endpoint_url = endpoint_url
         self.streaming_callback = streaming_callback
-        self.model_parameters = model_parameters or {}
+        self.model_parameters = model_kwargs or {}
         self._max_streaming_tokens = max_streaming_tokens
         self._timeout = timeout
 
