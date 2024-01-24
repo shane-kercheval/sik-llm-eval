@@ -294,7 +294,7 @@ class EvalResult(DictionaryEqualsMixin):
             else:
                 self.candidate_obj = Candidate(**candidate_obj)
         else:
-            raise TypeError("candidate_obj must be either a Candidate instance or a dictionary")
+            raise TypeError("candidate_obj must be either a Candidate or a dictionary")
         self.responses = responses
         if total_time_seconds <= 0:
             raise ValueError("Total time must be greater than zero")
@@ -313,7 +313,7 @@ class EvalResult(DictionaryEqualsMixin):
                 elif isinstance(r, CheckResult):
                     test_results_created.append(r)
                 else:
-                    raise TypeError("results must be either a CheckResult instance or a dictionary")
+                    raise TypeError("results must be either a CheckResult or a dictionary")
             results_created.append(test_results_created)
         self.results = results_created
 
@@ -443,7 +443,7 @@ def eval_result_summarizer(result: EvalResult) -> dict:
 #     An EvalHarness provides a interface for evaluating a list of Evals against a list of
 #     Candidates.
 
-#     The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
+#The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
 #     collection of EvalResults.
 
 #     TODO: for OpenAI, it's probably fine to launch many tasks async and not effect individual

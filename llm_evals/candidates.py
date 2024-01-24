@@ -2,7 +2,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Callable, ClassVar, ForwardRef, Type
+from typing import Callable, ForwardRef, Type
 import yaml
 from llm_evals.llms.openai import OpenAIChat
 
@@ -36,6 +36,7 @@ class Candidate(ABC):
     maintain state between prompts (e.g. history/context) and a single Candidate object should
     be created for a single Eval object, and not reused across multiple Eval objects.
     """
+
     registry = Registry()
 
     def __init__(

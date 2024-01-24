@@ -331,7 +331,7 @@ class PythonCodeBlocksPresent(Check):
         """TODO document."""
         # We are currently assuming any code blocks are Python code blocks.
         # We could either check for "```python" or we could check for "```" and then check if the
-        # code blocks run, but a) we'd be running the code blocks twice if there is a 
+        # code blocks run, but a) we'd be running the code blocks twice if there is a
         # PythonCodeBlocksRun check and b) just because the code blocks fail doesn't mean they
         # aren't Python code blocks.
         return PassFailResult(
@@ -369,7 +369,7 @@ class PythonCodeBlocksRun(Check):
     # The difference between this class and PythonFunctionTest is that this class is responsible
     # for running tests against the code blocks returned by the LLM, whereas PythonFunctionTest
     # is responsible for running tests against the (string) response returned by the LLM.
-    """  # noqa: D404
+    """  # noqa
 
     code_setup: str | None = Field(
         default=None,
@@ -385,7 +385,6 @@ class PythonCodeBlocksRun(Check):
 
     def __call__(self, code_blocks: list[str]) -> ScoreResult:
         """TODO document."""
-
         # run code blocks and any setup code
         code_block_errors = []
         if code_blocks:
