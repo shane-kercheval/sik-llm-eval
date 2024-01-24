@@ -384,8 +384,9 @@ class EvalResult(DictionaryEqualsMixin):
     def __str__(self) -> str:
         return dedent(f"""
         EvalResult:
-            # of Response Characters={self.response_characters}
+            # of Prompts Tested={len(self.eval_obj.test_sequence)}
             Total Time (seconds)={self.total_time_seconds}
+            # of Response Characters={self.response_characters}
             Characters per Second={self.characters_per_second}
             # of Checks={self.num_checks}
             # of Pass/Fail Checks={self.num_pass_fail_checks}
