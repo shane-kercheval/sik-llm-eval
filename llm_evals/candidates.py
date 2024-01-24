@@ -4,6 +4,7 @@ from enum import Enum, auto
 from textwrap import dedent
 from typing import Callable, ForwardRef, Type
 import yaml
+from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
 from llm_evals.llms.openai import OpenAIChat
 
 from llm_evals.utilities.internal_utilities import EnumMixin, Registry
@@ -211,6 +212,61 @@ class OpenAICandidate(Candidate):
         if parameters is None:
             parameters = {}
         self.model = OpenAIChat(**parameters)
+
+    def __call__(self, prompt: str) -> str:
+        """Invokes the underlying model with the prompt and returns the response."""
+        return self.model(prompt)
+
+    @property
+    def total_tokens(self) -> int:
+        """Returns the total number of tokens processed by the model."""
+        return self.model.total_tokens
+
+    @property
+    def input_tokens(self) -> int:
+        """Returns the total number of input tokens processed by the model."""
+        return self.model.input_tokens
+
+    @property
+    def response_tokens(self) -> int:
+        """Returns the total number of response tokens returned by the model."""
+        return self.model.response_tokens
+
+    @property
+    def cost(self) -> float:
+        """Returns the total cost of using the model."""
+        return self.model.cost
+
+
+@Candidate.register(CandidateType.HUGGING_FACE_ENDPOINT)
+class HuggingFaceEndpointCandidate(Candidate):
+    """
+    Wrapper around Hugging Face Inference API.
+
+    NOTE: the `HUGGING_FACE_API_KEY` environment variable must be set to use this class.
+    """
+
+    def __init__(self,
+        uuid: str | None = None,
+        metadata: dict | None = None,
+        parameters: dict | None = None,
+        system_info: dict | None = None) -> None:
+        """
+        Initialize a HuggingFaceEndpointCandidate object.
+
+        Args:
+            uuid: A unique identifier for the Candidate.
+            metadata: A dictionary of metadata about the Candidate.
+            parameters: A dictionary of parameters passed to Hugging Face.
+            system_info: A dictionary of system information about the Candidate.
+        """
+        super().__init__(
+            uuid=uuid, metadata=metadata,
+            parameters=parameters, system_info=system_info,
+        )
+        if parameters is None:
+            parameters = {}
+        self.model = HuggingFaceEndpointChat(**parameters)
 
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""

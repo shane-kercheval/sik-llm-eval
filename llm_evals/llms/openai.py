@@ -1,6 +1,4 @@
 """Contains helper functions for interacting with OpenAI models."""
-
-
 from typing import Callable
 from functools import cache
 import tiktoken
