@@ -44,10 +44,10 @@ class MockCandidate(Candidate):
         return self.model(prompt)
 
 
-def test__CallableCandidate():  # noqa
-    candidate = CallableCandidate(model=lambda x: x)
-    assert candidate('test') == 'test'
-    assert candidate.to_dict() == {'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name}
+def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa
+    candidate = Candidate.from_yaml('evals/templates/candidate_openai.yaml')
+    assert candidate.candidate_type == CandidateType.OPENAI.name
+    assert candidate.to_dict() == openai_candidate_template
 
 def test__candidate__registration():  # noqa
     assert 'MOCK_MODEL' in Candidate.registry
@@ -144,6 +144,11 @@ def test__candidate__clone():  #noqa
     assert response == 'test another'
     assert clone.model.prompts == ['test another']
     assert candidate.model.prompts == ['test']
+
+def test__CallableCandidate():  # noqa
+    candidate = CallableCandidate(model=lambda x: x)
+    assert candidate('test') == 'test'
+    assert candidate.to_dict() == {'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name}
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAI__default__no_model_parameters():  # noqa

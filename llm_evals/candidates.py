@@ -121,7 +121,7 @@ class Candidate(ABC):
         """
         with open(path) as f:
             config = yaml.safe_load(f)
-        return cls.from_dict(**config)
+        return cls.from_dict(config)
 
     def __str__(self) -> str:
         """Returns a string representation of the Candidate."""
