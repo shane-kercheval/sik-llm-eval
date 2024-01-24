@@ -8,7 +8,7 @@ from llm_evals.llms.base import (
     ExchangeRecord,
     TokenUsageRecord,
 )
-from llm_evals.llms.hugging_face import llama_message_formatter
+from llm_evals.llms.message_formatters import llama_message_formatter
 from tests.conftest import (
     MockChatModel,
     MockCostMemoryManager,

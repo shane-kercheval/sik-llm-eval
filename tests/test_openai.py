@@ -232,7 +232,7 @@ def test_OpenAIChat__with_parameters():  # noqa
     response = model("What is the capital of France?")
     assert 'Paris' in response
     assert response == callback_response
-    assert model.history()[-1].metadata['model_parameters'] == model_parameters  
+    assert model.history()[-1].metadata['model_parameters'] == model_parameters
 
     # test invalid parameters so that we know we're actually sending them
     model_parameters = {'temperature': -10}

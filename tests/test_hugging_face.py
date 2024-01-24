@@ -1,15 +1,17 @@
 """Test HuggingFace models and helpers."""
 
 import os
+import re
 from unittest.mock import patch
 from dotenv import load_dotenv
 
 
 import pytest
+from llm_evals.llms.message_formatters import llama_message_formatter
 from llm_evals.llms.hugging_face import (
+    HuggingFaceRequestError,
     HuggingFaceEndpointChat,
     get_tokenizer,
-    llama_message_formatter,
     num_tokens,
     query_hugging_face_endpoint,
 )
@@ -30,40 +32,6 @@ def test_query_hugging_face_endpoint(fake_retry_handler, fake_hugging_face_respo
             assert isinstance(response, list)
             assert 'generated_text' in response[0]
 
-def test_llama_message_formatter():  # noqa
-    assert llama_message_formatter(system_message=None, history=[], prompt=None) == ''
-    assert llama_message_formatter(system_message=None, history=None, prompt=None) == ''
-
-    messages = llama_message_formatter(
-        system_message=None,
-        history=[
-            ExchangeRecord(prompt='a', response='b'),
-            ExchangeRecord(prompt='c', response='d'),
-        ],
-        prompt=None,
-    )
-    expected_value = '[INST] a [/INST]\nb\n[INST] c [/INST]\nd\n'
-    assert messages == '[INST] a [/INST]\nb\n[INST] c [/INST]\nd\n'
-
-    messages = llama_message_formatter(
-        system_message='system',
-        history=[
-            ExchangeRecord(prompt='a', response='b'),
-            ExchangeRecord(prompt='c', response='d'),
-        ],
-        prompt=None,
-    )
-    assert messages == '[INST] <<SYS>> system <</SYS>> [/INST]\n' + expected_value
-
-    messages = llama_message_formatter(
-        system_message='system',
-        history=[
-            ExchangeRecord(prompt='a', response='b'),
-            ExchangeRecord(prompt='c', response='d'),
-        ],
-        prompt='e',
-    )
-    assert messages == f'[INST] <<SYS>> system <</SYS>> [/INST]\n{expected_value}[INST] e [/INST]\n'  # noqa
 
 @pytest.mark.skipif(not os.environ.get('HUGGING_FACE_API_KEY'), reason="HUGGING_FACE_API_KEY is not set")  # noqa
 @pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
@@ -75,6 +43,7 @@ def test_HuggingFaceEndpointChat__no_token_calculator(hugging_face_endpoint):  #
 
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
+        message_formatter=llama_message_formatter,
         streaming_callback=streaming_callback,
     )
     assert len(model.history()) == 0
@@ -121,6 +90,68 @@ def test_HuggingFaceEndpointChat__no_token_calculator(hugging_face_endpoint):  #
 
 @pytest.mark.skipif(not os.environ.get('HUGGING_FACE_API_KEY'), reason="HUGGING_FACE_API_KEY is not set")  # noqa
 @pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
+def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
+    # test valid parameters for non-streaming
+    model_parameters = {'temperature': 0.01, 'max_tokens': 4096}
+    model = HuggingFaceEndpointChat(
+        endpoint_url=hugging_face_endpoint,
+        message_formatter=llama_message_formatter,
+        model_parameters=model_parameters,
+    )
+    assert model.model_parameters == model_parameters
+    response = model("What is the capital of France?")
+    assert 'Paris' in response
+    assert model.history()[-1].metadata['model_parameters'] == model_parameters
+
+    # test valid parameters for streaming
+    callback_response = ''
+    def streaming_callback(record: StreamingEvent) -> None:
+        nonlocal callback_response
+        callback_response += record.response
+
+    model = HuggingFaceEndpointChat(
+        endpoint_url=hugging_face_endpoint,
+        message_formatter=llama_message_formatter,
+        streaming_callback=streaming_callback,
+        model_parameters=model_parameters,
+    )
+    assert model.model_parameters == model_parameters
+    response = model("What is the capital of France?")
+    assert 'Paris' in response
+    assert response == callback_response
+    assert model.history()[-1].metadata['model_parameters'] == model_parameters
+
+    # test invalid parameters so that we know we're actually sending them
+    model_parameters = {'temperature': -10}
+    model = HuggingFaceEndpointChat(
+        endpoint_url=hugging_face_endpoint,
+        message_formatter=llama_message_formatter,
+        model_parameters=model_parameters,
+    )
+    assert model.model_parameters == model_parameters
+    with pytest.raises(HuggingFaceRequestError) as exception:
+        _ = model("What is the capital of France?")
+    exception = exception.value
+    assert exception.error_type == 'validation'
+    assert 'temperature' in exception.error_message
+
+    # test invalid parameters for streaming
+    model_parameters = {'temperature': -10}
+    model = HuggingFaceEndpointChat(
+        endpoint_url=hugging_face_endpoint,
+        message_formatter=llama_message_formatter,
+        streaming_callback=streaming_callback,
+        model_parameters=model_parameters,
+    )
+    assert model.model_parameters == model_parameters
+    with pytest.raises(HuggingFaceRequestError) as exception:
+        _ = model("What is the capital of France?")
+    exception = exception.value
+    assert exception.error_type == 'validation'
+    assert 'temperature' in exception.error_message
+
+@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_API_KEY'), reason="HUGGING_FACE_API_KEY is not set")  # noqa
+@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
 def test_HuggingFaceEndpointChat(hugging_face_endpoint):  # noqa
     tokenizer = get_tokenizer('meta-llama/Llama-2-7b-chat-hf')
 
@@ -134,6 +165,7 @@ def test_HuggingFaceEndpointChat(hugging_face_endpoint):  # noqa
 
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
+        message_formatter=llama_message_formatter,
         token_calculator=calc_num_tokens,
         streaming_callback=streaming_callback,
     )
@@ -241,6 +273,7 @@ def test_HuggingFaceEndpointChat__timeout(hugging_face_endpoint):  # noqa
 
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
+        message_formatter=llama_message_formatter,
         streaming_callback=streaming_callback,
         max_streaming_tokens=30,
         # 1 second is only enough time for one call to the model and associated callback
@@ -372,7 +405,7 @@ def test_HuggingFaceEndpointChat__memory_manager__1000_tokens(hugging_face_endpo
     assert history[1].prompt == prompt
     assert history[1].response == response
     assert message.metadata['endpoint_url'] == hugging_face_endpoint
-    pattern = fr'^\[INST\].*?<<SYS>> {model.system_message} <</SYS>>.*?\[\/INST\]\n\[INST\].*?{previous_prompt}.*?\[\/INST\]\n.*?{previous_response}.*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
+    pattern = fr'^\[INST\].*?<<SYS>> {model.system_message} <</SYS>>.*?\[\/INST\]\n\[INST\].*?{previous_prompt}.*?\[\/INST\]\n.*?{re.escape(previous_response)}.*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
     assert pattern_found(message.metadata['messages'], pattern)
     assert message.metadata['messages'].count('<<SYS>>') == 1
     assert message.metadata['messages'].count('<</SYS>>') == 1
@@ -619,7 +652,7 @@ def test_HuggingFaceEndpointChat__memory_manager__LastNExchangesManager_1(huggin
     assert history[1].prompt == prompt
     assert history[1].response == response
     assert message.metadata['endpoint_url'] == hugging_face_endpoint
-    pattern = fr'^\[INST\].*?<<SYS>> {model.system_message} <</SYS>>.*?\[\/INST\]\n\[INST\].*?{previous_prompt}.*?\[\/INST\]\n.*?{previous_response}.*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
+    pattern = fr'^\[INST\].*?<<SYS>> {model.system_message} <</SYS>>.*?\[\/INST\]\n\[INST\].*?{previous_prompt}.*?\[\/INST\]\n.*?{re.escape(previous_response)}.*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
     assert pattern_found(message.metadata['messages'], pattern)
     assert message.metadata['messages'].count('<<SYS>>') == 1
     assert message.metadata['messages'].count('<</SYS>>') == 1
@@ -727,7 +760,7 @@ def test_HuggingFaceEndpointChat__memory_manager__LastNExchangesManager_0(huggin
     assert history[1].prompt == prompt
     assert history[1].response == response
     assert message.metadata['endpoint_url'] == hugging_face_endpoint
-    # pattern = fr'^\[INST\].*?<<SYS>> {model.system_message} <</SYS>>.*?\[\/INST\]\n\[INST\].*?{previous_prompt}.*?\[\/INST\]\n.*?{previous_response}.*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
+    # pattern = fr'^\[INST\].*?<<SYS>> {model.system_message} <</SYS>>.*?\[\/INST\]\n\[INST\].*?{previous_prompt}.*?\[\/INST\]\n.*?{re.escape(previous_response)}.*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
     # we should not see the previous prompt or response in the messages
     pattern = fr'^\[INST\].*?<<SYS>> {model.system_message} <</SYS>>.*?\[\/INST\]\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
     assert pattern_found(message.metadata['messages'], pattern)

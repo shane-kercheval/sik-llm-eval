@@ -12,7 +12,7 @@ from faker import Faker
 import numpy as np
 from dotenv import load_dotenv
 from unittest.mock import MagicMock
-from llm_evals.llms.hugging_face import llama_message_formatter
+from llm_evals.llms.message_formatters import llama_message_formatter
 from llm_evals.llms.base import (
     ChatModel,
     Document,

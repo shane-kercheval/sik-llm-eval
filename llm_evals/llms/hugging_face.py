@@ -5,7 +5,6 @@ import time
 import requests
 from typing import Callable
 from transformers import PreTrainedTokenizer, AutoTokenizer
-from llm_evals.llms.message_formatters import llama_message_formatter
 from llm_evals.utilities.internal_utilities import retry_handler
 from llm_evals.llms.base import ChatModel, ExchangeRecord, StreamingEvent
 
@@ -83,6 +82,21 @@ def num_tokens(
     return len(tokens['input_ids'][0])
 
 
+# create error message for hugging face request
+class HuggingFaceRequestError(Exception):
+    """An exception raised when there is an error with a Hugging Face request."""
+
+    def __init__(self, error: dict) -> None:
+        """
+        Args:
+            error:
+                The error returned from the Hugging Face API.
+        """
+        self.error_message = error['error']
+        super().__init__(self.error_message)
+        self.error_type = error['error_type']
+
+
 class HuggingFaceEndpointChat(ChatModel):
     """
     A wrapper around a model being served via Hugging Face Endpoints. More info here:
@@ -96,12 +110,12 @@ class HuggingFaceEndpointChat(ChatModel):
     via `memory_manager` (e.g. `LastNTokensMemoryManager`).
     """
 
-    def __init__(  # noqa: D417
+    def __init__(
             self,
             endpoint_url: str,
+            message_formatter: Callable[[str, list[ExchangeRecord]], str],
             system_message: str = 'You are a helpful AI assistant.',
-            message_formatter: Callable[[str, list[ExchangeRecord]], str] = llama_message_formatter,  # noqa
-            parameters: dict | None = None,
+            model_parameters: dict | None = None,
             token_calculator: Callable[[str], int] = len,
             memory_manager: Callable[[list[ExchangeRecord]], list[str]] | None = None,
             streaming_callback: Callable[[StreamingEvent], None] | None = None,
@@ -118,7 +132,7 @@ class HuggingFaceEndpointChat(ChatModel):
             message_formatter:
                 A callable that takes the system message, the history of messages, and the prompt
                 and returns a list of messages to send to the model.
-            parameters:
+            model_parameters:
                 A dictionary of parameters to send to the model. For example:
                 ```
                 {
@@ -140,7 +154,7 @@ class HuggingFaceEndpointChat(ChatModel):
                 streaming.
             timeout:
                 The maximum number of seconds to wait for a response from the model.
-        """  # noqa
+        """
         super().__init__(
             system_message=system_message,
             message_formatter=message_formatter,
@@ -150,7 +164,7 @@ class HuggingFaceEndpointChat(ChatModel):
         )
         self.endpoint_url = endpoint_url
         self.streaming_callback = streaming_callback
-        self.parameters = parameters or {}
+        self.model_parameters = model_parameters or {}
         self._max_streaming_tokens = max_streaming_tokens
         self._timeout = timeout
 
@@ -166,12 +180,11 @@ class HuggingFaceEndpointChat(ChatModel):
                 endpoint_url=self.endpoint_url,
                 payload={
                     "inputs": messages + response,
-                    "parameters": self.parameters,
+                    "parameters": self.model_parameters,
                 },
             )
             if isinstance(output, dict) and 'error' in output:
-                response += f"\n\n{output['error']}"
-                break
+                raise HuggingFaceRequestError(output)
             if not output:
                 break
             delta = output[0]['generated_text']
@@ -183,7 +196,7 @@ class HuggingFaceEndpointChat(ChatModel):
 
         metadata = {
             'endpoint_url': self.endpoint_url,
-            'parameters': self.parameters,
+            'model_parameters': self.model_parameters,
             'timeout': self._timeout,
         }
         return response, metadata
