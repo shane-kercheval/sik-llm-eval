@@ -305,3 +305,11 @@ def openai_candidate_template() -> dict:
     """Returns the yaml template for an OpenAI."""
     with open('evals/templates/candidate_openai.yaml') as f:
         return yaml.safe_load(f)
+
+@pytest.fixture()
+def hugging_face_candidate_template() -> dict:
+    """Returns the yaml template for a Hugging Face Endpoint candidate."""
+    with open('evals/templates/candidate_hugging_face_endpoints.yaml') as f:
+        config = yaml.safe_load(f)
+    config['model_parameters']['endpoint_url'] = os.getenv('HUGGING_FACE_ENDPOINT_UNIT_TESTS')
+    return config

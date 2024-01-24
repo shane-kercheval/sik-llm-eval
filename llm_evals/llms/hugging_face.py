@@ -93,7 +93,7 @@ class HuggingFaceRequestError(Exception):
         """
         self.error_message = error['error']
         super().__init__(self.error_message)
-        self.error_type = error['error_type']
+        self.error_type = error['error_type'] if 'error_type' in error else None
 
 
 class HuggingFaceEndpointChat(ChatModel):

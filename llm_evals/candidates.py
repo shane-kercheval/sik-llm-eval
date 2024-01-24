@@ -5,6 +5,7 @@ from textwrap import dedent
 from typing import Callable, ForwardRef, Type
 import yaml
 from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
+from llm_evals.llms.message_formatters import create_message_formatter
 from llm_evals.llms.openai import OpenAIChat
 
 from llm_evals.utilities.internal_utilities import EnumMixin, Registry
@@ -44,7 +45,7 @@ class Candidate(ABC):
         self,
         uuid: str | None = None,
         metadata: dict | None = None,
-        parameters: dict | None = None,
+        model_parameters: dict | None = None,
         system_info: dict | None = None) -> None:
         """
         Initialize a Candidate object.
@@ -52,12 +53,12 @@ class Candidate(ABC):
         Args:
             uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
-            parameters: A dictionary of parameters for the Candidate.
+            model_parameters: A dictionary of parameters for the Candidate.
             system_info: A dictionary of system information about the Candidate.
         """
         self.uuid = uuid
         self.metadata = metadata
-        self.parameters = parameters
+        self.model_parameters = model_parameters
         self.system_info = system_info
 
     @abstractmethod
@@ -93,9 +94,9 @@ class Candidate(ABC):
         if self.uuid:
             value['uuid'] = self.uuid
         if self.metadata:
-            value['metadata'] = self.metadata
-        if self.parameters:
-            value['parameters'] = self.parameters
+            value['metadata'] = self.metadata.copy()
+        if self.model_parameters:
+            value['model_parameters'] = self.model_parameters.copy()
         if self.system_info:
             value['system_info'] = self.system_info
         if self.candidate_type:
@@ -124,7 +125,7 @@ class Candidate(ABC):
 
     def __str__(self) -> str:
         """Returns a string representation of the Candidate."""
-        parameters = '' if not self.parameters else f'\n            parameters={self.parameters},'
+        parameters = '' if not self.model_parameters else f'\n            model_parameters={self.model_parameters},'  # noqa
         system_info = '' if not self.system_info else f'\n            system_info={self.system_info},'  # noqa
         return dedent(f"""
         {self.__class__.__name__}(
@@ -199,19 +200,24 @@ class OpenAICandidate(Candidate):
     def __init__(self,
         uuid: str | None = None,
         metadata: dict | None = None,
-        parameters: dict | None = None) -> None:
+        model_parameters: dict | None = None) -> None:
         """
         Initialize a OpenAICandidate object.
 
         Args:
             uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
-            parameters: A dictionary of parameters passed to OpenAI.
+            model_parameters: A dictionary of parameters passed to OpenAI.
         """
-        super().__init__(uuid=uuid, metadata=metadata, parameters=parameters, system_info=None)
-        if parameters is None:
-            parameters = {}
-        self.model = OpenAIChat(**parameters)
+        super().__init__(
+            uuid=uuid,
+            metadata=metadata,
+            model_parameters=model_parameters,
+            system_info=None,
+        )
+        if model_parameters is None:
+            model_parameters = {}
+        self.model = OpenAIChat(**model_parameters)
 
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
@@ -247,9 +253,9 @@ class HuggingFaceEndpointCandidate(Candidate):
     """
 
     def __init__(self,
+        model_parameters: dict,
         uuid: str | None = None,
         metadata: dict | None = None,
-        parameters: dict | None = None,
         system_info: dict | None = None) -> None:
         """
         Initialize a HuggingFaceEndpointCandidate object.
@@ -257,17 +263,57 @@ class HuggingFaceEndpointCandidate(Candidate):
         Args:
             uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
-            parameters: A dictionary of parameters passed to Hugging Face.
+            model_parameters: A dictionary of parameters passed to Hugging Face.
             system_info: A dictionary of system information about the Candidate.
         """
+        model_parameters = model_parameters.copy()
+        self.system_format = model_parameters.pop('system_format')
+        self.prompt_format = model_parameters.pop('prompt_format')
+        self.response_format = model_parameters.pop('response_format')
         super().__init__(
-            uuid=uuid, metadata=metadata,
-            parameters=parameters, system_info=system_info,
+            uuid=uuid,
+            metadata=metadata,
+            model_parameters=model_parameters,
+            system_info=system_info,
         )
-        if parameters is None:
-            parameters = {}
-        self.model = HuggingFaceEndpointChat(**parameters)
+        message_formatter = create_message_formatter(
+            system_format=self.system_format,
+            prompt_format=self.prompt_format,
+            response_format=self.response_format,
+        )
+        self.model = HuggingFaceEndpointChat(
+            message_formatter=message_formatter,
+            **model_parameters,
+        )
 
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
+
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the Candidate."""
+        # value = self.model_dump(exclude_defaults=True, exclude_none=True)
+        value = super().to_dict()
+        if self.system_format:
+            value['model_parameters']['system_format'] = self.system_format
+        if self.prompt_format:
+            value['model_parameters']['prompt_format'] = self.prompt_format
+        if self.response_format:
+            value['model_parameters']['response_format'] = self.response_format
+        return value
+
+    @property
+    def total_tokens(self) -> int:
+        """Returns the total number of tokens processed by the model."""
+        return self.model.total_tokens
+
+    @property
+    def input_tokens(self) -> int:
+        """Returns the total number of input tokens processed by the model."""
+        return self.model.input_tokens
+
+    @property
+    def response_tokens(self) -> int:
+        """Returns the total number of response tokens returned by the model."""
+        return self.model.response_tokens

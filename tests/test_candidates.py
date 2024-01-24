@@ -1,7 +1,14 @@
 """Tests for the candidates module."""
 import os
+from openai import BadRequestError
 import pytest
-from llm_evals.candidates import CallableCandidate, Candidate, CandidateType, OpenAICandidate
+from llm_evals.candidates import (
+    CallableCandidate,
+    Candidate,
+    CandidateType,
+    OpenAICandidate,
+)
+from llm_evals.llms.hugging_face import HuggingFaceRequestError
 
 
 class MockLMM:
@@ -25,12 +32,12 @@ class MockCandidate(Candidate):
         """Initialize a MockCandidate object."""
         uuid = kwargs.pop('uuid', None)
         metadata = kwargs.pop('metadata', None)
-        parameters = kwargs.pop('parameters', None)
+        model_parameters = kwargs.pop('model_parameters', None)
         system_info = kwargs.pop('system_info', None)
-        super().__init__(parameters=parameters, metadata=metadata, uuid=uuid, system_info=system_info)  # noqa
+        super().__init__(model_parameters=model_parameters, metadata=metadata, uuid=uuid, system_info=system_info)  # noqa
         self.model = None
-        if parameters is not None:
-            self.model = MockLMM(**parameters)
+        if model_parameters is not None:
+            self.model = MockLMM(**model_parameters)
 
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
@@ -50,8 +57,8 @@ def test__candidate__registration():  # noqa
     assert MockCandidate() == Candidate.from_dict({'candidate_type': 'MOCK_MODEL'})
     assert MockCandidate().to_dict() == {'candidate_type': 'MOCK_MODEL'}
 
-    candidate = MockCandidate(parameters={'param_1': 'param_a'}, metadata={'test': 'test'})
-    candidate.parameters == {'param_1': 'param_a'}
+    candidate = MockCandidate(model_parameters={'param_1': 'param_a'}, metadata={'test': 'test'})
+    candidate.model_parameters == {'param_1': 'param_a'}
     candidate.metadata == {'test': 'test'}
     assert isinstance(candidate.model, MockLMM)
     assert candidate.model.llm_parameters == {'param_1': 'param_a'}
@@ -64,7 +71,7 @@ def test__candidate__registration():  # noqa
     assert response == 'test_2'
     assert candidate.model.prompts == ['test_1', 'test_2']
 
-    candidate_2 = MockCandidate(parameters={'param_1': 'param_b'})
+    candidate_2 = MockCandidate(model_parameters={'param_1': 'param_b'})
     assert candidate_2.model.llm_parameters == {'param_1': 'param_b'}
     assert candidate.model.llm_parameters == {'param_1': 'param_a'}
     assert candidate.model.prompts == ['test_1', 'test_2']
@@ -78,7 +85,7 @@ def test__candidate__to_from_dict():  # noqa
         'candidate_type': 'MOCK_MODEL',
         'uuid': 'test_uuid',
         'metadata': {'name': 'test name'},
-        'parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
+        'model_parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
         'system_info': {'system_1': 'system_a', 'system_2': 'system_b'},
     }
     candidate_dict_no_type = candidate_dict.copy()
@@ -111,7 +118,7 @@ def test__candidate__clone():  #noqa
         'candidate_type': 'MOCK_MODEL',
         'uuid': 'test_uuid',
         'metadata': {'name': 'test name'},
-        'parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
+        'model_parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
         'system_info': {'system_1': 'system_a', 'system_2': 'system_b'},
     }
     candidate = Candidate.from_dict(candidate_dict)
@@ -128,7 +135,7 @@ def test__candidate__clone():  #noqa
     # ensure that changing values on the clone doesn't affect the original
     clone.uuid = 'test_uuid_2'
     clone.metadata['name'] = 'test name 2'
-    clone.parameters['param_1'] = 'param_a_2'
+    clone.model_parameters['param_1'] = 'param_a_2'
     clone.system_info['system_1'] = 'system_a_2'
     assert clone.to_dict() != candidate.to_dict()
     assert candidate.to_dict() == candidate_dict
@@ -139,8 +146,9 @@ def test__candidate__clone():  #noqa
     assert candidate.model.prompts == ['test']
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI():  # noqa
+def test__OpenAI__default__no_model_parameters():  # noqa
     candidate = OpenAICandidate()
+    candidate.model.model_parameters == {}
     response = candidate("What is the capital of France?")
     assert 'Paris' in response
     assert candidate.total_tokens > 0
@@ -155,6 +163,7 @@ def test__OpenAI():  # noqa
     # test that the model generated from the dict is the same as the original
     # but that they don't share history (i.e. there is a new underlying object for the model)
     recreated_candidate = Candidate.from_dict(candidate.to_dict())
+    recreated_candidate.model.model_parameters == {}
     assert candidate == recreated_candidate
     # ensure that the recreated candidate doesn't share history with the original
     assert len(candidate.model.history()) == 1
@@ -165,6 +174,7 @@ def test__OpenAI():  # noqa
     assert len(recreated_candidate.model.history()) == 1
     # ensure that the cloned candidate doesn't share history with the original
     cloned_candidate = recreated_candidate.clone()
+    cloned_candidate.model.model_parameters == {}
     assert cloned_candidate == recreated_candidate
     assert len(cloned_candidate.model.history()) == 0
     response = cloned_candidate("What is the capital of Germany?")
@@ -173,14 +183,149 @@ def test__OpenAI():  # noqa
     assert len(recreated_candidate.model.history()) == 1
     assert len(cloned_candidate.model.history()) == 1
 
+def test__OpenAI__config():  # noqa
+    """Test that the various config options for an OpenAI candidate work."""
+    config = {
+        'uuid': 'test uuid',
+        'metadata': {'name': 'Test Name'},
+        'candidate_type': CandidateType.OPENAI.name,
+        'model_parameters': {
+            'model_name': 'test model name',
+            'system_message': 'test system message',
+            'temperature': -1,
+            'max_tokens': -2,
+            'seed': -3,
+        },
+    }
+    candidate = Candidate.from_dict(config)
+    assert candidate.uuid == config['uuid']
+    assert candidate.metadata == config['metadata']
+    assert candidate.candidate_type == CandidateType.OPENAI.name
+    assert candidate.model_parameters == config['model_parameters']
+    # test that the underlying model parameters that are sent to OpenAI are correct
+    expected_model_param_names = ['temperature', 'max_tokens']
+    expected_model_parameters = {
+        k:v for k, v in config['model_parameters'].items()
+        if k in expected_model_param_names
+    }
+    assert candidate.model.model_parameters == expected_model_parameters
+
+    assert candidate.to_dict() == config
+    assert candidate.from_dict(candidate.to_dict()) == candidate
+
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__template(openai_candidate_template):  # noqa
+def test__OpenAI__template__model_parameters(openai_candidate_template):  # noqa
     """Test that the template for an OpenAI candidate works."""
-    dict_copy = openai_candidate_template.copy()
-    candidate = Candidate.from_dict(openai_candidate_template)
-    assert candidate.to_dict() == dict_copy
+    template = openai_candidate_template.copy()
+    expected_model_param_names = ['temperature', 'max_tokens']
+    expected_model_parameters = {
+        k:v for k, v in template['model_parameters'].items()
+        if k in expected_model_param_names
+    }
+    candidate = Candidate.from_dict(template)
+    assert candidate.model.model_parameters == expected_model_parameters
+    assert candidate.model.model_name == template['model_parameters']['model_name']
+    assert candidate.model.system_message == template['model_parameters']['system_message']
+    assert candidate.to_dict() == template
+
     response = candidate("What is the capital of France?")
     assert 'Paris' in response
-    assert candidate.model.model_name == openai_candidate_template['parameters']['model_name']
-    
-    assert candidate.model.history()[-1].metadata == {}  # TODO
+    assert candidate.model.model_name == template['model_parameters']['model_name']
+    assert candidate.model.history()[-1].metadata['model_name'] == template['model_parameters']['model_name']  # noqa: E501
+    assert candidate.model.history()[-1].metadata['model_parameters'] == expected_model_parameters
+    # after all tests, the dict_copy shoudl be the same as the original i.e. no side effects from
+    # other functions we are passing dict4 to
+    assert template == openai_candidate_template
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test__OpenAI__invalid_model_parameters(openai_candidate_template):  # noqa
+    """Test invalid parameters so that we know we're actually sending them."""
+    template = openai_candidate_template.copy()
+    template['model_parameters']['temperature'] = -10  # invalid value
+    candidate = Candidate.from_dict(template)
+    with pytest.raises(BadRequestError):
+        _ = candidate("What is the capital of France?")
+
+@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_API_KEY'), reason="HUGGING_FACE_API_KEY is not set")  # noqa
+@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
+def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noqa
+    """Test that the various config options for a Hugging Face Endpoint candidate work."""
+    template = hugging_face_candidate_template.copy()
+    expected_model_param_names = ['temperature', 'max_tokens', 'seed']
+    expected_model_parameters = {
+        k:v for k, v in template['model_parameters'].items()
+        if k in expected_model_param_names
+    }
+    candidate = Candidate.from_dict(template)
+    assert candidate.to_dict() == template
+    assert Candidate.from_dict(candidate.to_dict()) == candidate
+
+    # check .model_parameters on candidate
+    expected_candidate_parameters = template['model_parameters'].copy()
+    expected_candidate_parameters.pop('system_format')
+    expected_candidate_parameters.pop('prompt_format')
+    expected_candidate_parameters.pop('response_format')
+    assert candidate.model_parameters == expected_candidate_parameters
+    assert candidate.system_info == template['system_info']
+
+    # check .model_parameters on model
+    assert candidate.model.model_parameters == expected_model_parameters
+
+    # ensure message is created correctly
+    expected_message = template['model_parameters']['system_format'].format(system_message='a') \
+        + template['model_parameters']['prompt_format'].format(prompt='b') \
+        + template['model_parameters']['response_format'].format(response='c') \
+        + template['model_parameters']['prompt_format'].format(prompt='d')
+    assert candidate.model._message_formatter('a', [('b', 'c')], 'd') == expected_message
+
+    # test that the dictionary hasn't changed after passing the dict to various functions
+    # i.e. test no side effects against dict
+    assert candidate.to_dict() == template
+    assert template == hugging_face_candidate_template
+    assert Candidate.from_dict(candidate.to_dict()) == candidate
+
+    # test response
+    response = candidate("What is the capital of France?")
+    assert 'Paris' in response
+    assert candidate.total_tokens > 0
+    assert candidate.total_tokens == candidate.model.total_tokens
+    assert candidate.response_tokens > 0
+    assert candidate.response_tokens == candidate.model.response_tokens
+    assert candidate.input_tokens > 0
+    assert candidate.input_tokens == candidate.model.input_tokens
+    # test that the model generated from the dict is the same as the original
+    # but that they don't share history (i.e. there is a new underlying object for the model)
+    assert candidate.to_dict() == template
+    recreated_candidate = Candidate.from_dict(candidate.to_dict())
+    assert candidate == recreated_candidate
+    # ensure that the recreated candidate doesn't share history with the original
+    assert len(candidate.model.history()) == 1
+    assert len(recreated_candidate.model.history()) == 0
+    response = recreated_candidate("What is the capital of Spain?")
+    assert 'Madrid' in response
+    assert len(candidate.model.history()) == 1
+    assert len(recreated_candidate.model.history()) == 1
+    assert recreated_candidate.to_dict() == template
+    # ensure that the cloned candidate doesn't share history with the original
+    cloned_candidate = recreated_candidate.clone()
+    assert cloned_candidate == candidate
+    assert len(cloned_candidate.model.history()) == 0
+    response = cloned_candidate("What is the capital of Germany?")
+    assert 'Berlin' in response
+    assert cloned_candidate.to_dict() == template
+    assert len(candidate.model.history()) == 1
+    assert len(recreated_candidate.model.history()) == 1
+    assert len(cloned_candidate.model.history()) == 1
+
+@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_API_KEY'), reason="HUGGING_FACE_API_KEY is not set")  # noqa
+@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
+def test__HuggingFaceEndpointCandidate__invalid_model_parameters(hugging_face_candidate_template):  # noqa
+    """Test invalid parameters so that we know we're actually sending them."""
+    template = hugging_face_candidate_template.copy()
+    template['model_parameters']['temperature'] = -10  # invalid value
+    candidate = Candidate.from_dict(template)
+    with pytest.raises(HuggingFaceRequestError) as exception:
+        _ = candidate("What is the capital of France?")
+    exception = exception.value
+    assert exception.error_type.lower() == 'validation'
+    assert 'temperature' in exception.error_message

@@ -132,7 +132,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     with pytest.raises(HuggingFaceRequestError) as exception:
         _ = model("What is the capital of France?")
     exception = exception.value
-    assert exception.error_type == 'validation'
+    assert exception.error_type.lower() == 'validation'
     assert 'temperature' in exception.error_message
 
     # test invalid parameters for streaming
@@ -147,7 +147,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     with pytest.raises(HuggingFaceRequestError) as exception:
         _ = model("What is the capital of France?")
     exception = exception.value
-    assert exception.error_type == 'validation'
+    assert exception.error_type.lower() == 'validation'
     assert 'temperature' in exception.error_message
 
 @pytest.mark.skipif(not os.environ.get('HUGGING_FACE_API_KEY'), reason="HUGGING_FACE_API_KEY is not set")  # noqa
