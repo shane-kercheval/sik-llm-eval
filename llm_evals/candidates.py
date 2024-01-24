@@ -157,9 +157,9 @@ class CallableCandidate(Candidate):
     Candidate for a simple callable model. This is useful for simple use-cases, stateless models,
     and for testing.
 
-    NOTE: This class is with the Candidate registry and can be created from a dictionary using
-    `Candidate.from_dict(...)`. However, since the model is a callable, it cannot be serialized
-    and is not included in the dict representation of the Candidate. When creating a
+    NOTE: This class is registered with the Candidate registry and can be created from a dictionary
+    using `Candidate.from_dict(...)`. However, since the model is a callable, it cannot be
+    serialized and is not included in the dict representation of the Candidate. When creating a
     CallableCandidate from a dictionary, the `model` field will be `None`. Therefore, it can
     be reloded from a dictionary but will not be able to run evaluations.
     """

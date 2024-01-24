@@ -6,8 +6,8 @@ candidate_type: HUGGING_FACE_ENDPOINT
 model_parameters:
   endpoint_url: https://api-inference.huggingface.co/models/llama-2-7b-chat
   system_message: You are a helpful AI assistant.
-  temperature: 0.2
-  max_tokens: 2048
+  temperature: 0.01
+  max_tokens: 4096
   system_format: '[INST] <<SYS>> {system_message} <</SYS>> [/INST]\n'
   prompt_format: '[INST] {prompt} [/INST]\n'
   response_format: '{response}\n'

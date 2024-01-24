@@ -1,4 +1,6 @@
 """Tests for the evals module."""
+import os
+import pytest
 from llm_evals.candidates import Candidate, CandidateType
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck
 from llm_evals.eval import Eval, EvalResult, PromptTest, eval_result_summarizer
@@ -204,3 +206,33 @@ def test_Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  
         assert c.check_type == r.metadata['check_type']
 
     assert eval_result_summarizer(eval_result)
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test_Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_template):  # noqa
+    eval_config = fake_eval_sum_two_numbers.copy()
+    eval_obj = Eval(**eval_config)
+    result = eval_obj(openai_candidate_template)
+    assert result.eval_obj == eval_obj
+    assert result.candidate_obj == Candidate.from_dict(openai_candidate_template)
+    assert result.candidate_obj.to_dict() == openai_candidate_template
+    assert len(result.responses) == 1
+    assert 'sum_two_numbers' in result.responses[0]
+    assert len(result.prompts) == 1
+    assert result.prompts[0] == eval_config['test_sequence'][0]['prompt']
+    assert len(result.results) == 1
+    assert len(result.all_checks_results()) == 2
+    assert result.all_checks_results()[0].success
+    assert result.all_checks_results()[0].metadata['check_type'] == CheckType.CONTAINS.name
+    assert result.all_checks_results()[1].success
+    assert result.all_checks_results()[1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
+    assert result.all_checks_results()[1].metadata['num_code_blocks'] >= 1
+    expected_num_code_blocks = len(result.all_checks_results()[1].metadata['code_blocks'])
+    assert result.all_checks_results()[1].metadata['num_code_blocks'] == expected_num_code_blocks
+    assert result.num_checks == 2
+    assert result.num_pass_fail_checks == 2
+    assert result.num_passing_checks == 2
+    assert result.perc_passed_checks == 1
+    assert str(result)
+    assert EvalResult(**result.to_dict()) == result
+    assert EvalResult(**result.to_dict()).to_dict() == result.to_dict()
+    assert eval_config == fake_eval_sum_two_numbers  # make sure eval_config wasn't modified

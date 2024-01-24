@@ -101,6 +101,8 @@ def has_method(obj: object, method_name: str) -> bool:
 
 def extract_code_blocks(markdown_text: str) -> list[str]:
     """Extract code blocks from Markdown text (e.g. llm response)."""
+    if not markdown_text:
+        return []
     pattern = re.compile(r'```(?:python)?\s*(.*?)```', re.DOTALL)
     matches = pattern.findall(markdown_text)
     return [match.strip() for match in matches]

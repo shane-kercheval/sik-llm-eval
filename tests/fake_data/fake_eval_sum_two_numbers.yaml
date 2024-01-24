@@ -1,0 +1,16 @@
+uuid: 8F9FBF37-C18D-46AD-8C34-A0196739643D
+version: 1
+metadata:
+  name: Test Eval
+  description: This is a test eval.
+  difficulty: 1  # 1-5
+  tags:
+    - python
+    - test
+  source: Test
+test_sequence:
+  - prompt: Write a function that called `sum_two_numbers` that takes two numbers and returns their sum.
+    checks:
+      - check_type: CONTAINS
+        value: sum_two_numbers
+      - check_type: PYTHON_CODE_BLOCKS_PRESENT

@@ -477,6 +477,18 @@ def test__get_stack_overflow_answers_404():  # noqa
         with pytest.raises(RequestError):
             _ = _get_stack_overflow_answers(question_id='asdf')
 
+def test__extract_code_blocks__no_code_blocks():  # noqa
+    result = extract_code_blocks(None)
+    assert result == []
+    result = extract_code_blocks("")
+    assert result == []
+    result = extract_code_blocks("This is a test")
+    assert result == []
+    result = extract_code_blocks("This is a test ```")
+    assert result == []
+    result = extract_code_blocks("This is a test ```python")
+    assert result == []
+
 def test__extract_code_blocks__conversation_sum(conversation_sum):  # noqa
     extracted_code_blocks = extract_code_blocks(conversation_sum['model_1']['responses'][0])
     assert len(extracted_code_blocks) == 2

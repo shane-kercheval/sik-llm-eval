@@ -12,6 +12,7 @@ from llm_evals.checks import (
 )
 from llm_evals.utilities.internal_utilities import (
     DictionaryEqualsMixin,
+    extract_code_blocks,
     extract_valid_parameters,
     get_callable_info,
 )
@@ -152,7 +153,6 @@ class Eval(DictionaryEqualsMixin):
                 raise TypeError("test_sequence must be either a PromptTest instance or a dictionary")  # noqa
         self.test_sequence = tests_created
 
-
     def to_dict(self) -> dict:
         """Return a dictionary representation of the PromptTest."""
         value = {'test_sequence': [t.to_dict() for t in self.test_sequence]}
@@ -186,13 +186,29 @@ class Eval(DictionaryEqualsMixin):
             config = yaml.safe_load(f)
         return cls(**config)
 
-    def __call__(self, candidate: Candidate | Callable) -> EvalResult:
-        """Evaluates the model against the prompts and tests."""
+    def __call__(self, candidate: Candidate | Callable | dict) -> EvalResult:
+        """
+        Evaluates the model against the prompts and tests.
+
+        Args:
+            candidate:
+                The Candidate object to evaluate. If the Candidate is a dictionary, the Candidate
+                subclasses need to be registered via `Candidate.register(...)`.
+                The dictionary needs a `candidate_type` key with the registration value.
+
+                If the Candidate is a callable, it will be wrapped in a CallableCandidate object
+                and the metadata will be populated with the function's signature. The Candidate
+                can be serialized via `to_dict()` and deserialized via `from_dict()` but will
+                not be able to be called when deserialized, since the underlying function will not
+                be serialized.
+        """
         if isinstance(candidate, Callable):
             candidate = CallableCandidate(
                 model=candidate,
                 metadata={'function': get_callable_info(candidate)},
             )
+        if isinstance(candidate, dict):
+            candidate = Candidate.from_dict(candidate)
 
         start = time.time()
         responses = [candidate(p.prompt) for p in self.test_sequence]
@@ -200,20 +216,7 @@ class Eval(DictionaryEqualsMixin):
         results = []
         for test, response in zip(self.test_sequence, responses):
             check_results = []
-            # this probably won't work with CODE blocks
-            # TODO: how do i retain the enviornment of the code block so during the next round of
-            # I can execute the subsequent code block in the same environment as the first code
-            # blocks?
-            # TODO: Extract and report number of code blocks generated
-            # If there are code blocks generated, run ...???
-            # only need to run if there are CODE_BLOCKS_RUN or CODE_BLOCKS_EVIRONMENT
-            # i don't like this dependency
-            # hnmm.m.m.mm.m..m..m.mm.m.
-            # if there are code blocks. How do i know they are python? I don't. I need to know
-            # I can't run them here, this code shouldn't know how to run them because someone
-            # needs to register the the check which knows how to run them and which language they
-            # are, but i do need to distract them
-            code_blocks = []  # TODO: extract_code_blocks()
+            code_blocks = extract_code_blocks(response)
             parameters = {
                 'prompt': test.prompt,
                 'ideal_response': test.ideal_response,
