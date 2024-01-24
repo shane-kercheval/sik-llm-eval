@@ -290,7 +290,6 @@ class HuggingFaceEndpointCandidate(Candidate):
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
 
-
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
         # value = self.model_dump(exclude_defaults=True, exclude_none=True)
