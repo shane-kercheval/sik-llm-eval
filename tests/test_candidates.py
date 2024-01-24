@@ -163,3 +163,15 @@ def test__OpenAI():  # noqa
     assert len(candidate.model.history()) == 1
     assert len(recreated_candidate.model.history()) == 1
     assert len(cloned_candidate.model.history()) == 1
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test__OpenAI(openai_candidate_template):  # noqa
+    """Test that the template for an OpenAI candidate works."""
+    dict_copy = openai_candidate_template.copy()
+    candidate = Candidate.from_dict(openai_candidate_template)
+    assert candidate.to_dict() == dict_copy
+    response = candidate("What is the capital of France?")
+    assert 'Paris' in response
+    assert candidate.model.model_name == openai_candidate_template['parameters']['model_name']
+    
+    # assert candidate.model.history()[-1].metadata == {}  # TODO
