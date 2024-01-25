@@ -15,6 +15,8 @@ test_sequence:
         value: sum_two_numbers
       - check_type: MATCH
         value: does not match
+      - check_type: CONTAINS
+        value: does not contain
       - check_type: PYTHON_CODE_BLOCKS_PRESENT
   - prompt: Write some assertion statements to check the function.
     checks:

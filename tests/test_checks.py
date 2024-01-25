@@ -725,7 +725,7 @@ def test__PythonCodeBlocksRun__has_check_type():  # noqa
 
 def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
     check = PythonCodeBlocksRun()
-    assert check.percent_success_threshold == 1
+    assert check.success_threshold == 1
     assert check.code_setup is None
     assert check.functions is None
     assert check.metadata == {}
@@ -759,7 +759,7 @@ def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
 
 def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
     check = PythonCodeBlocksRun()
-    assert check.percent_success_threshold == 1
+    assert check.success_threshold == 1
     assert check.code_setup is None
     assert check.functions is None
     assert check.metadata == {}
@@ -786,10 +786,10 @@ def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
 
 def test__PythonCodeBlocksRun__with_setup():  # noqa
     check = PythonCodeBlocksRun(
-        percent_success_threshold=0.5,
+        success_threshold=0.5,
         code_setup='my_value = 1',  # my_value is depended on the code_blocks
     )
-    assert check.percent_success_threshold == 0.5
+    assert check.success_threshold == 0.5
     assert check.code_setup == 'my_value = 1'
     assert check.functions is None
     assert check.metadata == {}
@@ -847,11 +847,11 @@ def test__PythonCodeBlocksRun__with_functions():  # noqa
         expected_successful_function_checks
     threshold = (expected_successful_checks/expected_total_checks) + 0.001
     check = PythonCodeBlocksRun(
-        percent_success_threshold=threshold,
+        success_threshold=threshold,
         code_setup='my_value = 1',  # my_value is depended on the code_blocks
         functions=functions,
     )
-    assert check.percent_success_threshold == threshold
+    assert check.success_threshold == threshold
     assert check.code_setup == 'my_value = 1'
     assert len(check.functions) == len(functions)
     assert check.metadata == {}

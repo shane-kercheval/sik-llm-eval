@@ -6,8 +6,8 @@ import yaml
 from llm_evals.candidates import CallableCandidate, Candidate
 from llm_evals.checks import (
     Check,
-    CheckType,
     CheckResult,
+    CheckType,
 )
 from llm_evals.utilities.internal_utilities import (
     DictionaryEqualsMixin,
@@ -234,6 +234,7 @@ class Eval(DictionaryEqualsMixin):
             responses=responses,
             results=results,
             total_time_seconds=end - start,
+            num_code_blocks=len(code_blocks),
         )
 
     def __str__(self) -> str:
@@ -269,6 +270,7 @@ class EvalResult(DictionaryEqualsMixin):
         candidate_obj: Candidate | dict,
         responses: list[str],
         total_time_seconds: float,
+        num_code_blocks: int,
         results: list[list[CheckResult | dict]]) -> None:
         """
         Initializes the EvalResult.
@@ -284,6 +286,8 @@ class EvalResult(DictionaryEqualsMixin):
                 A list of responses (strings) from the LLM.
             total_time_seconds:
                 The total time (in seconds) it took to run the Eval.
+            num_code_blocks:
+                The total number of code blocks generated across all responses.
             results:
                 A list of lists of CheckResult objects.
         """
@@ -302,6 +306,7 @@ class EvalResult(DictionaryEqualsMixin):
         if total_time_seconds <= 0:
             raise ValueError("Total time must be greater than zero")
         self.total_time_seconds = total_time_seconds
+        self.num_code_blocks = num_code_blocks
         results = results or []
         results_created = []
         # results is a list of lists of CheckResults (each list corresponds to a prompt/test)
@@ -367,6 +372,7 @@ class EvalResult(DictionaryEqualsMixin):
             # of Prompts Tested={len(self.eval_obj.test_sequence)}
             Total Time (seconds)={self.total_time_seconds}
             # of Response Characters={self.response_characters}
+            # of Code Blocks Generated={self.num_code_blocks}
             Characters per Second={self.characters_per_second}
             # of Checks={self.num_checks}
             # of Successful Checks={self.num_successful_checks}
@@ -380,6 +386,7 @@ class EvalResult(DictionaryEqualsMixin):
             'candidate_obj': self.candidate_obj.to_dict(),
             'responses': self.responses,
             'total_time_seconds': self.total_time_seconds,
+            'num_code_blocks': self.num_code_blocks,
             'results': [[r.to_dict() for r in result] for result in self.results],
         }
 
@@ -415,6 +422,7 @@ def eval_result_summarizer(result: EvalResult) -> dict:
         summary['num_code_blocks_successful'] = sum(r.metadata['num_code_blocks_successful'] for r in code_run_checks)  # noqa
         summary['perc_code_blocks_successful'] = summary['num_code_blocks_successful'] / summary['num_code_blocks']  # noqa
     return summary
+
 
 
 # class EvalHarness:

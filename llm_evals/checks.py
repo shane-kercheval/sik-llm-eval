@@ -366,6 +366,9 @@ class PythonCodeBlocksRun(Check):
     functions could be due to the response from the llm (e.g. not naming the expected
     value/function correctly)
 
+    TODO: document that the success_threshold includes code blocks successes and function
+    checks
+
     NOTE: this check will run all code blocks. If you have multiple PythonCodeBlocksRun (e.g. one
     for each PromptTest, then the code blocks will be run multiple times. It's recommended to
     only have one PythonCodeBlocksRun which is ran on the last PromptTest.)
@@ -380,9 +383,9 @@ class PythonCodeBlocksRun(Check):
     # is responsible for running tests against the (string) response returned by the LLM.
     """  # noqa
 
-    percent_success_threshold: float = Field(
+    success_threshold: float = Field(
         default=1.0,
-        description="The minimum percent of successfully executed code blocks (and function checks (if `functions` is used)) required for the check to be considered successful. Defaulted to 1.0 (i.e. 100% of code blocks must run successfully).",  # noqa
+        description="The minimum **percent** of successfully executed code blocks and function checks (if `functions` is used) required for the check to be considered successful. Defaulted to 1.0 (i.e. 100% of code blocks must run successfully).",  # noqa
     )
     code_setup: str | None = Field(
         default=None,
@@ -470,7 +473,7 @@ class PythonCodeBlocksRun(Check):
             score = 0.0
         return ScoreResult(
             value=score,
-            success_threshold=self.percent_success_threshold,
+            success_threshold=self.success_threshold,
             metadata={
                 'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
                 'num_code_blocks': num_code_blocks,

@@ -4,7 +4,7 @@ from textwrap import dedent
 import pytest
 from llm_evals.candidates import Candidate, CandidateType
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
-from llm_evals.eval import Eval, EvalResult, PromptTest, eval_result_summarizer
+from llm_evals.eval import Eval, EvalResult, PromptTest
 from llm_evals.utilities.internal_utilities import extract_code_blocks
 
 
@@ -182,6 +182,15 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     assert eval_result.ideal_responses == [test.ideal_response for test in eval_obj.test_sequence]
     assert eval_result.eval_obj.to_dict() == eval_dict
 
+    assert eval_result.num_checks == 4
+    assert eval_result.num_successful_checks == 2
+    assert eval_result.perc_successful_checks == 2 / 4
+    assert len(eval_result.results) == 2
+    assert len(eval_result.results[0]) == 3
+    assert len(eval_result.results[1]) == 1
+    assert eval_result.response_characters == sum(len(r) for r in responses)
+    assert eval_result.num_code_blocks == 1
+
     eval_result_dict = eval_result.to_dict()
     # we can't check that entire eval_result_dict will recreate the exact eval_result object
     # because the candidate will be slightly different (e.g. if it was a function, it will have
@@ -206,8 +215,6 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     flatted_checks = [r for test in eval_obj.test_sequence for r in test.checks]
     for c, r in zip(flatted_checks, eval_result.all_checks_results, strict=True):
         assert c.check_type == r.metadata['check_type']
-
-    assert eval_result_summarizer(eval_result)
 
 def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run):  # noqa
     """
@@ -259,6 +266,9 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     expected_code_blocks = extract_code_blocks(response_1)
     expected_code_blocks.extend(extract_code_blocks(response_2))
 
+    expected_num_code_blocks = len(expected_code_blocks)
+    expected_successful_code_blocks = len(expected_code_blocks)
+
     def mock_llm():  # noqa
         yield from responses
     mock_llm_instance = mock_llm()
@@ -271,17 +281,23 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert eval_result.responses == responses
     assert eval_result.prompts == [test.prompt for test in eval_obj.test_sequence]
     assert eval_result.ideal_responses == [test.ideal_response for test in eval_obj.test_sequence]
+    assert eval_result.response_characters == sum(len(r) for r in responses)
+    assert eval_result.num_checks == 7
+    assert eval_result.num_successful_checks == 4
+    assert eval_result.perc_successful_checks == 4 / 7
+    assert eval_result.num_code_blocks == expected_num_code_blocks
 
     assert len(eval_result.results) == 2
-    assert len(eval_result.results[0]) == 3
+    assert len(eval_result.results[0]) == 4
     assert isinstance(eval_result.results[0][0], PassFailResult)
     assert isinstance(eval_result.results[0][0], PassFailResult)
+    assert isinstance(eval_result.results[0][1], PassFailResult)
     assert isinstance(eval_result.results[0][1], PassFailResult)
     assert len(eval_result.results[1]) == 3
     assert isinstance(eval_result.results[1][0], PassFailResult)
     assert isinstance(eval_result.results[1][1], PassFailResult)
     assert isinstance(eval_result.results[1][2], ScoreResult)
-    assert len(eval_result.all_checks_results) == 6
+    assert len(eval_result.all_checks_results) == 7
 
     # Check 0.0
     assert eval_result.results[0][0].success
@@ -290,8 +306,11 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert not eval_result.results[0][1].success
     assert eval_result.results[0][1].metadata['check_type'] == CheckType.MATCH.name
     # Check 0.2
-    assert eval_result.results[0][2].success
-    assert eval_result.results[0][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
+    assert not eval_result.results[0][2].success
+    assert eval_result.results[0][2].metadata['check_type'] == CheckType.CONTAINS.name
+    # Check 0.3
+    assert eval_result.results[0][3].success
+    assert eval_result.results[0][3].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
     # Check 1.0
     assert eval_result.results[1][0].success
     assert eval_result.results[1][0].metadata['check_type'] == CheckType.CONTAINS.name
@@ -301,10 +320,8 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     # Check 1.2
     assert not eval_result.results[1][2].success
     assert eval_result.results[1][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name  # noqa
-    # check PythonCodeBlocksRun
 
-    expected_num_code_blocks = 3
-    expected_successful_code_blocks = 3
+    # function checks
     expected_function_checks = 6
     expected_successful_function_checks = 4
     expected_total_checks = expected_num_code_blocks + expected_function_checks
