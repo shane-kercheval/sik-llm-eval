@@ -214,9 +214,10 @@ class Eval(DictionaryEqualsMixin):
         responses = [candidate(p.prompt) for p in self.test_sequence]
         end = time.time()
         results = []
+        code_blocks = []
         for test, response in zip(self.test_sequence, responses):
             check_results = []
-            code_blocks = extract_code_blocks(response)
+            code_blocks.extend(extract_code_blocks(response))
             parameters = {
                 'prompt': test.prompt,
                 'ideal_response': test.ideal_response,

@@ -862,21 +862,6 @@ def test__PythonCodeBlocksRun__with_functions():  # noqa
     assert result.metadata['num_function_checks'] == expected_function_checks
     assert result.metadata['num_function_checks_successful'] == expected_successful_function_checks
 
-def test__PythonCodeBlocksRun__with_functions__failing_function_raises_error():  # noqa
-    """
-    If one of the functions (that is checking the results) raises an error, the entire check should
-    fail.
-    """
-    def failing_function(code_blocks):  # noqa
-        raise ValueError()
-    check = PythonCodeBlocksRun(
-        functions=[
-            failing_function,  # should raise an Error
-        ],
-    )
-    with pytest.raises(AssertionError):
-        check(code_blocks=['1 == 1'])
-
 def test__PythonCodeBlocksRun__failing_code_setup_raises_error():  # noqa
     """
     If one of the functions (that is checking the results) raises an error, the entire check should
@@ -887,3 +872,31 @@ def test__PythonCodeBlocksRun__failing_code_setup_raises_error():  # noqa
     )
     with pytest.raises(AssertionError):
         check(code_blocks=['1 == 1'])
+
+def test__PythonCodeBlocksRun__with_functions__failing_function_does_not_raise_error():  # noqa
+    """
+    If one of the functions (that is checking the results) raises an error, the entire check should
+    fail.
+    """
+    def failing_function(code_blocks):  # noqa
+        raise ValueError()
+    check = PythonCodeBlocksRun(
+        functions=[
+            failing_function,
+        ],
+    )
+    result = check(code_blocks=['1 == 1'])
+    assert len(result.metadata['function_check_errors']) == 1
+    assert isinstance(result.metadata['function_check_errors'][0], ValueError)
+    assert result.metadata['num_function_checks'] == 1
+    assert result.metadata['function_check_results'] == [False]
+    assert result.metadata['num_function_checks_successful'] == 0
+
+    assert result.value == 0.5
+    assert not result.success
+    assert result.success_threshold == 1
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['num_code_blocks'] == 1
+    assert result.metadata['num_code_blocks_successful'] == 1
+    assert result.metadata['code_blocks'] == ['1 == 1']
+    assert result.metadata['code_block_errors'][0] is None

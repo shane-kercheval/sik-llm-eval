@@ -361,6 +361,11 @@ class PythonCodeBlocksRun(Check):
         - how many code blocks ran successfully
         - how custom functions ran successfully
 
+    TODO: document the fact that failures during code_setup will cause the check to fail, but
+    failtures from functions will not cause the check to fail. This is because failures from
+    functions could be due to the response from the llm (e.g. not naming the expected
+    value/function correctly)
+
     NOTE: this check will run all code blocks. If you have multiple PythonCodeBlocksRun (e.g. one
     for each PromptTest, then the code blocks will be run multiple times. It's recommended to
     only have one PythonCodeBlocksRun which is ran on the last PromptTest.)
@@ -393,6 +398,7 @@ class PythonCodeBlocksRun(Check):
         code_blocks = code_blocks or []
         code_block_errors = []
         function_results = []
+        function_errors = []
 
         num_code_blocks = len(code_blocks)
         num_function_checks = 0
@@ -403,17 +409,21 @@ class PythonCodeBlocksRun(Check):
             env_namespace = {}
 
             if self.code_setup:
+                # execute code setup; if there are errors, raise an exception and fail the check
                 setup_errors = execute_code_blocks([self.code_setup], env_namespace=env_namespace)
                 assert all(e is None for e in setup_errors), \
                     f"Errors executing code setup in PythonCodeBlocksRun: \n`{setup_errors}`"
 
+            # run the primary code blocks
             code_block_errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
+
+            # run the custom/user functions with contain additional tests (they functions should
+            # return boolean success/fail)
             functions = self.functions or []
             for func in functions:
                 num_function_checks += 1
                 if isinstance(func, Callable):
                     func_name = func.__name__
-                    # convert to string
                     func = dedent(getsource(func))  # noqa: PLW2901
                 else:
                     assert isinstance(func, str), \
@@ -421,17 +431,25 @@ class PythonCodeBlocksRun(Check):
                     match = re.search(r'def (\w+)\(', func)
                     assert match, f"Could not find function name in {func}"
                     func_name = match.group(1)
+                # add code blocks to the environment; the functions will take the code blocks
+                # as input
                 env_namespace['__code_blocks__'] = code_blocks
+                # Run the function
+                # if there are errors, we will capture and return the errors
+                # Errors could be caused by the LLM response (e.g. if the LLM response doesn't
+                # contain the expected function name) so we don't want to fail out of the entire
+                # check
                 # add function to namespace
-                func_errors = execute_code_blocks([func], env_namespace=env_namespace)
-                # ensure no errors
-                assert all(e is None for e in func_errors), \
-                    f"Errors executing function definition in PythonCodeBlocksRun `{func_name}`: `{func_errors}`"  # noqa
+                _ = execute_code_blocks([func], env_namespace=env_namespace)
                 function_call = f"__result__ = {func_name}(__code_blocks__)"
                 func_errors = execute_code_blocks([function_call], env_namespace=env_namespace)
-                assert all(e is None for e in func_errors), \
-                    f"Errors executing function in PythonCodeBlocksRun `{func_name}`: `{func_errors}`"  # noqa
-                func_result = bool(env_namespace['__result__'])
+                function_errors.extend(func_errors)
+                # get the result of the function from the environment
+                if '__result__' not in env_namespace:
+                    # if the code failed to execute, we will assume the check failed
+                    func_result = False
+                else:
+                    func_result = bool(env_namespace['__result__'])
                 if func_result:
                     num_function_checks_successful += 1
                 function_results.append(func_result)
@@ -455,6 +473,7 @@ class PythonCodeBlocksRun(Check):
                 'function_check_results': function_results,
                 'num_function_checks': num_function_checks,
                 'num_function_checks_successful': num_function_checks_successful,
+                'function_check_errors': function_errors,
             },
         )
 
