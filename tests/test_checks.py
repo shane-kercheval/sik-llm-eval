@@ -886,11 +886,11 @@ def test__PythonCodeBlocksRun__with_functions__failing_function_does_not_raise_e
         ],
     )
     result = check(code_blocks=['1 == 1'])
+    assert result.metadata['num_function_checks'] == 1
+    assert result.metadata['num_function_checks_successful'] == 0
     assert len(result.metadata['function_check_errors']) == 1
     assert isinstance(result.metadata['function_check_errors'][0], ValueError)
-    assert result.metadata['num_function_checks'] == 1
     assert result.metadata['function_check_results'] == [False]
-    assert result.metadata['num_function_checks_successful'] == 0
 
     assert result.value == 0.5
     assert not result.success
