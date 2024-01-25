@@ -299,12 +299,14 @@ def fake_eval_8f9fbf37() -> dict:
     with open('tests/fake_data/fake_eval_8F9FBF37.yaml') as f:
         return yaml.safe_load(f)
 
+
 @pytest.fixture()
 def fake_eval_sum_two_numbers() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_sum_two_numbers.yaml') as f:
         return yaml.safe_load(f)
-    
+
+
 @pytest.fixture()
 def fake_eval_sum_two_numbers_code_blocks_run() -> dict:
     """Returns a fake eval."""
@@ -317,6 +319,7 @@ def openai_candidate_template() -> dict:
     """Returns the yaml template for an OpenAI."""
     with open('evals/templates/candidate_openai.yaml') as f:
         return yaml.safe_load(f)
+
 
 @pytest.fixture()
 def hugging_face_candidate_template() -> dict:

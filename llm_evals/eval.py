@@ -8,7 +8,6 @@ from llm_evals.checks import (
     Check,
     CheckType,
     CheckResult,
-    PassFailResult,
 )
 from llm_evals.utilities.internal_utilities import (
     DictionaryEqualsMixin,
@@ -416,9 +415,6 @@ def eval_result_summarizer(result: EvalResult) -> dict:
         summary['num_code_blocks_successful'] = sum(r.metadata['num_code_blocks_successful'] for r in code_run_checks)  # noqa
         summary['perc_code_blocks_successful'] = summary['num_code_blocks_successful'] / summary['num_code_blocks']  # noqa
     return summary
-
-
-# Eval.model_rebuild()
 
 
 # class EvalHarness:
