@@ -44,8 +44,6 @@ test_sequence:
       This function uses a regular expression to identify email addresses in the input text. The `\b[A-Za-z0-9._%+-]+` part matches the local part of the email address, and the `@` ensures that the match occurs right before the domain part. The `re.sub` function replaces the local part with asterisks. You can adjust the number of asterisks or the replacement character as needed.
     checks:
       - check_type: CONTAINS
-        value: def mask_emails(
-      - check_type: CONTAINS
         value: re.sub(
       - check_type: REGEX
         pattern: "def mask_email\\(\\s*[a-zA-Z_][a-zA-Z0-9_]*\\s*(\\s*:\\s*[a-zA-Z_][a-zA-Z0-9_]*\\s*)?\\)\\s*:"

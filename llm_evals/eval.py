@@ -370,13 +370,13 @@ class EvalResult(DictionaryEqualsMixin):
         return dedent(f"""
         EvalResult:
             # of Prompts Tested={len(self.eval_obj.test_sequence)}
-            Total Time (seconds)={self.total_time_seconds}
-            # of Response Characters={self.response_characters}
+            Total Response Time (seconds)={self.total_time_seconds: 0.1f}
+            # of Response Characters={self.response_characters:,}
             # of Code Blocks Generated={self.num_code_blocks}
-            Characters per Second={self.characters_per_second}
+            Characters per Second={self.characters_per_second: ,.1f}
             # of Checks={self.num_checks}
             # of Successful Checks={self.num_successful_checks}
-            % of Successful Checks={self.perc_successful_checks}
+            % of Successful Checks={self.perc_successful_checks: .1%}
         """).strip()
 
     def to_dict(self) -> dict:
