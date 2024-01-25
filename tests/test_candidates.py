@@ -1,5 +1,6 @@
 """Tests for the candidates module."""
 import os
+from copy import deepcopy
 from openai import BadRequestError
 import pytest
 from llm_evals.candidates import (
@@ -88,7 +89,7 @@ def test__candidate__to_from_dict():  # noqa
         'model_parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
         'system_info': {'system_1': 'system_a', 'system_2': 'system_b'},
     }
-    candidate_dict_no_type = candidate_dict.copy()
+    candidate_dict_no_type = deepcopy(candidate_dict)
     candidate_dict_no_type.pop('candidate_type')
 
     candidate = MockCandidate(**candidate_dict_no_type)
@@ -221,7 +222,7 @@ def test__OpenAI__config():  # noqa
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAI__template__model_parameters(openai_candidate_template):  # noqa
     """Test that the template for an OpenAI candidate works."""
-    template = openai_candidate_template.copy()
+    template = deepcopy(openai_candidate_template)
     expected_model_param_names = ['temperature', 'max_tokens']
     expected_model_parameters = {
         k:v for k, v in template['model_parameters'].items()
@@ -245,7 +246,7 @@ def test__OpenAI__template__model_parameters(openai_candidate_template):  # noqa
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAI__invalid_model_parameters(openai_candidate_template):  # noqa
     """Test invalid parameters so that we know we're actually sending them."""
-    template = openai_candidate_template.copy()
+    template = deepcopy(openai_candidate_template)
     template['model_parameters']['temperature'] = -10  # invalid value
     candidate = Candidate.from_dict(template)
     with pytest.raises(BadRequestError):
@@ -255,7 +256,7 @@ def test__OpenAI__invalid_model_parameters(openai_candidate_template):  # noqa
 @pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
 def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noqa
     """Test that the various config options for a Hugging Face Endpoint candidate work."""
-    template = hugging_face_candidate_template.copy()
+    template = deepcopy(hugging_face_candidate_template)
     expected_model_param_names = ['temperature', 'max_tokens', 'seed']
     expected_model_parameters = {
         k:v for k, v in template['model_parameters'].items()
@@ -266,7 +267,7 @@ def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noq
     assert Candidate.from_dict(candidate.to_dict()) == candidate
 
     # check .model_parameters on candidate
-    expected_candidate_parameters = template['model_parameters'].copy()
+    expected_candidate_parameters = deepcopy(template['model_parameters'])
     expected_candidate_parameters.pop('system_format')
     expected_candidate_parameters.pop('prompt_format')
     expected_candidate_parameters.pop('response_format')
@@ -326,7 +327,7 @@ def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noq
 @pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
 def test__HuggingFaceEndpointCandidate__invalid_model_parameters(hugging_face_candidate_template):  # noqa
     """Test invalid parameters so that we know we're actually sending them."""
-    template = hugging_face_candidate_template.copy()
+    template = deepcopy(hugging_face_candidate_template)
     template['model_parameters']['temperature'] = -10  # invalid value
     candidate = Candidate.from_dict(template)
     with pytest.raises(HuggingFaceRequestError) as exception:

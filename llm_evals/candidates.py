@@ -1,13 +1,13 @@
 """Defines a registration system for Candidate models."""
+import yaml
+from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
 from typing import Callable, ForwardRef, Type
-import yaml
 from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
 from llm_evals.llms.message_formatters import create_message_formatter
 from llm_evals.llms.openai import OpenAIChat
-
 from llm_evals.utilities.internal_utilities import EnumMixin, Registry
 
 
@@ -81,7 +81,7 @@ class Candidate(ABC):
         Create a Candidate object from a dictionary. This method requires that the Candidate
         subclass has been registered with the `register` decorator.
         """
-        data_copy = data.copy()
+        data_copy = deepcopy(data)
         candidate_type = data_copy.pop('candidate_type', '')
         if candidate_type in cls.registry:
             return cls.registry.create_instance(type_name=candidate_type, **data_copy)
@@ -94,9 +94,9 @@ class Candidate(ABC):
         if self.uuid:
             value['uuid'] = self.uuid
         if self.metadata:
-            value['metadata'] = self.metadata.copy()
+            value['metadata'] = deepcopy(self.metadata)
         if self.model_parameters:
-            value['model_parameters'] = self.model_parameters.copy()
+            value['model_parameters'] = deepcopy(self.model_parameters)
         if self.system_info:
             value['system_info'] = self.system_info
         if self.candidate_type:
@@ -148,7 +148,7 @@ class Candidate(ABC):
 
         Reques
         """
-        return self.from_dict(self.to_dict().copy())
+        return self.from_dict(deepcopy(self.to_dict()))
 
 
 @Candidate.register(CandidateType.CALLABLE_NO_SERIALIZE)
@@ -266,7 +266,7 @@ class HuggingFaceEndpointCandidate(Candidate):
             model_parameters: A dictionary of parameters passed to Hugging Face.
             system_info: A dictionary of system information about the Candidate.
         """
-        model_parameters = model_parameters.copy()
+        model_parameters = deepcopy(model_parameters)
         self.system_format = model_parameters.pop('system_format')
         self.prompt_format = model_parameters.pop('prompt_format')
         self.response_format = model_parameters.pop('response_format')

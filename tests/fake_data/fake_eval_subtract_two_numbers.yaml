@@ -1,0 +1,23 @@
+uuid: 4BC12172-7FB7-4CDB-A2C2-B9BFD6044AB1
+version: 1
+metadata:
+  name: Test Eval
+  description: This is a test eval. Two out of three checks should pass.
+  difficulty: 1  # 1-5
+  tags:
+    - python
+    - test
+  source: Test
+test_sequence:
+  - prompt: Write a function that called `subtract_two_numbers` that takes two numbers and returns the second subtracted from the first.
+    checks:
+      - check_type: CONTAINS
+        value: subtract_two_numbers
+      - check_type: MATCH
+        value: does not match
+      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+  - prompt: Write some assertion statements to check the function.
+    checks:
+      - check_type: CONTAINS
+        value: assert subtract_two_numbers
+      - check_type: PYTHON_CODE_BLOCKS_PRESENT

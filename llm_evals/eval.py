@@ -1,4 +1,5 @@
 """Classes and functions to eval LLMs."""
+from copy import deepcopy
 from textwrap import dedent, indent
 import time
 from typing import Callable, ForwardRef
@@ -59,7 +60,7 @@ class PromptTest(DictionaryEqualsMixin):
         for check in checks:
             if isinstance(check, dict):
                 assert 'check_type' in check, "Check dictionary must contain a 'check_type' key"
-                checks_created.append(Check.from_dict(check.copy()))
+                checks_created.append(Check.from_dict(deepcopy(check)))
             elif isinstance(check, Check):
                 checks_created.append(check)
             else:
@@ -201,13 +202,17 @@ class Eval(DictionaryEqualsMixin):
                 not be able to be called when deserialized, since the underlying function will not
                 be serialized.
         """
-        if isinstance(candidate, Callable):
+        if isinstance(candidate, dict):
+            candidate = Candidate.from_dict(candidate)
+        elif not isinstance(candidate, Candidate) and isinstance(candidate, Callable):
+            # all Candidates must be callable so need to ensure it's not already a Candidate
             candidate = CallableCandidate(
                 model=candidate,
                 metadata={'function': get_callable_info(candidate)},
             )
-        if isinstance(candidate, dict):
-            candidate = Candidate.from_dict(candidate)
+        else:
+            assert isinstance(candidate, Candidate), \
+                "candidate must be either a Candidate, callable, or a dictionary"
 
         start = time.time()
         responses = [candidate(p.prompt) for p in self.test_sequence]
@@ -297,7 +302,7 @@ class EvalResult(DictionaryEqualsMixin):
         elif isinstance(candidate_obj, dict):
             if 'candidate_type' in candidate_obj:
                 # loads the Candidate subclass from the registry
-                self.candidate_obj = Candidate.from_dict(candidate_obj.copy())
+                self.candidate_obj = Candidate.from_dict(deepcopy(candidate_obj))
             else:
                 self.candidate_obj = Candidate(**candidate_obj)
         else:
@@ -317,7 +322,7 @@ class EvalResult(DictionaryEqualsMixin):
                 if isinstance(r, dict):
                     assert 'result_type' in r, \
                         "CheckResult dictionary must contain a 'result_type' key"
-                    test_results_created.append(CheckResult.from_dict(r.copy()))
+                    test_results_created.append(CheckResult.from_dict(deepcopy(r)))
                 elif isinstance(r, CheckResult):
                     test_results_created.append(r)
                 else:
@@ -424,34 +429,190 @@ def eval_result_summarizer(result: EvalResult) -> dict:
 
     return summary
 
-# class EvalHarness:
-#     """
-#     An EvalHarness provides a interface for evaluating a list of Evals against a list of
-#     Candidates.
+
+class EvalHarness:
+    """
+    An EvalHarness provides a interface for evaluating a list of Evals against a list of
+    Candidates.
+
+    The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
+    collection of EvalResults.
+
+    TODO: for OpenAI, it's probably fine to launch many tasks async and not effect individual
+    performance. For hugging face, it might be better to launch same eval across different
+    endpoints. For local, it might be better to run one at a time to avoid performance issues.
+
+    TODO: A single Candidate object should ONLY be used on an individual Eval object and not
+    reused. For Evals that contain multiple prompts (i.e. PromptTest objects), the assumption is
+    that the prompts sequentially build on eachother and the Candidate's should maintain
+    state/history).
+
+    TODO: consider how to async and/or parallelize(?)
 
 
-#The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
-#     collection of EvalResults.
+    TODO: how do check for duplicate candidates and evals? full dict? Even if full dict, someone
+    could be passing in minimum values required and could be different. Maybe don't check.
+    """
 
-#     TODO: for OpenAI, it's probably fine to launch many tasks async and not effect individual
-#     performance. For hugging face, it might be better to launch same eval across different
-#     endpoints. For local, it might be better to run one at a time to avoid performance issues.
+    def __init__(
+            self,
+            evals: list[Eval] | list[dict] | None = None,
+            candidates: list[Candidate | Callable | dict] | None = None) -> None:
+        """
+        Initializes the EvalHarness. The user can either pass in Eval and Candidate objects in the
+        constructor or call
+            - `add_eval_from_yaml(...)`, which takes a path to a YAML file.
+            - `add_evals_from_yamls(...)`, which takes a path to a directory of YAML files.
+            - `add_candidate_from_yaml(...)`, which takes a path to a YAML file.
+            - `add_candidates_from_yamls(...)`, which takes a path to a directory of YAML files.
 
-#     TODO: A single Candidate object should ONLY be used on an individual Eval object and not
-#     reused. For Evals that contain multiple prompts (i.e. PromptTest objects), the assumption is
-#     that the prompts sequentially build on eachother and the Candidate's should maintain
-#     state/history).
-#     """
+        The methods above can be called multiple times to add additional Eval and Candidate
+        objects.
+        """
+        evals = evals or []
+        eval_objects = []
+        candidates = candidates or []
+        candidate_objects = []
 
-#     def __init__(self, evals: list[Eval]):
-#         """Initializes the EvalHarness."""
-#         self.evals = evals
+        for eval_obj in evals:
+            if isinstance(eval_obj, dict):
+                eval_objects.append(Eval(**eval_obj))
+            elif isinstance(eval_obj, Eval):
+                eval_objects.append(eval_obj)
+            else:
+                raise TypeError("evals must be either an Eval instance or a dictionary")
 
-#     def __call__(self, candidates: list[Candidate | Callable]) -> list[EvalResult]:
-#         """Evaluates the Eval against a list of Candidates."""
-#         results = []
-#         for candidate in candidates:
-#             results.append(self.evals(candidate))
-#         return results
+        for candidate in candidates:
+            if isinstance(candidate, dict):
+                candidate_objects.append(Candidate.from_dict(deepcopy(candidate)))
+            elif isinstance(candidate, Candidate):
+                candidate_objects.append(candidate)
+            else:
+                raise TypeError("candidates must be either a Candidate instance or a dictionary")
 
+        self.evals = eval_objects
+        self.candidates = candidate_objects
 
+    def add_eval(self, eval_obj: Eval | dict) -> None:
+        """
+        Adds an Eval object. This method can be called multiple times to add additional Eval
+        objects.
+
+        Args:
+            eval_obj:
+                The Eval object to add. If the Eval is a dictionary, the Check subclasses need to
+                be registered via `Check.register(...)`.
+                The checks needs a `check_type` key with the registration value.
+        """
+        if isinstance(eval_obj, dict):
+            eval_obj = Eval(**eval_obj)
+        self.evals.append(eval_obj)
+
+    def add_eval_from_yaml(self, path: str) -> None:
+        """
+        Adds an Eval from a YAML file. This method can be called multiple times to add additional
+        Eval objects.
+
+        The underlying Check objects must be registered with the CheckRegistry before calling this
+        method and the checks need a `check_type` key with the registration value.
+
+        Args:
+            path:
+                Path to the YAML file.
+        """
+        self.add_eval(Eval.from_yaml(path))
+
+    def add_evals_from_yamls(self, path: str) -> None:
+        """
+        Adds multiple Evals from a directory of YAML files. This method can be called multiple
+        times to add additional Eval objects.
+
+        The underlying Check objects must be registered with the CheckRegistry before calling this
+        method and the checks need a `check_type` key with the registration value.
+
+        Args:
+            path:
+                Path to the directory of YAML files.
+        """
+        import glob
+        for file_path in glob.glob(path):
+            self.add_eval_from_yaml(file_path)
+
+    def add_candidate(self, candidate: Candidate | Callable | dict) -> None:
+        """
+        Adds a Candidate object. This method can be called multiple times to add additional
+        Candidate objects.
+
+        Args:
+            candidate:
+                The Candidate object to add. If the Candidate is a dictionary, the Candidate
+                subclasses need to be registered via `Candidate.register(...)`.
+                The dictionary needs a `candidate_type` key with the registration value.
+        """
+        if isinstance(candidate, dict):
+            candidate = Candidate.from_dict(candidate)
+        self.candidates.append(candidate)
+
+    def add_candidate_from_yaml(self, path: str) -> None:
+        """
+        Adds a Candidate from a YAML file. This method can be called multiple times to add
+        additional Candidate objects.
+
+        The underlying Candidate objects must be registered with the CandidateRegistry before
+        calling this method and the candidate needs a `candidate_type` key with the registration
+        value.
+
+        Args:
+            path:
+                Path to the YAML file.
+        """
+        self.add_candidate(Candidate.from_yaml(path))
+
+    def add_candidates_from_yamls(self, path: str) -> None:
+        """
+        Adds multiple Candidates from a directory of YAML files. This method can be called
+        multiple times to add additional Candidate objects.
+
+        The underlying Candidate objects must be registered with the CandidateRegistry before
+        calling this method and the candidate needs a `candidate_type` key with the registration
+        value.
+
+        Args:
+            path:
+                Path to the directory of YAML files.
+        """
+        import glob
+        for file_path in glob.glob(path):
+            self.add_candidate_from_yaml(file_path)
+
+    def __call__(self) -> list[list[EvalResult]]:
+        """
+        Evaluates the Evals against the Candidates.
+
+        Returns
+            A list of lists of EvalResults. Each index of the outer list corresponds to a
+            particular candidate (in the order they were added to the EvalHarness). Each
+            index/candidate contains a list of EvalResults (in the order they were added to the
+            EvalHarness).
+
+            So if [{candidate_1}, {candidate_2}] were added to the EvalHarness and [{eval_1},
+            {eval_2}, {eval_3}] were added to the EvalHarness, the returned EvalResult object
+            would be in the following order:
+
+            [
+                [
+                    {eval_1 result for candidate_1},
+                    {eval_2 result for candidate_1},
+                    {eval_3 result for candidate_1}
+                ],
+                [
+                    {eval_1 result for candidate_2},
+                    {eval_2 result for candidate_2},
+                    {eval_3 result for candidate_2}
+                ],
+            ]
+        """
+        return [
+            [eval_obj(candidate) for eval_obj in self.evals]
+            for candidate in self.candidates
+        ]

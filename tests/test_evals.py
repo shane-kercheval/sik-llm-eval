@@ -4,7 +4,7 @@ from textwrap import dedent
 import pytest
 from llm_evals.candidates import Candidate, CandidateType
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
-from llm_evals.eval import Eval, EvalResult, PromptTest, eval_result_summarizer
+from llm_evals.eval import Eval, EvalHarness, EvalResult, PromptTest, eval_result_summarizer
 from llm_evals.utilities.internal_utilities import extract_code_blocks
 
 
@@ -278,7 +278,8 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
 
     assert eval_result.eval_obj.to_dict() == config
     assert Eval(**eval_obj.to_dict()) == eval_obj
-    assert EvalResult(**eval_result.to_dict()) == eval_result
+    # i need to compare strings because underlying error objects (i.e. instances) will not be same
+    assert str(EvalResult(**eval_result.to_dict()).to_dict()) == str(eval_result.to_dict())
 
     assert eval_result.responses == responses
     assert eval_result.prompts == [test.prompt for test in eval_obj.test_sequence]
@@ -350,7 +351,6 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert isinstance(eval_result.results[1][2].metadata['function_check_errors'][5], NameError)
     assert eval_result_summarizer(eval_result)
 
-
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_template):  # noqa
     eval_config = fake_eval_sum_two_numbers.copy()
@@ -379,3 +379,100 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert EvalResult(**result.to_dict()) == result
     assert EvalResult(**result.to_dict()).to_dict() == result.to_dict()
     assert eval_config == fake_eval_sum_two_numbers  # make sure eval_config wasn't modified
+
+def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+    subtract_config = fake_eval_subtract_two_numbers.copy()
+    sum_config = fake_eval_sum_two_numbers.copy()
+
+    @Candidate.register('MockCandidate')
+    class MockCandidate(Candidate):
+        def __init__(self, responses: list[str], uuid: str, metadata: dict | None = None):
+            super().__init__(uuid=uuid, metadata=metadata)
+            self.responses = responses.copy()
+
+        def __call__(self, _: str) -> str:
+            return self.responses.pop(0)
+
+    candidate_1_dict = {
+        'uuid': 'candidate_1',
+        'candidate_type': 'MockCandidate',
+        # the assumed order of responses is two responses for the subtract eval, then response
+        # for the sum eval
+        'responses': [
+            'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```',
+            'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```',  # noqa
+            'This is the response.\n\n```\ndef sum_two_numbers(a, b):\n    return a + b\n```',
+        ],
+    }
+    candidate_2_dict = candidate_1_dict.copy()
+    candidate_2_dict['uuid'] = 'candidate_2'
+
+    eval_harness_via_dicts = EvalHarness(
+        evals=[subtract_config, sum_config],
+        candidates=[candidate_1_dict, candidate_2_dict],
+    )
+    eval_harness_via_objects = EvalHarness(
+        evals=[Eval(**subtract_config), Eval(**sum_config)],
+        candidates=[Candidate.from_dict(candidate_1_dict), Candidate.from_dict(candidate_2_dict)],
+    )
+    assert eval_harness_via_dicts.evals == eval_harness_via_objects.evals
+    assert eval_harness_via_dicts.candidates == eval_harness_via_objects.candidates
+
+    eval_harness = EvalHarness()
+    assert eval_harness.evals != eval_harness_via_dicts.evals
+    assert eval_harness.candidates != eval_harness_via_dicts.candidates
+    eval_harness.add_eval(Eval(**subtract_config))
+    eval_harness.add_eval(Eval(**sum_config))
+    eval_harness.add_candidate(Candidate.from_dict(candidate_1_dict))
+    eval_harness.add_candidate(Candidate.from_dict(candidate_2_dict))
+    assert eval_harness.evals == eval_harness_via_dicts.evals
+    assert eval_harness.candidates == eval_harness_via_dicts.candidates
+
+    results = eval_harness()
+    assert len(results) == 2
+    assert len(results[0]) == 2
+    assert len(results[1]) == 2
+    # The first list should contain the results for candidate 1 (subtract eval, sum eval)
+    assert results[0][0].eval_obj == Eval(**subtract_config)
+    assert results[0][0].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][1].eval_obj == Eval(**sum_config)
+    assert results[0][1].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    # The second list should contain the results for candidate 2 (subtract eval, sum eval)
+    assert results[1][0].eval_obj == Eval(**subtract_config)
+    assert results[1][0].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][1].eval_obj == Eval(**sum_config)
+    assert results[1][1].candidate_obj == Candidate.from_dict(candidate_2_dict)
+
+    # candidate 1 - subtract eval
+    cand_1_results = results[0][0]
+    assert cand_1_results.responses == candidate_1_dict['responses'][:2]
+    assert cand_1_results.num_code_blocks == 2
+    assert cand_1_results.num_checks == 5
+    assert cand_1_results.num_successful_checks == 4
+    assert cand_1_results.perc_successful_checks == 4 / 5
+
+    # candidate 1 - sum eval
+    cand_1_results = results[0][1]
+    assert cand_1_results.responses == candidate_1_dict['responses'][2:]
+    assert cand_1_results.num_code_blocks == 1
+    assert cand_1_results.num_checks == 2
+    assert cand_1_results.num_successful_checks == 2
+    assert cand_1_results.perc_successful_checks == 1
+
+    # candidate 2 - subtract eval
+    cand_2_results = results[1][0]
+    assert cand_2_results.responses == candidate_2_dict['responses'][:2]
+    assert cand_2_results.num_code_blocks == 2
+    assert cand_2_results.num_checks == 5
+    assert cand_2_results.num_successful_checks == 4
+    assert cand_2_results.perc_successful_checks == 4 / 5
+
+    # candidate 2 - sum eval
+    cand_2_results = results[1][1]
+    assert cand_2_results.responses == candidate_2_dict['responses'][2:]
+    assert cand_2_results.num_code_blocks == 1
+    assert cand_2_results.num_checks == 2
+    assert cand_2_results.num_successful_checks == 2
+    assert cand_2_results.perc_successful_checks == 1
+
+
