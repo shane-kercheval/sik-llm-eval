@@ -192,7 +192,7 @@ def test_Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  
     }
     # check that the check result dicts match
     flatted_check_results = [r for tests in eval_result_dict['results'] for r in tests]
-    assert flatted_check_results == [r.to_dict() for r in eval_result.all_checks_results()]
+    assert flatted_check_results == [r.to_dict() for r in eval_result.all_checks_results]
     assert eval_result.total_time_seconds > 0
     # check that the eval_result_dict will recreate the exact eval_result object
     recreated_eval = EvalResult(**eval_result_dict)
@@ -202,7 +202,7 @@ def test_Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  
     assert recreated_eval.candidate_obj == eval_result.candidate_obj
     assert recreated_eval.results == eval_result.results
     flatted_checks = [r for test in eval_obj.test_sequence for r in test.checks]
-    for c, r in zip(flatted_checks, eval_result.all_checks_results(), strict=True):
+    for c, r in zip(flatted_checks, eval_result.all_checks_results, strict=True):
         assert c.check_type == r.metadata['check_type']
 
     assert eval_result_summarizer(eval_result)
@@ -220,18 +220,17 @@ def test_Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_t
     assert len(result.prompts) == 1
     assert result.prompts[0] == eval_config['test_sequence'][0]['prompt']
     assert len(result.results) == 1
-    assert len(result.all_checks_results()) == 2
-    assert result.all_checks_results()[0].success
-    assert result.all_checks_results()[0].metadata['check_type'] == CheckType.CONTAINS.name
-    assert result.all_checks_results()[1].success
-    assert result.all_checks_results()[1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
-    assert result.all_checks_results()[1].metadata['num_code_blocks'] >= 1
-    expected_num_code_blocks = len(result.all_checks_results()[1].metadata['code_blocks'])
-    assert result.all_checks_results()[1].metadata['num_code_blocks'] == expected_num_code_blocks
+    assert len(result.all_checks_results) == 2
+    assert result.all_checks_results[0].success
+    assert result.all_checks_results[0].metadata['check_type'] == CheckType.CONTAINS.name
+    assert result.all_checks_results[1].success
+    assert result.all_checks_results[1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
+    assert result.all_checks_results[1].metadata['num_code_blocks'] >= 1
+    expected_num_code_blocks = len(result.all_checks_results[1].metadata['code_blocks'])
+    assert result.all_checks_results[1].metadata['num_code_blocks'] == expected_num_code_blocks
     assert result.num_checks == 2
-    assert result.num_pass_fail_checks == 2
-    assert result.num_passing_checks == 2
-    assert result.perc_passed_checks == 1
+    assert result.num_successful_checks == 2
+    assert result.perc_successful_checks == 1
     assert str(result)
     assert EvalResult(**result.to_dict()) == result
     assert EvalResult(**result.to_dict()).to_dict() == result.to_dict()

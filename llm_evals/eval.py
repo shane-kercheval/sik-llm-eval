@@ -347,36 +347,16 @@ class EvalResult(DictionaryEqualsMixin):
         return sum(len(r) for r in self.results)
 
     @property
-    def num_pass_fail_checks(self) -> int:
-        """Returns the number of pass/fail checks."""
-        pass_fail_results = [
-            result for prompt_test in self.results for result in prompt_test
-            if isinstance(result, PassFailResult)
-        ]
-        return len(pass_fail_results)
+    def num_successful_checks(self) -> int:
+        """Returns the number of successful checks."""
+        return sum(r.success for r in self.all_checks_results if r.success)
 
     @property
-    def num_passing_checks(self) -> int | None:
-        """Returns the number of passing checks. If there are no pass/fail checks, returns None."""
-        pass_fail_results = [
-            result for prompt_test in self.results for result in prompt_test
-            if isinstance(result, PassFailResult)
-        ]
-        if not pass_fail_results:
-            return None
-        return sum(r.success for r in pass_fail_results)
+    def perc_successful_checks(self) -> float | None:
+        """Returns the percentage of passing checks. If there are checks, returns None."""
+        return self.num_successful_checks / self.num_checks if self.num_checks else None
 
     @property
-    def perc_passed_checks(self) -> float | None:
-        """
-        Returns the percentage of passing checks.
-        If there are no pass/fail checks, returns None.
-        """
-        num_passing = self.num_passing_checks
-        if num_passing is None:
-            return None
-        return num_passing / self.num_pass_fail_checks
-
     def all_checks_results(self) -> list[CheckResult]:
         """Returns a (flattened) list of all CheckResults."""
         return [r for result in self.results for r in result]
@@ -389,9 +369,8 @@ class EvalResult(DictionaryEqualsMixin):
             # of Response Characters={self.response_characters}
             Characters per Second={self.characters_per_second}
             # of Checks={self.num_checks}
-            # of Pass/Fail Checks={self.num_pass_fail_checks}
-            # of Passing Checks={self.num_passing_checks}
-            % of Passing Checks={self.perc_passed_checks}
+            # of Successful Checks={self.num_successful_checks}
+            % of Successful Checks={self.perc_successful_checks}
         """).strip()
 
     def to_dict(self) -> dict:
@@ -413,7 +392,7 @@ class EvalResult(DictionaryEqualsMixin):
 def eval_result_summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
     code_run_checks = [
-        r for r in result.all_checks_results()
+        r for r in result.all_checks_results
         if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
     ]
     summary = {}
@@ -426,9 +405,8 @@ def eval_result_summarizer(result: EvalResult) -> dict:
     summary['total_time_seconds'] = result.total_time_seconds
     summary['characters_per_second'] = result.characters_per_second
     summary['num_checks'] = result.num_checks
-    summary['num_pass_fail_checks'] = result.num_pass_fail_checks
-    summary['num_passing_checks'] = result.num_passing_checks
-    summary['perc_passed_checks'] = result.perc_passed_checks
+    summary['num_successful_checks'] = result.num_successful_checks
+    summary['perc_successful_checks'] = result.perc_successful_checks
     summary['num_code_blocks'] = sum(r.metadata['num_code_blocks'] for r in code_run_checks)
     if summary['num_code_blocks'] == 0:
         summary['num_code_blocks_successful'] = None
