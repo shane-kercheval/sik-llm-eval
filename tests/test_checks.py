@@ -648,6 +648,58 @@ def test__RegexCheck():  # noqa
     assert not check(response='123foo').success
     assert not check(response='Foo').success
 
+def test__RegexCheck__multiline_response():  # noqa
+    response = """
+    Here's a Python function called mask_emails that uses regex to mask all emails:
+
+    ```
+    import re
+
+    def mask_emails(text: str) -> str:
+        '''
+        Mask all emails in the given text.
+
+        Args:
+        text (str): The input text containing emails to be masked.
+
+        Returns:
+        str: The text with masked emails.
+        '''
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        masked_text = re.sub(email_pattern, '[MASKED]@[MASKED]', text)
+        return masked_text
+    ```
+    """  # noqa: W605
+    check = RegexCheck(pattern='def mask_emails\\([a-zA-Z_]+\\: str\\) -> str\\:')
+    result = check(response=response)
+    assert result.success
+
+    # check without type hints; should fail
+    response = """
+    Here's a Python function called mask_emails that uses regex to mask all emails:
+
+    ```
+    import re
+
+    def mask_emails(text):
+        '''
+        Mask all emails in the given text.
+
+        Args:
+        text (str): The input text containing emails to be masked.
+
+        Returns:
+        str: The text with masked emails.
+        '''
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        masked_text = re.sub(email_pattern, '[MASKED]@[MASKED]', text)
+        return masked_text
+    ```
+    """  # noqa: W605
+    check = RegexCheck(pattern='def mask_emails\\([a-zA-Z_]+\\: str\\) -> str\\:')
+    result = check(response=response)
+    assert not result.success
+
 def test__PythonCodeBlocksPresent__has_check_type():  # noqa
     """
     Test that the check has a check_type upon object creation (without using create_instance from

@@ -257,7 +257,7 @@ class RegexCheck(Check):
     def __call__(self, response: str) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
         return PassFailResult(
-            value=re.compile(self.pattern).match(response) is not None,
+            value=re.search(self.pattern, response, re.MULTILINE) is not None,
             metadata={
                 'check_type': self.check_type,
                 'check_pattern': self.pattern,
