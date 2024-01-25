@@ -819,12 +819,28 @@ def test__PythonCodeBlocksRun__with_functions():  # noqa
         return code_blocks == ['assert my_value != 1', 'assert my_value == 1']
     def my_value_equals_1(code_blocks):  # noqa
         return my_value == 1  # noqa
+    def non_existant_value_should_fail(code_blocks):  # noqa
+        raise does_not_exist  # noqa
     def my_value_not_equals(code_block):  # noqa
         return my_value != 1  # noqa
+    def raises_error_should_fail(code_blocks):  # noqa
+        raise ValueError('This should fail')
 
+    functions = [
+        check_code_blocks,  # expect success
+        my_value_equals_1,  # expect success
+        # this needs to follow a successful function check because `__results__` (which is returned
+        # but the function) will be set to True after the previous function check, but a function
+        # check that fails won't set `__results__`, so we need to make sure `__results__` is reset
+        # to False before this function check is run so we don't grab the previous function check's
+        # result
+        non_existant_value_should_fail,  # expect failure
+        my_value_not_equals,  # expect failure
+        raises_error_should_fail,  # expect failure
+    ]
     expected_num_code_blocks = 2
     expected_successful_code_blocks = 1
-    expected_function_checks = 3
+    expected_function_checks = len(functions)
     expected_successful_function_checks = 2
     expected_total_checks = expected_num_code_blocks + expected_function_checks
     expected_successful_checks = expected_successful_code_blocks + \
@@ -833,15 +849,11 @@ def test__PythonCodeBlocksRun__with_functions():  # noqa
     check = PythonCodeBlocksRun(
         percent_success_threshold=threshold,
         code_setup='my_value = 1',  # my_value is depended on the code_blocks
-        functions=[
-            check_code_blocks,  # expect success
-            my_value_equals_1,  # expect success
-            my_value_not_equals,  # expect failure
-        ],
+        functions=functions,
     )
     assert check.percent_success_threshold == threshold
     assert check.code_setup == 'my_value = 1'
-    assert len(check.functions) == 3
+    assert len(check.functions) == len(functions)
     assert check.metadata == {}
     assert str(check)
     code_blocks = [
@@ -858,9 +870,14 @@ def test__PythonCodeBlocksRun__with_functions():  # noqa
     assert result.metadata['code_blocks'] == code_blocks
     assert isinstance(result.metadata['code_block_errors'][0], AssertionError)
     assert result.metadata['code_block_errors'][1] is None
-    assert result.metadata['function_check_results'] == [True, True, False]
+    assert result.metadata['function_check_results'] == [True, True, False, False, False]
     assert result.metadata['num_function_checks'] == expected_function_checks
     assert result.metadata['num_function_checks_successful'] == expected_successful_function_checks
+    assert result.metadata['function_check_errors'][0] is None
+    assert result.metadata['function_check_errors'][1] is None
+    assert isinstance(result.metadata['function_check_errors'][2], NameError)
+    assert result.metadata['function_check_errors'][3] is None
+    assert isinstance(result.metadata['function_check_errors'][4], ValueError)
 
 def test__PythonCodeBlocksRun__failing_code_setup_raises_error():  # noqa
     """

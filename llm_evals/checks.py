@@ -410,7 +410,10 @@ class PythonCodeBlocksRun(Check):
 
             if self.code_setup:
                 # execute code setup; if there are errors, raise an exception and fail the check
-                setup_errors = execute_code_blocks([self.code_setup], env_namespace=env_namespace)
+                setup_errors = execute_code_blocks(
+                    [dedent(self.code_setup)],
+                    env_namespace=env_namespace,
+                )
                 assert all(e is None for e in setup_errors), \
                     f"Errors executing code setup in PythonCodeBlocksRun: \n`{setup_errors}`"
 
@@ -422,6 +425,10 @@ class PythonCodeBlocksRun(Check):
             functions = self.functions or []
             for func in functions:
                 num_function_checks += 1
+                # we need to reset `__result__` to False in case one of the functions fails to
+                # execute (which means `__result__` will not be set) in order to avoid grabbing
+                # the result from the previous function check
+                env_namespace['__result__'] = False
                 if isinstance(func, Callable):
                     func_name = func.__name__
                     func = dedent(getsource(func))  # noqa: PLW2901
@@ -447,11 +454,9 @@ class PythonCodeBlocksRun(Check):
                 func_errors = execute_code_blocks([function_call], env_namespace=env_namespace)
                 function_errors.extend(func_errors)
                 # get the result of the function from the environment
-                if '__result__' not in env_namespace:
-                    # if the code failed to execute, we will assume the check failed
-                    func_result = False
-                else:
-                    func_result = bool(env_namespace['__result__'])
+                func_result = env_namespace['__result__']
+                assert isinstance(func_result, bool), \
+                    f"Function {func_name} must return a boolean value"
                 if func_result:
                     num_function_checks_successful += 1
                 function_results.append(func_result)

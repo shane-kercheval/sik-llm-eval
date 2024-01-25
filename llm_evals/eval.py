@@ -53,8 +53,8 @@ class PromptTest(DictionaryEqualsMixin):
                 Check subclasses need to be registered via `Check.register(...)`.
                 The dictionary needs a `check_type` key with the registration value.
         """
-        self.prompt = prompt
-        self.ideal_response = ideal_response
+        self.prompt = dedent(prompt)
+        self.ideal_response = dedent(ideal_response) if ideal_response else None
         checks = checks or []
         checks_created = []
         for check in checks:
