@@ -472,9 +472,9 @@ class PythonCodeBlocksRun(Check):
                 'num_code_blocks_successful': num_code_blocks_successful,
                 'code_blocks': code_blocks,
                 'code_block_errors': code_block_errors,
-                'function_check_results': function_results,
                 'num_function_checks': num_function_checks,
                 'num_function_checks_successful': num_function_checks_successful,
+                'function_check_results': function_results,
                 'function_check_errors': function_errors,
             },
         )
