@@ -580,7 +580,7 @@ def test__extract_code_blocks__conversation_mask_emails(conversation_mask_email)
         assert mask_email("test@test.com") == "t****t@test.com"
         """).strip()
 
-def test__execute_code_blocks__without_global_namespace(conversation_sum):  # noqa
+def test__execute_code_blocks__without_env_namespace(conversation_sum):  # noqa
     code_blocks = extract_code_blocks(conversation_sum['model_1']['responses'][0])
     code_blocks.append('assert sum_numbers(5, 3) == 8')
     code_blocks.append('assert sum_numbers(5, 3) != 8')
@@ -592,37 +592,116 @@ def test__execute_code_blocks__without_global_namespace(conversation_sum):  # no
     assert results[2] is None
     assert isinstance(results[3], AssertionError)
 
-    # this will fail because global_namespace was not reused so sum_numbers is not defined during
+    # this will fail because env_namespace was not reused so sum_numbers is not defined during
     # a subsequent call to execute_code_blocks
     results = execute_code_blocks(code_blocks=['assert sum_numbers(5, 3) == 8'])
     assert len(results) == 1
     assert isinstance(results[0], NameError)
     assert str(results[0]) == "name 'sum_numbers' is not defined"
 
-def test__execute_code_blocks__with_global_namespace(conversation_sum):  # noqa
+def test__execute_code_blocks__with_env_namespace(conversation_sum):  # noqa
     code_blocks = extract_code_blocks(conversation_sum['model_1']['responses'][0])
     code_blocks.append('assert sum_numbers(5, 3) == 8')
     code_blocks.append('assert sum_numbers(5, 3) != 8')
     assert len(code_blocks) == 4
-    global_namespace = {}
-    results = execute_code_blocks(code_blocks, global_namespace)
+    env_namespace = {}
+    results = execute_code_blocks(code_blocks, env_namespace)
     assert len(results) == 4
     assert results[0] is None
     assert results[1] is None
     assert results[2] is None
     assert isinstance(results[3], AssertionError)
-    assert 'sum_numbers' in global_namespace
-    assert 'result' in global_namespace
+    assert 'sum_numbers' in env_namespace
+    assert 'result' in env_namespace
 
-    # this will NOT fail because global_namespace was reused so the state is carried over to
+    # this will NOT fail because env_namespace was reused so the state is carried over to
     # a subsequent call to execute_code_blocks
     results = execute_code_blocks(
         code_blocks=['assert sum_numbers(5, 3) == 8', 'assert sum_numbers(5, 3) != 8'],
-        global_namespace=global_namespace,
+        env_namespace=env_namespace,
     )
     assert len(results) == 2
     assert results[0] is None
     assert isinstance(results[1], AssertionError)
+
+def test__execute_code_blocks__with_env_namespace__test_dependencies():  # noqa
+    code_blocks = [
+        'my_value = 10',
+        'def add_my_value(num1):\n    return num1 + my_value',
+        'result = add_my_value(5)',
+        'assert result != 15',  # execute error before last code block to ensure if it runs
+        'assert result == 15',
+    ]
+    env_namespace = {}
+    errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
+    assert len(errors) == 5
+    assert errors[0] is None
+    assert errors[1] is None
+    assert errors[2] is None
+    assert isinstance(errors[3], AssertionError)
+    assert errors[4] is None
+    assert 'add_my_value' in env_namespace
+    assert 'result' in env_namespace
+
+    # this will NOT fail because env_namespace was reused so the state is carried over to
+    # a subsequent call to execute_code_blocks
+    errors = execute_code_blocks(
+        code_blocks=['assert result != 15', 'assert result == 15'],
+        env_namespace=env_namespace,
+    )
+    assert len(errors) == 2
+    assert isinstance(errors[0], AssertionError)
+    assert errors[1] is None
+
+def test__execute_code_blocks__with_env_namespace__test_import_dependencies():  # noqa
+    code_blocks = [
+        'import itertools',
+        "s=[[ 'a', 'b', 'c'], ['d'], ['e', 'f']]",
+        'combinations = list(itertools.product(*s))',
+        'num_combinations = len(combinations)',
+        'assert num_combinations != 6',
+        'assert num_combinations == 6',
+    ]
+    env_namespace = {}
+    errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
+    assert len(errors) == 6
+    assert errors[0] is None
+    assert errors[1] is None
+    assert errors[2] is None
+    assert errors[3] is None
+    assert isinstance(errors[4], AssertionError)
+    assert errors[5] is None
+    assert 'num_combinations' in env_namespace
+    assert env_namespace['num_combinations'] == 6
+
+def test__execute_code_blocks__with_env_namespace__inject_objects_into_namespace():  # noqa
+    func = dedent("""
+    def get_combinations(list_of_lists: list[list[str]]):
+        import itertools
+        combinations = list(itertools.product(*list_of_lists))
+        return len(combinations)
+    """)
+    code_blocks = [
+        func,
+        'num_combinations = get_combinations(__list_of_lists__)',
+        'assert num_combinations != 6',
+        'assert num_combinations == 6',
+    ]
+    list_to_inject = [[ 'a', 'b', 'c'], ['d'], ['e', 'f']]
+    env_namespace = {
+        '__list_of_lists__': list_to_inject,
+    }
+    errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
+
+    assert len(errors) == 4
+    assert errors[0] is None
+    assert errors[1] is None
+    assert isinstance(errors[2], AssertionError)
+    assert errors[3] is None
+    assert 'num_combinations' in env_namespace
+    assert env_namespace['num_combinations'] == 6
+    assert '__list_of_lists__' in env_namespace
+    assert env_namespace['__list_of_lists__'] == list_to_inject
 
 def test__extract_variables():  # noqa
     assert extract_variables('') == set()
