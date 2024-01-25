@@ -369,14 +369,14 @@ class EvalResult(DictionaryEqualsMixin):
     def __str__(self) -> str:
         return dedent(f"""
         EvalResult:
-            # of Prompts Tested={len(self.eval_obj.test_sequence)}
-            Total Response Time (seconds)={self.total_time_seconds: 0.1f}
-            # of Response Characters={self.response_characters:,}
-            # of Code Blocks Generated={self.num_code_blocks}
-            Characters per Second={self.characters_per_second: ,.1f}
-            # of Checks={self.num_checks}
-            # of Successful Checks={self.num_successful_checks}
-            % of Successful Checks={self.perc_successful_checks: .1%}
+            # of Prompts Tested:        {len(self.eval_obj.test_sequence)}
+            Total Response Time:        {self.total_time_seconds:0.1f} seconds
+            # of Response Characters:   {self.response_characters:,}
+            # of Code Blocks Generated: {self.num_code_blocks}
+            Characters per Second:      {self.characters_per_second:,.1f}
+            # of Checks:                {self.num_checks}
+            # of Successful Checks:     {self.num_successful_checks}
+            % of Successful Checks:     {self.perc_successful_checks:.1%}
         """).strip()
 
     def to_dict(self) -> dict:
@@ -398,10 +398,6 @@ class EvalResult(DictionaryEqualsMixin):
 
 def eval_result_summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
-    code_run_checks = [
-        r for r in result.all_checks_results
-        if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
-    ]
     summary = {}
     if result.eval_obj.uuid:
         summary['eval_uuid'] = result.eval_obj.uuid
@@ -414,21 +410,25 @@ def eval_result_summarizer(result: EvalResult) -> dict:
     summary['num_checks'] = result.num_checks
     summary['num_successful_checks'] = result.num_successful_checks
     summary['perc_successful_checks'] = result.perc_successful_checks
-    summary['num_code_blocks'] = sum(r.metadata['num_code_blocks'] for r in code_run_checks)
-    if summary['num_code_blocks'] == 0:
-        summary['num_code_blocks_successful'] = None
-        summary['perc_code_blocks_successful'] = None
-    else:
-        summary['num_code_blocks_successful'] = sum(r.metadata['num_code_blocks_successful'] for r in code_run_checks)  # noqa
-        summary['perc_code_blocks_successful'] = summary['num_code_blocks_successful'] / summary['num_code_blocks']  # noqa
+    summary['num_code_blocks'] = result.num_code_blocks
+    code_run_checks = [
+        r for r in result.all_checks_results
+        if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    ]
+    if code_run_checks:
+        summary['num_code_blocks_successful'] = sum(
+            r.metadata['num_code_blocks_successful'] for r in code_run_checks
+        )
+        summary['perc_code_blocks_successful'] = \
+            summary['num_code_blocks_successful'] / summary['num_code_blocks']
+
     return summary
-
-
 
 # class EvalHarness:
 #     """
 #     An EvalHarness provides a interface for evaluating a list of Evals against a list of
 #     Candidates.
+
 
 #The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
 #     collection of EvalResults.

@@ -4,7 +4,7 @@ from textwrap import dedent
 import pytest
 from llm_evals.candidates import Candidate, CandidateType
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
-from llm_evals.eval import Eval, EvalResult, PromptTest
+from llm_evals.eval import Eval, EvalResult, PromptTest, eval_result_summarizer
 from llm_evals.utilities.internal_utilities import extract_code_blocks
 
 
@@ -216,6 +216,8 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     for c, r in zip(flatted_checks, eval_result.all_checks_results, strict=True):
         assert c.check_type == r.metadata['check_type']
 
+    assert eval_result_summarizer(eval_result)
+
 def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run):  # noqa
     """
     Use Mock LLM with multiple code blocks (over multiple responses) to ensure code blocks run and
@@ -346,6 +348,8 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert eval_result.results[1][2].metadata['function_check_errors'][3] is None
     assert eval_result.results[1][2].metadata['function_check_errors'][4] is None
     assert isinstance(eval_result.results[1][2].metadata['function_check_errors'][5], NameError)
+    summary = eval_result_summarizer(eval_result)
+    
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_template):  # noqa
