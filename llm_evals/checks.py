@@ -434,14 +434,16 @@ class PythonCodeBlocksRun(Check):
                 # add code blocks to the environment; the functions will take the code blocks
                 # as input
                 env_namespace['__code_blocks__'] = code_blocks
-                # Run the function
+                # add function to environment; ignore errors, we will capture and return the errors
+                # associated when we execute the function, which will fail if added the function
+                # to the environment fails
+                _ = execute_code_blocks([func], env_namespace=env_namespace)
+                function_call = f"__result__ = {func_name}(__code_blocks__)"
+                # execute the function
                 # if there are errors, we will capture and return the errors
                 # Errors could be caused by the LLM response (e.g. if the LLM response doesn't
                 # contain the expected function name) so we don't want to fail out of the entire
                 # check
-                # add function to namespace
-                _ = execute_code_blocks([func], env_namespace=env_namespace)
-                function_call = f"__result__ = {func_name}(__code_blocks__)"
                 func_errors = execute_code_blocks([function_call], env_namespace=env_namespace)
                 function_errors.extend(func_errors)
                 # get the result of the function from the environment
