@@ -8,11 +8,12 @@ LLM to evaluate the response.
 """
 from abc import ABC, abstractmethod
 from enum import Enum, auto
+from inspect import getsource
 import re
 from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, Field
-from llm_evals.utilities.internal_utilities import EnumMixin, Registry
+from llm_evals.utilities.internal_utilities import EnumMixin, Registry, execute_code_blocks
 
 
 class CheckType(EnumMixin, Enum):
@@ -117,7 +118,6 @@ class ScoreResult(CheckResult):
     """
 
     success_threshold: int | float | None = None
-    # result_type: str = Field(default='SCORE')
 
     def __init__(self, **data):  # noqa: ANN003
         super().__init__(**data)
@@ -327,13 +327,17 @@ class PythonCodeBlocksPresent(Check):
         description="The minimum number of code blocks that must be present in the response.",
     )
 
-    def __call__(self, code_blocks: str) -> CheckResult:
-        """TODO document."""
-        # We are currently assuming any code blocks are Python code blocks.
-        # We could either check for "```python" or we could check for "```" and then check if the
-        # code blocks run, but a) we'd be running the code blocks twice if there is a
-        # PythonCodeBlocksRun check and b) just because the code blocks fail doesn't mean they
-        # aren't Python code blocks.
+    def __call__(self, code_blocks: list[str]) -> PassFailResult:
+        """
+        Returns a PassFailResult based on the number of code blocks present.
+
+        NOTE: We are currently assuming any code blocks are Python code blocks.
+        We could either check for "```python" or we could check for "```" and then check if the
+        code blocks run, but a) we'd be running the code blocks twice if there is a
+        PythonCodeBlocksRun check and b) just because the code blocks fail doesn't mean they
+        aren't Python code blocks.
+        """
+        code_blocks = code_blocks or []
         return PassFailResult(
             value=len(code_blocks) >= self.min_code_blocks,
             metadata={
@@ -371,52 +375,86 @@ class PythonCodeBlocksRun(Check):
     # is responsible for running tests against the (string) response returned by the LLM.
     """  # noqa
 
+    percent_success_threshold: float = Field(
+        default=1.0,
+        description="The minimum percent of successfully executed code blocks (and function checks (if `functions` is used)) required for the check to be considered successful. Defaulted to 1.0 (i.e. 100% of code blocks must run successfully).",  # noqa
+    )
     code_setup: str | None = Field(
         default=None,
         description="Python code that is executed before the code blocks are executed.",
     )
-    functions: list[
-        str |
-        Callable[[list[str], str, dict], list[CheckResult]]
-        ] | None = Field(
+    functions: list[str | Callable[[list[str]], bool]] | None = Field(
         default=None,
-        description="A list of callables. Each callable is passed the list of code blocks that were extracted from the response. The functions are executed in the same environment that the code blocks were executed in. The code blocks may or may not have executed successfully. The functions can test the enviroment or the code blocks.",  # noqa
+        description="A list of callables (or strings representing callables). Each callable is passed the list of code blocks that were extracted from the response. The functions are executed in the same environment that the code blocks were executed in. The code blocks may or may not have executed successfully. The functions can test the enviroment or the code blocks.",  # noqa
     )
 
     def __call__(self, code_blocks: list[str]) -> ScoreResult:
         """TODO document."""
-        # run code blocks and any setup code
+        code_blocks = code_blocks or []
         code_block_errors = []
-        if code_blocks:
-            environment = {}
-            if self._code_setup is not None:
-                exec(self._code_setup, environment)
-            # run code blocks; capture if the code blocks run successfully
-            for code in code_blocks:
-                try:
-                    exec(code, environment)
-                    code_block_errors.append(None)
-                except Exception as e:
-                    code_block_errors.append(e)
-            for func in self.functions:
-                # run function in same environent as code blocks
-                # check_results.append(func(code_blocks, response, environment))
-                pass
-            # return CodeBlocksRunResult(
-            # )
+        function_results = []
+
         num_code_blocks = len(code_blocks)
+        num_function_checks = 0
+        num_function_checks_successful = 0
+
+        if code_blocks:
+            code_blocks = code_blocks.copy()
+            env_namespace = {}
+
+            if self.code_setup:
+                setup_errors = execute_code_blocks([self.code_setup], env_namespace=env_namespace)
+                assert all(e is None for e in setup_errors), \
+                    f"Errors executing code setup in PythonCodeBlocksRun: \n`{setup_errors}`"
+
+            code_block_errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
+            functions = self.functions or []
+            for func in functions:
+                num_function_checks += 1
+                if isinstance(func, Callable):
+                    func_name = func.__name__
+                    # convert to string
+                    func = dedent(getsource(func))  # noqa: PLW2901
+                else:
+                    assert isinstance(func, str), \
+                        f"Function must be callable or string, got {type(func)}"
+                    match = re.search(r'def (\w+)\(', func)
+                    assert match, f"Could not find function name in {func}"
+                    func_name = match.group(1)
+                env_namespace['__code_blocks__'] = code_blocks
+                # add function to namespace
+                func_errors = execute_code_blocks([func], env_namespace=env_namespace)
+                # ensure no errors
+                assert all(e is None for e in func_errors), \
+                    f"Errors executing function definition in PythonCodeBlocksRun `{func_name}`: `{func_errors}`"  # noqa
+                function_call = f"__result__ = {func_name}(__code_blocks__)"
+                func_errors = execute_code_blocks([function_call], env_namespace=env_namespace)
+                assert all(e is None for e in func_errors), \
+                    f"Errors executing function in PythonCodeBlocksRun `{func_name}`: `{func_errors}`"  # noqa
+                func_result = bool(env_namespace['__result__'])
+                if func_result:
+                    num_function_checks_successful += 1
+                function_results.append(func_result)
+
         num_code_blocks_successful = len([e for e in code_block_errors if e is None])
 
+        if num_code_blocks > 0:
+            score = (num_code_blocks_successful + num_function_checks_successful) \
+                / (num_code_blocks + num_function_checks)
+        else:
+            score = 0.0
         return ScoreResult(
-            value=num_code_blocks_successful / num_code_blocks if num_code_blocks > 0 else 0.0,
-            success_threshold=1.0,
+            value=score,
+            success_threshold=self.percent_success_threshold,
             metadata={
                 'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
                 'num_code_blocks': num_code_blocks,
                 'num_code_blocks_successful': num_code_blocks_successful,
                 'code_blocks': code_blocks,
                 'code_block_errors': code_block_errors,
-                'function_check_results': None, # TODO;; these are individual PassFailResults
+                'function_check_results': function_results,
+                'num_function_checks': num_function_checks,
+                'num_function_checks_successful': num_function_checks_successful,
             },
         )
 

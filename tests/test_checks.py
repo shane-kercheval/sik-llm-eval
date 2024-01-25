@@ -2,17 +2,16 @@
 from pydantic import ValidationError
 import pytest
 from llm_evals.checks import (
-    # CHECK_REGISTRY,
-    CheckResultsType,
-    ContainsCheck,
-    MatchCheck,
-    RegexCheck,
-    # register_check,
-    # CheckRegistry,
     Check,
     CheckResult,
+    CheckResultsType,
     CheckType,
+    ContainsCheck,
+    MatchCheck,
     PassFailResult,
+    PythonCodeBlocksPresent,
+    PythonCodeBlocksRun,
+    RegexCheck,
     ScoreResult,
 )
 
@@ -324,7 +323,7 @@ def test__ScoreResult__serialize():  # noqa
     assert isinstance(recreated, ScoreResult)
     assert recreated == result
 
-def test__MatchExactCheck__has_check_type():  # noqa
+def test__ExactCheck__has_check_type():  # noqa
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -337,8 +336,9 @@ def test__MatchExactCheck__has_check_type():  # noqa
         'value': 'foo',
     }
     assert MatchCheck(**check_dict) == check
+    assert Check.from_dict(check_dict) == check
 
-def test__MatchExactCheck():  # noqa
+def test__ExactCheck():  # noqa
     assert CheckType.MATCH.name in Check.registry
     assert CheckType.MATCH in Check.registry
 
@@ -432,7 +432,7 @@ def test__MatchExactCheck():  # noqa
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
-def test__MatchContainsCheck__has_check_type():  # noqa
+def test__ContainsCheck__has_check_type():  # noqa
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -445,8 +445,9 @@ def test__MatchContainsCheck__has_check_type():  # noqa
         'value': 'foo',
     }
     assert ContainsCheck(**check_dict) == check
+    assert Check.from_dict(check_dict) == check
 
-def test__MatchContainsCheck():  # noqa
+def test__ContainsCheck():  # noqa
     assert CheckType.CONTAINS.name in Check.registry
     assert CheckType.CONTAINS in Check.registry
 
@@ -543,7 +544,7 @@ def test__MatchContainsCheck():  # noqa
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
-def test__MatchRegexCheck__has_check_type():  # noqa
+def test__RegexCheck__has_check_type():  # noqa
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -556,8 +557,9 @@ def test__MatchRegexCheck__has_check_type():  # noqa
         'pattern': 'foo',
     }
     assert RegexCheck(**check_dict) == check
+    assert Check.from_dict(check_dict) == check
 
-def test__MatchRegexCheck():  # noqa
+def test__RegexCheck():  # noqa
     assert CheckType.REGEX.name in Check.registry
     assert CheckType.REGEX in Check.registry
 
@@ -645,3 +647,217 @@ def test__MatchRegexCheck():  # noqa
     assert not check(response='foo123').success
     assert not check(response='123foo').success
     assert not check(response='Foo').success
+
+def test__PythonCodeBlocksPresent__has_check_type():  # noqa
+    """
+    Test that the check has a check_type upon object creation (without using create_instance from
+    the registry).
+    """
+    check = PythonCodeBlocksPresent()
+    assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    check_dict = check.to_dict()
+    assert check_dict == {'check_type': CheckType.PYTHON_CODE_BLOCKS_PRESENT.name}
+    assert PythonCodeBlocksPresent(**check_dict) == check
+    assert Check.from_dict(check_dict) == check
+
+def test__test__PythonCodeBlocksPresent():  # noqa
+    check = PythonCodeBlocksPresent(min_code_blocks=1)
+    assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    assert check.min_code_blocks == 1
+    assert check.metadata == {}
+    assert str(check)
+    result = check(code_blocks=[])
+    assert not result.success
+    assert not result.value
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    assert result.metadata['num_code_blocks'] == 0
+    assert result.metadata['min_code_blocks'] == 1
+    assert result.metadata['code_blocks'] == []
+
+    check = PythonCodeBlocksPresent(min_code_blocks=1)
+    result = check(code_blocks=None)
+    assert not result.success
+    assert not result.value
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    assert result.metadata['num_code_blocks'] == 0
+    assert result.metadata['min_code_blocks'] == 1
+    assert result.metadata['code_blocks'] == []
+
+    check = PythonCodeBlocksPresent(min_code_blocks=1, metadata={'foo': 'bar'})
+    assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    assert check.min_code_blocks == 1
+    assert check.metadata == {'foo': 'bar'}
+    assert str(check)
+    code_blocks = ['```python\nprint("hello world")\n```']
+    result = check(code_blocks=code_blocks)
+    assert result.success
+    assert result.value
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    assert result.metadata['num_code_blocks'] == 1
+    assert result.metadata['min_code_blocks'] == 1
+    assert result.metadata['code_blocks'] == code_blocks
+
+    check = PythonCodeBlocksPresent(min_code_blocks=2, metadata={'foo': 'bar'})
+    assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    assert check.min_code_blocks == 2
+    assert check.metadata == {'foo': 'bar'}
+    assert str(check)
+    code_blocks = ['```python\nprint("hello world")\n```']
+    result = check(code_blocks=code_blocks)
+    assert not result.success
+    assert not result.value
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    assert result.metadata['num_code_blocks'] == 1
+    assert result.metadata['min_code_blocks'] == 2
+    assert result.metadata['code_blocks'] == code_blocks
+
+def test__PythonCodeBlocksRun__has_check_type():  # noqa
+    """
+    Test that the check has a check_type upon object creation (without using create_instance from
+    the registry).
+    """
+    check = PythonCodeBlocksRun()
+    assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    check_dict = check.to_dict()
+    assert check_dict == {'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name}
+    assert PythonCodeBlocksRun(**check_dict) == check
+    assert Check.from_dict(check_dict) == check
+
+def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
+    check = PythonCodeBlocksRun()
+    assert check.percent_success_threshold == 1
+    assert check.code_setup is None
+    assert check.functions is None
+    assert check.metadata == {}
+    assert str(check)
+
+    result = check(code_blocks=[])
+    assert result.value == 0
+    assert not result.success
+    assert result.success_threshold == 1
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['num_code_blocks'] == 0
+    assert result.metadata['num_code_blocks_successful'] == 0
+    assert result.metadata['code_blocks'] == []
+    assert result.metadata['code_block_errors'] == []
+    assert result.metadata['function_check_results'] == []
+    assert result.metadata['num_function_checks'] == 0
+    assert result.metadata['num_function_checks_successful'] == 0
+
+    result = check(code_blocks=None)
+    assert result.value == 0
+    assert not result.success
+    assert result.success_threshold == 1
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['num_code_blocks'] == 0
+    assert result.metadata['num_code_blocks_successful'] == 0
+    assert result.metadata['code_blocks'] == []
+    assert result.metadata['code_block_errors'] == []
+    assert result.metadata['function_check_results'] == []
+    assert result.metadata['num_function_checks'] == 0
+    assert result.metadata['num_function_checks_successful'] == 0
+
+def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
+    check = PythonCodeBlocksRun()
+    assert check.percent_success_threshold == 1
+    assert check.code_setup is None
+    assert check.functions is None
+    assert check.metadata == {}
+    assert str(check)
+    code_blocks = [
+        'my_value = 1',
+        'assert my_value != 1',
+        'assert my_value == 1',
+    ]
+    result = check(code_blocks=code_blocks)
+    assert result.value == 2/3
+    assert not result.success
+    assert result.success_threshold == 1
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['num_code_blocks'] == 3
+    assert result.metadata['num_code_blocks_successful'] == 2
+    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_block_errors'][0] is None
+    assert isinstance(result.metadata['code_block_errors'][1], AssertionError)
+    assert result.metadata['code_block_errors'][2] is None
+    assert result.metadata['function_check_results'] == []
+    assert result.metadata['num_function_checks'] == 0
+    assert result.metadata['num_function_checks_successful'] == 0
+
+def test__PythonCodeBlocksRun__with_setup():  # noqa
+    check = PythonCodeBlocksRun(
+        percent_success_threshold=0.5,
+        code_setup='my_value = 1',  # my_value is depended on the code_blocks
+    )
+    assert check.percent_success_threshold == 0.5
+    assert check.code_setup == 'my_value = 1'
+    assert check.functions is None
+    assert check.metadata == {}
+    assert str(check)
+    code_blocks = [
+        'assert my_value != 1',
+        'assert my_value == 1',
+    ]
+    result = check(code_blocks=code_blocks)
+    assert result.value == 0.5
+    assert result.success
+    assert result.success_threshold == 0.5
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['num_code_blocks'] == 2
+    assert result.metadata['num_code_blocks_successful'] == 1
+    assert result.metadata['code_blocks'] == code_blocks
+    assert isinstance(result.metadata['code_block_errors'][0], AssertionError)
+    assert result.metadata['code_block_errors'][1] is None
+    assert result.metadata['function_check_results'] == []
+    assert result.metadata['num_function_checks'] == 0
+    assert result.metadata['num_function_checks_successful'] == 0
+    assert Check.from_dict(check.to_dict()) == check
+    assert CheckResult.from_dict(result.to_dict()) == result
+
+def test__PythonCodeBlocksRun__with_functions():  # noqa
+    def check_code_blocks(code_blocks):  # noqa
+        return code_blocks == ['assert my_value != 1', 'assert my_value == 1']
+    def my_value_equals_1(code_blocks):  # noqa
+        return my_value == 1  # noqa
+    def my_value_not_equals(code_block):  # noqa
+        return my_value != 1  # noqa
+
+    expected_num_code_blocks = 2
+    expected_successful_code_blocks = 1
+    expected_function_checks = 3
+    expected_successful_function_checks = 2
+    expected_total_checks = expected_num_code_blocks + expected_function_checks
+    expected_successful_checks = expected_successful_code_blocks + \
+        expected_successful_function_checks
+    threshold = (expected_successful_checks/expected_total_checks) + 0.001
+    check = PythonCodeBlocksRun(
+        percent_success_threshold=threshold,
+        code_setup='my_value = 1',  # my_value is depended on the code_blocks
+        functions=[
+            check_code_blocks,  # expect success
+            my_value_equals_1,  # expect success
+            my_value_not_equals,  # expect failure
+        ],
+    )
+    assert check.percent_success_threshold == threshold
+    assert check.code_setup == 'my_value = 1'
+    assert len(check.functions) == 3
+    assert check.metadata == {}
+    assert str(check)
+    code_blocks = [
+        'assert my_value != 1',
+        'assert my_value == 1',
+    ]
+    result = check(code_blocks=code_blocks)
+    assert result.value == expected_successful_checks / expected_total_checks
+    assert not result.success
+    assert result.success_threshold == threshold
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['num_code_blocks'] == 2
+    assert result.metadata['num_code_blocks_successful'] == 1
+    assert result.metadata['code_blocks'] == code_blocks
+    assert isinstance(result.metadata['code_block_errors'][0], AssertionError)
+    assert result.metadata['code_block_errors'][1] is None
+    assert result.metadata['function_check_results'] == [True, True, False]
+    assert result.metadata['num_function_checks'] == expected_function_checks
+    assert result.metadata['num_function_checks_successful'] == expected_successful_function_checks
