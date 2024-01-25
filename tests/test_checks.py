@@ -861,3 +861,29 @@ def test__PythonCodeBlocksRun__with_functions():  # noqa
     assert result.metadata['function_check_results'] == [True, True, False]
     assert result.metadata['num_function_checks'] == expected_function_checks
     assert result.metadata['num_function_checks_successful'] == expected_successful_function_checks
+
+def test__PythonCodeBlocksRun__with_functions__failing_function_raises_error():  # noqa
+    """
+    If one of the functions (that is checking the results) raises an error, the entire check should
+    fail.
+    """
+    def failing_function(code_blocks):  # noqa
+        raise ValueError()
+    check = PythonCodeBlocksRun(
+        functions=[
+            failing_function,  # should raise an Error
+        ],
+    )
+    with pytest.raises(AssertionError):
+        check(code_blocks=['1 == 1'])
+
+def test__PythonCodeBlocksRun__failing_code_setup_raises_error():  # noqa
+    """
+    If one of the functions (that is checking the results) raises an error, the entire check should
+    fail.
+    """
+    check = PythonCodeBlocksRun(
+        code_setup='raise ValueError()',
+    )
+    with pytest.raises(AssertionError):
+        check(code_blocks=['1 == 1'])
