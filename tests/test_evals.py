@@ -474,5 +474,3 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert cand_2_results.num_checks == 2
     assert cand_2_results.num_successful_checks == 2
     assert cand_2_results.perc_successful_checks == 1
-
-
