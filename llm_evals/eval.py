@@ -139,6 +139,9 @@ class Eval(DictionaryEqualsMixin):
         self.metadata = metadata
         self.uuid = uuid
         self.version = version
+        self._candidate = None
+        self._responses = None
+        self._duration = None
 
         test_sequence = test_sequence or []
         if isinstance(test_sequence, (dict, PromptTest)):
@@ -186,6 +189,61 @@ class Eval(DictionaryEqualsMixin):
             config = yaml.safe_load(f)
         return cls(**config)
 
+    @staticmethod
+    def _to_candidate(candidate: Candidate | Callable | dict) -> Candidate:
+        if isinstance(candidate, dict):
+            candidate = Candidate.from_dict(candidate)
+        elif not isinstance(candidate, Candidate) and isinstance(candidate, Callable):
+            # all Candidates must be callable so need to ensure it's not already a Candidate
+            candidate = CallableCandidate(
+                model=candidate,
+                metadata={'function': get_callable_info(candidate)},
+            )
+        else:
+            assert isinstance(candidate, Candidate), \
+                "candidate must be either a Candidate, callable, or a dictionary"
+        return candidate
+
+    # OR INSTEAD OF THIS HAVE SOME WAY OF INJECTING RESPONSES/DURATION SO WE CAN DELEGATE TO ASYNC
+    def _generate_responses(self, candidate: Candidate | Callable | dict) -> None:
+        """TODO: this is a seperate call from _execute_eval so we can async/parallelize."""
+        self._candidate = self._to_candidate(candidate)
+        start = time.time()
+        # time.sleep(2)
+        self._responses = [self._candidate(p.prompt) for p in self.test_sequence]
+        end = time.time()
+        self._duration = end - start
+
+    def _execute_checks(self) -> EvalResult:
+        """TODO: this is a seperate call from _generate_responses so we can async/parallelize."""
+        assert self._responses
+        assert self._duration
+        assert self._candidate
+        results = []
+        code_blocks = []
+        for test, response in zip(self.test_sequence, self._responses):
+            check_results = []
+            code_blocks.extend(extract_code_blocks(response))
+            parameters = {
+                'prompt': test.prompt,
+                'ideal_response': test.ideal_response,
+                'response': response,
+                'code_blocks': code_blocks,
+            }
+            for check in test.checks:
+                valid_parameters = extract_valid_parameters(check.__call__, parameters)
+                check_results.append(check(**valid_parameters))
+            results.append(check_results)
+
+        return EvalResult(
+            eval_obj=self,
+            candidate_obj=self._candidate,
+            responses=self._responses,
+            results=results,
+            total_time_seconds=self._duration,
+            num_code_blocks=len(code_blocks),
+        )
+
     def __call__(self, candidate: Candidate | Callable | dict) -> EvalResult:
         """
         Evaluates the model against the prompts and tests.
@@ -202,45 +260,18 @@ class Eval(DictionaryEqualsMixin):
                 not be able to be called when deserialized, since the underlying function will not
                 be serialized.
         """
-        if isinstance(candidate, dict):
-            candidate = Candidate.from_dict(candidate)
-        elif not isinstance(candidate, Candidate) and isinstance(candidate, Callable):
-            # all Candidates must be callable so need to ensure it's not already a Candidate
-            candidate = CallableCandidate(
-                model=candidate,
-                metadata={'function': get_callable_info(candidate)},
-            )
-        else:
-            assert isinstance(candidate, Candidate), \
-                "candidate must be either a Candidate, callable, or a dictionary"
-
-        start = time.time()
-        responses = [candidate(p.prompt) for p in self.test_sequence]
-        end = time.time()
-        results = []
-        code_blocks = []
-        for test, response in zip(self.test_sequence, responses):
-            check_results = []
-            code_blocks.extend(extract_code_blocks(response))
-            parameters = {
-                'prompt': test.prompt,
-                'ideal_response': test.ideal_response,
-                'response': response,
-                'code_blocks': code_blocks,
-            }
-            for check in test.checks:
-                valid_parameters = extract_valid_parameters(check.__call__, parameters)
-                check_results.append(check(**valid_parameters))
-            results.append(check_results)
-
-        return EvalResult(
-            eval_obj=self,
-            candidate_obj=candidate,
-            responses=responses,
-            results=results,
-            total_time_seconds=end - start,
-            num_code_blocks=len(code_blocks),
-        )
+        self._generate_responses(candidate)
+        # _generate_responses has side effects of setting self.responses, self.duration, and
+        # self.candidate that _execute_check relies on;
+        # this is bad practice but we need to do this to support calling _generate_responses async
+        # and then executing the checks afterwards
+        results = self._execute_checks()
+        # these should be reset so we don't accidentally use them again; they should not be accessed
+        # directly
+        self._candidate = None
+        self._responses = None
+        self._duration = None
+        return results
 
     def __str__(self) -> str:
         """Returns a string representation of the Eval."""
@@ -259,6 +290,14 @@ class Eval(DictionaryEqualsMixin):
         )
         """).strip()
 
+    def clone(self) -> Eval:
+        """
+        Returns a copy of the Candidate with the same state but with a different instance of the
+        underlying model (e.g. same parameters but reset history/context).
+
+        Reques
+        """
+        return Eval(**deepcopy(self.to_dict()))
 
 class EvalResult(DictionaryEqualsMixin):
     """
@@ -430,7 +469,6 @@ def eval_result_summarizer(result: EvalResult) -> dict:
             sum(c.metadata['num_code_block_checks'] for c in code_run_checks)
         summary['num_code_block_checks_successful'] = \
             sum(c.metadata['num_code_block_checks_successful'] for c in code_run_checks)
-
     return summary
 
 
@@ -616,7 +654,30 @@ class EvalHarness:
                 ],
             ]
         """
-        return [
-            [eval_obj(candidate) for eval_obj in self.evals]
-            for candidate in self.candidates
-        ]
+        # return [
+        #     [eval_obj(candidate) for eval_obj in self.evals]
+        #     for candidate in self.candidates
+        # ]
+        # clone objects (the candidate in particular) so that each eval is run against a fresh
+        # candidate (i.e. if the candidate maintains state/history between prompts, we don't want
+        # to reuse the same candidate for each eval)
+        # generate responses
+        eval_objs: list[list[Eval]] = []
+        for candidate in self.candidates:
+            candidate_evals = []
+            for eval_obj in self.evals:
+                # ensure we don't mutate the original Eval object or reuse the same Candidate
+                # (i.e. the same underlying model)
+                cloned_eval = eval_obj.clone()
+                candidate_evals.append(cloned_eval)
+                cloned_eval._generate_responses(candidate.clone())
+            eval_objs.append(candidate_evals)
+
+        # execute checks
+        results: list[list[EvalResult]] = []
+        for candidate_evals in eval_objs:
+            candidate_results = []
+            for eval_obj in candidate_evals:
+                candidate_results.append(eval_obj._execute_checks())
+            results.append(candidate_results)
+        return results

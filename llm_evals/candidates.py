@@ -32,6 +32,8 @@ class Candidate(ABC):
     A Candidate describes an LLM (or specific implementation of an LLM interface (e.g.
     history/context management)) along wiht optional parameters or hardware.
 
+    A Candidate is a callable that takes a prompt and returns a response.
+
     NOTE: If a candidate is being evaluated against multiple prompts (i.e. multiple PromptTest
     objects) in the same Eval, the assumption those prompts are testing a conversation (i.e.
     sequentially building on each other). This means that the candidate should be able to
@@ -148,7 +150,7 @@ class Candidate(ABC):
 
         Reques
         """
-        return self.from_dict(deepcopy(self.to_dict()))
+        return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
 @Candidate.register(CandidateType.CALLABLE_NO_SERIALIZE)

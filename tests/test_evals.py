@@ -1,4 +1,5 @@
 """Tests for the evals module."""
+from copy import deepcopy
 import os
 from textwrap import dedent
 import pytest
@@ -138,6 +139,19 @@ def test__Eval__creation():  # noqa
         ],
     }
     assert Eval(**eval_dict) == eval_obj
+
+def test__eval_obj__clone(fake_eval_8f9fbf37):  #noqa
+    config = deepcopy(fake_eval_8f9fbf37)
+    eval_obj = Eval(**config)
+    eval_cloned = eval_obj.clone()
+    assert eval_obj == eval_cloned
+    assert eval_obj.to_dict() == eval_cloned.to_dict()
+    # test-sequence (i.e. PromptTest objects) should be the same prompt tests but different objects
+    assert eval_obj.test_sequence == eval_cloned.test_sequence
+    assert eval_obj.test_sequence[0] == eval_cloned.test_sequence[0]
+    assert eval_obj.test_sequence[0] is not eval_cloned.test_sequence[0]
+    assert eval_obj.test_sequence[1] == eval_cloned.test_sequence[1]
+    assert eval_obj.test_sequence[1] is not eval_cloned.test_sequence[1]
 
 def test__Eval__call__result__to_from_dict():  # noqa
     """
@@ -386,23 +400,31 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
 
     @Candidate.register('MockCandidate')
     class MockCandidate(Candidate):
-        def __init__(self, responses: list[str], uuid: str, metadata: dict | None = None):
+        def __init__(self, responses: dict, uuid: str, metadata: dict | None = None):
             super().__init__(uuid=uuid, metadata=metadata)
             self.responses = responses.copy()
 
-        def __call__(self, _: str) -> str:
-            return self.responses.pop(0)
+        def __call__(self, prompt: str) -> str:
+            return self.responses[prompt]
+
+        def to_dict(self) -> dict:
+            value = super().to_dict()
+            value['responses'] = self.responses
+            return value
+
+    response_subtract_0 = 'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```'  # noqa
+    response_subtract_1 = 'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```'  # noqa
+    response_sum_0 = 'This is the response.\n\n```\ndef sum_two_numbers(a, b):\n    return a + b\n```'  # noqa
+    responses_lookup = {
+        fake_eval_subtract_two_numbers['test_sequence'][0]['prompt']: response_subtract_0,
+        fake_eval_subtract_two_numbers['test_sequence'][1]['prompt']: response_subtract_1,
+        fake_eval_sum_two_numbers['test_sequence'][0]['prompt']: response_sum_0,
+    }
 
     candidate_1_dict = {
         'uuid': 'candidate_1',
         'candidate_type': 'MockCandidate',
-        # the assumed order of responses is two responses for the subtract eval, then response
-        # for the sum eval
-        'responses': [
-            'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```',
-            'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```',  # noqa
-            'This is the response.\n\n```\ndef sum_two_numbers(a, b):\n    return a + b\n```',
-        ],
+        'responses': responses_lookup,
     }
     candidate_2_dict = candidate_1_dict.copy()
     candidate_2_dict['uuid'] = 'candidate_2'
@@ -432,6 +454,14 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert len(results) == 2
     assert len(results[0]) == 2
     assert len(results[1]) == 2
+    # The underlying candidate objects should have the same values but should be different objects
+    # because each candidate object (against a specific eval) is responsible for storing its own
+    # history/conversation and the history should be different for each eval.
+    assert results[0][0].candidate_obj == results[0][1].candidate_obj
+    assert results[0][0].candidate_obj is not results[0][1].candidate_obj
+    assert results[1][0].candidate_obj == results[1][1].candidate_obj
+    assert results[1][0].candidate_obj is not results[1][1].candidate_obj
+
     # The first list should contain the results for candidate 1 (subtract eval, sum eval)
     assert results[0][0].eval_obj == Eval(**subtract_config)
     assert results[0][0].candidate_obj == Candidate.from_dict(candidate_1_dict)
@@ -445,7 +475,7 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
 
     # candidate 1 - subtract eval
     cand_1_results = results[0][0]
-    assert cand_1_results.responses == candidate_1_dict['responses'][:2]
+    assert cand_1_results.responses == [response_subtract_0, response_subtract_1]
     assert cand_1_results.num_code_blocks == 2
     assert cand_1_results.num_checks == 5
     assert cand_1_results.num_successful_checks == 4
@@ -453,7 +483,7 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
 
     # candidate 1 - sum eval
     cand_1_results = results[0][1]
-    assert cand_1_results.responses == candidate_1_dict['responses'][2:]
+    assert cand_1_results.responses == [response_sum_0]
     assert cand_1_results.num_code_blocks == 1
     assert cand_1_results.num_checks == 2
     assert cand_1_results.num_successful_checks == 2
@@ -461,7 +491,7 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
 
     # candidate 2 - subtract eval
     cand_2_results = results[1][0]
-    assert cand_2_results.responses == candidate_2_dict['responses'][:2]
+    assert cand_2_results.responses == [response_subtract_0, response_subtract_1]
     assert cand_2_results.num_code_blocks == 2
     assert cand_2_results.num_checks == 5
     assert cand_2_results.num_successful_checks == 4
@@ -469,7 +499,7 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
 
     # candidate 2 - sum eval
     cand_2_results = results[1][1]
-    assert cand_2_results.responses == candidate_2_dict['responses'][2:]
+    assert cand_2_results.responses == [response_sum_0]
     assert cand_2_results.num_code_blocks == 1
     assert cand_2_results.num_checks == 2
     assert cand_2_results.num_successful_checks == 2

@@ -60,7 +60,7 @@ class AsyncEvaluator:
 
         eval_results = [r['eval_obj']._execute_eval() for r in results]
         for er in eval_results:
-            print(eval_result_summarizer(er))
+            pprint(eval_result_summarizer(er))
 
 
 def main():
@@ -70,7 +70,7 @@ def main():
     )
 
     start = time.time()
-    evaluator.run_evaluation(async_mode=False)  # Set async_mode to False for synchronous execution
+    evaluator.run_evaluation(async_mode=True)  # Set async_mode to False for synchronous execution
     end = time.time()
     print(f"Total time: {end - start}")
 
