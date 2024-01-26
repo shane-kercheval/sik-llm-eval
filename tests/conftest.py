@@ -324,7 +324,7 @@ def fake_eval_sum_two_numbers_code_blocks_run() -> dict:
 @pytest.fixture()
 def openai_candidate_template() -> dict:
     """Returns the yaml template for an OpenAI."""
-    with open('evals/templates/candidate_openai.yaml') as f:
+    with open('evals/templates/candidate_openai_3.5_1106.yaml') as f:
         return yaml.safe_load(f)
 
 

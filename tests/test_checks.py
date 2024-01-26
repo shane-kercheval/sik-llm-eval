@@ -792,9 +792,9 @@ def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
     assert result.metadata['num_code_blocks_successful'] == 0
     assert result.metadata['code_blocks'] == []
     assert result.metadata['code_block_errors'] == []
-    assert result.metadata['function_check_results'] == []
-    assert result.metadata['num_function_checks'] == 0
-    assert result.metadata['num_function_checks_successful'] == 0
+    assert result.metadata['code_block_check_results'] == []
+    assert result.metadata['num_code_block_checks'] == 0
+    assert result.metadata['num_code_block_checks_successful'] == 0
 
     result = check(code_blocks=None)
     assert result.value == 0
@@ -805,9 +805,9 @@ def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
     assert result.metadata['num_code_blocks_successful'] == 0
     assert result.metadata['code_blocks'] == []
     assert result.metadata['code_block_errors'] == []
-    assert result.metadata['function_check_results'] == []
-    assert result.metadata['num_function_checks'] == 0
-    assert result.metadata['num_function_checks_successful'] == 0
+    assert result.metadata['code_block_check_results'] == []
+    assert result.metadata['num_code_block_checks'] == 0
+    assert result.metadata['num_code_block_checks_successful'] == 0
 
 def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
     check = PythonCodeBlocksRun()
@@ -832,9 +832,9 @@ def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
     assert result.metadata['code_block_errors'][0] is None
     assert isinstance(result.metadata['code_block_errors'][1], AssertionError)
     assert result.metadata['code_block_errors'][2] is None
-    assert result.metadata['function_check_results'] == []
-    assert result.metadata['num_function_checks'] == 0
-    assert result.metadata['num_function_checks_successful'] == 0
+    assert result.metadata['code_block_check_results'] == []
+    assert result.metadata['num_code_block_checks'] == 0
+    assert result.metadata['num_code_block_checks_successful'] == 0
 
 def test__PythonCodeBlocksRun__with_setup():  # noqa
     check = PythonCodeBlocksRun(
@@ -860,9 +860,9 @@ def test__PythonCodeBlocksRun__with_setup():  # noqa
     assert result.metadata['code_blocks'] == code_blocks
     assert isinstance(result.metadata['code_block_errors'][0], AssertionError)
     assert result.metadata['code_block_errors'][1] is None
-    assert result.metadata['function_check_results'] == []
-    assert result.metadata['num_function_checks'] == 0
-    assert result.metadata['num_function_checks_successful'] == 0
+    assert result.metadata['code_block_check_results'] == []
+    assert result.metadata['num_code_block_checks'] == 0
+    assert result.metadata['num_code_block_checks_successful'] == 0
     assert Check.from_dict(check.to_dict()) == check
     assert CheckResult.from_dict(result.to_dict()) == result
 
@@ -892,11 +892,11 @@ def test__PythonCodeBlocksRun__with_functions():  # noqa
     ]
     expected_num_code_blocks = 2
     expected_successful_code_blocks = 1
-    expected_function_checks = len(functions)
-    expected_successful_function_checks = 2
-    expected_total_checks = expected_num_code_blocks + expected_function_checks
+    expected_code_block_checks = len(functions)
+    expected_successful_code_block_checks = 2
+    expected_total_checks = expected_num_code_blocks + expected_code_block_checks
     expected_successful_checks = expected_successful_code_blocks + \
-        expected_successful_function_checks
+        expected_successful_code_block_checks
     threshold = (expected_successful_checks/expected_total_checks) + 0.001
     check = PythonCodeBlocksRun(
         success_threshold=threshold,
@@ -922,14 +922,14 @@ def test__PythonCodeBlocksRun__with_functions():  # noqa
     assert result.metadata['code_blocks'] == code_blocks
     assert isinstance(result.metadata['code_block_errors'][0], AssertionError)
     assert result.metadata['code_block_errors'][1] is None
-    assert result.metadata['function_check_results'] == [True, True, False, False, False]
-    assert result.metadata['num_function_checks'] == expected_function_checks
-    assert result.metadata['num_function_checks_successful'] == expected_successful_function_checks
-    assert result.metadata['function_check_errors'][0] is None
-    assert result.metadata['function_check_errors'][1] is None
-    assert isinstance(result.metadata['function_check_errors'][2], NameError)
-    assert result.metadata['function_check_errors'][3] is None
-    assert isinstance(result.metadata['function_check_errors'][4], ValueError)
+    assert result.metadata['code_block_check_results'] == [True, True, False, False, False]
+    assert result.metadata['num_code_block_checks'] == expected_code_block_checks
+    assert result.metadata['num_code_block_checks_successful'] == expected_successful_code_block_checks  # noqa
+    assert result.metadata['code_block_check_errors'][0] is None
+    assert result.metadata['code_block_check_errors'][1] is None
+    assert isinstance(result.metadata['code_block_check_errors'][2], NameError)
+    assert result.metadata['code_block_check_errors'][3] is None
+    assert isinstance(result.metadata['code_block_check_errors'][4], ValueError)
 
 def test__PythonCodeBlocksRun__failing_code_setup_raises_error():  # noqa
     """
@@ -955,11 +955,11 @@ def test__PythonCodeBlocksRun__with_functions__failing_function_does_not_raise_e
         ],
     )
     result = check(code_blocks=['1 == 1'])
-    assert result.metadata['num_function_checks'] == 1
-    assert result.metadata['num_function_checks_successful'] == 0
-    assert len(result.metadata['function_check_errors']) == 1
-    assert isinstance(result.metadata['function_check_errors'][0], ValueError)
-    assert result.metadata['function_check_results'] == [False]
+    assert result.metadata['num_code_block_checks'] == 1
+    assert result.metadata['num_code_block_checks_successful'] == 0
+    assert len(result.metadata['code_block_check_errors']) == 1
+    assert isinstance(result.metadata['code_block_check_errors'][0], ValueError)
+    assert result.metadata['code_block_check_results'] == [False]
 
     assert result.value == 0.5
     assert not result.success

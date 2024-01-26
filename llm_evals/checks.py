@@ -404,8 +404,8 @@ class PythonCodeBlocksRun(Check):
         function_errors = []
 
         num_code_blocks = len(code_blocks)
-        num_function_checks = 0
-        num_function_checks_successful = 0
+        num_code_block_checks = 0
+        num_code_block_checks_successful = 0
 
         if code_blocks:
             code_blocks = code_blocks.copy()
@@ -427,7 +427,7 @@ class PythonCodeBlocksRun(Check):
             # return boolean success/fail)
             functions = self.functions or []
             for func in functions:
-                num_function_checks += 1
+                num_code_block_checks += 1
                 # we need to reset `__result__` to False in case one of the functions fails to
                 # execute (which means `__result__` will not be set) in order to avoid grabbing
                 # the result from the previous function check
@@ -461,14 +461,14 @@ class PythonCodeBlocksRun(Check):
                 assert isinstance(func_result, bool), \
                     f"Function {func_name} must return a boolean value"
                 if func_result:
-                    num_function_checks_successful += 1
+                    num_code_block_checks_successful += 1
                 function_results.append(func_result)
 
         num_code_blocks_successful = len([e for e in code_block_errors if e is None])
 
         if num_code_blocks > 0:
-            score = (num_code_blocks_successful + num_function_checks_successful) \
-                / (num_code_blocks + num_function_checks)
+            score = (num_code_blocks_successful + num_code_block_checks_successful) \
+                / (num_code_blocks + num_code_block_checks)
         else:
             score = 0.0
         return ScoreResult(
@@ -480,10 +480,10 @@ class PythonCodeBlocksRun(Check):
                 'num_code_blocks_successful': num_code_blocks_successful,
                 'code_blocks': code_blocks,
                 'code_block_errors': code_block_errors,
-                'num_function_checks': num_function_checks,
-                'num_function_checks_successful': num_function_checks_successful,
-                'function_check_results': function_results,
-                'function_check_errors': function_errors,
+                'num_code_block_checks': num_code_block_checks,
+                'num_code_block_checks_successful': num_code_block_checks_successful,
+                'code_block_check_results': function_results,
+                'code_block_check_errors': function_errors,
             },
         )
 
