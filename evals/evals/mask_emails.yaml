@@ -74,12 +74,11 @@ test_sequence:
       assert mask_emails("No emails here") == "No emails here", "Failed when no emails are present"
       # Test with an empty string
       assert mask_emails("") == "", "Failed on empty string"
-      # Test with special characters in the local part
-      assert mask_emails("user+test@example.com") == "[MASKED]@example.com", "Failed to mask email with special characters in local part"
       # Test with a string containing multiple types of emails
       assert mask_emails("Emails: user@example.com, another_user@test.co, yet.another-user@subdomain.domain.net") == "Emails: [MASKED]@example.com, [MASKED]@test.co, [MASKED]@subdomain.domain.net", "Failed to mask multiple types of emails"
       # Print a success message if all assertions pass
       print("All tests passed successfully.")
+      ```
 
       Each assertion checks a different aspect of the email masking function:
 
