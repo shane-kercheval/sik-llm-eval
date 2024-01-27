@@ -477,6 +477,11 @@ class EvalHarness:
     An EvalHarness provides a interface for evaluating a list of Evals against a list of
     Candidates.
 
+    Candidates must be registered so that we can clone them. This is necessary because we need to
+    clone the Candidate for each Eval so that we can run each Eval against a fresh Candidate
+    (i.e. if the Candidate maintains state/history between prompts, we don't want to reuse the
+    same candidate for each eval).
+
     The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
     collection of EvalResults.
 
@@ -580,7 +585,7 @@ class EvalHarness:
         for file_path in glob.glob(path):
             self.add_eval_from_yaml(file_path)
 
-    def add_candidate(self, candidate: Candidate | Callable | dict) -> None:
+    def add_candidate(self, candidate: Candidate | dict) -> None:
         """
         Adds a Candidate object. This method can be called multiple times to add additional
         Candidate objects.
