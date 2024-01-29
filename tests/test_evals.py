@@ -394,23 +394,36 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert EvalResult(**result.to_dict()).to_dict() == result.to_dict()
     assert eval_config == fake_eval_sum_two_numbers  # make sure eval_config wasn't modified
 
+
+@Candidate.register('MockCandidate')
+class MockCandidate(Candidate):
+    """
+    This class needs to be outside of the test function so that we can test multi-processing, which
+    requires that the class be picklable, which requires that it be defined at the top level of the
+    module.
+
+    This candidate takes a dictionary of prompts (keys) and responses (values) and returns the
+    response for the given prompt.
+    """  # noqa: D404
+
+    def __init__(self, responses: dict, uuid: str, metadata: dict | None = None):
+        super().__init__(uuid=uuid, metadata=metadata)
+        self.responses = responses.copy()
+
+    def __call__(self, prompt: str) -> str:
+        """Returns the response for the given prompt."""
+        return self.responses[prompt]
+
+    def to_dict(self) -> dict:
+        """Need to add `responses` to enable proper to_dict values."""
+        value = super().to_dict()
+        value['responses'] = self.responses
+        return value
+
+
 def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
     sum_config = fake_eval_sum_two_numbers.copy()
-
-    @Candidate.register('MockCandidate')
-    class MockCandidate(Candidate):
-        def __init__(self, responses: dict, uuid: str, metadata: dict | None = None):
-            super().__init__(uuid=uuid, metadata=metadata)
-            self.responses = responses.copy()
-
-        def __call__(self, prompt: str) -> str:
-            return self.responses[prompt]
-
-        def to_dict(self) -> dict:
-            value = super().to_dict()
-            value['responses'] = self.responses
-            return value
 
     response_subtract_0 = 'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```'  # noqa
     response_subtract_1 = 'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```'  # noqa
@@ -472,6 +485,12 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert results[1][0].candidate_obj == Candidate.from_dict(candidate_2_dict)
     assert results[1][1].eval_obj == Eval(**sum_config)
     assert results[1][1].candidate_obj == Candidate.from_dict(candidate_2_dict)
+
+    # eval objects across candidates should have same values (same eval) but different objects
+    assert results[0][0].eval_obj == results[1][0].eval_obj
+    assert results[0][0].eval_obj is not results[1][0].eval_obj
+    assert results[0][1].eval_obj == results[1][1].eval_obj
+    assert results[0][1].eval_obj is not results[1][1].eval_obj
 
     # candidate 1 - subtract eval
     cand_1_results = results[0][0]
