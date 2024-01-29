@@ -1,4 +1,5 @@
 """Classes and functions to eval LLMs."""
+from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from textwrap import dedent, indent
 import time
@@ -632,6 +633,23 @@ class EvalHarness:
         for file_path in glob.glob(path):
             self.add_candidate_from_yaml(file_path)
 
+    @staticmethod
+    def _run_evals(candidate: Candidate, evals: list[Eval]) -> list[EvalResult]:
+        candidate_evals = []
+        # generate responses
+        for eval_obj in evals:
+            # ensure we don't mutate the original Eval object or reuse the same Candidate
+            # (i.e. the same underlying model)
+            cloned_eval = eval_obj.clone()
+            candidate_evals.append(cloned_eval)
+            cloned_eval._generate_responses(candidate.clone())
+        # TODO: run after async
+        # execute checks
+        candidate_results = []
+        for eval_obj in candidate_evals:
+            candidate_results.append(eval_obj._execute_checks())
+        return candidate_results
+
     def __call__(self) -> list[list[EvalResult]]:
         """
         Evaluates the Evals against the Candidates.
@@ -659,6 +677,10 @@ class EvalHarness:
                 ],
             ]
         """
+        eval_list = [self.evals for _ in self.candidates]
+        with ProcessPoolExecutor(max_workers=None) as executor:
+            return list(executor.map(EvalHarness._run_evals, self.candidates, eval_list))
+
         # return [
         #     [eval_obj(candidate) for eval_obj in self.evals]
         #     for candidate in self.candidates
@@ -666,23 +688,25 @@ class EvalHarness:
         # clone objects (the candidate in particular) so that each eval is run against a fresh
         # candidate (i.e. if the candidate maintains state/history between prompts, we don't want
         # to reuse the same candidate for each eval)
-        # generate responses
-        eval_objs: list[list[Eval]] = []
-        for candidate in self.candidates:
-            candidate_evals = []
-            for eval_obj in self.evals:
-                # ensure we don't mutate the original Eval object or reuse the same Candidate
-                # (i.e. the same underlying model)
-                cloned_eval = eval_obj.clone()
-                candidate_evals.append(cloned_eval)
-                cloned_eval._generate_responses(candidate.clone())
-            eval_objs.append(candidate_evals)
 
-        # execute checks
-        results: list[list[EvalResult]] = []
-        for candidate_evals in eval_objs:
-            candidate_results = []
-            for eval_obj in candidate_evals:
-                candidate_results.append(eval_obj._execute_checks())
-            results.append(candidate_results)
-        return results
+
+        # results: list[list[EvalResult]] = []
+        # # eval_objs: list[list[Eval]] = []
+        # for candidate in self.candidates:
+        #     # TODO: run each candidate on a different CPU
+        #     candidate_evals = []
+        #     # generate responses
+        #     # TODO: run async
+        #     for eval_obj in self.evals:
+        #         # ensure we don't mutate the original Eval object or reuse the same Candidate
+        #         # (i.e. the same underlying model)
+        #         cloned_eval = eval_obj.clone()
+        #         candidate_evals.append(cloned_eval)
+        #         cloned_eval._generate_responses(candidate.clone())
+        #     # TODO: run after async
+        #     # execute checks
+        #     candidate_results = []
+        #     for eval_obj in candidate_evals:
+        #         candidate_results.append(eval_obj._execute_checks())
+        #     results.append(candidate_results)
+        # return results
