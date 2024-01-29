@@ -166,7 +166,7 @@ class OpenAIChat(ChatModel):
             system_message: str = 'You are a helpful AI assistant.',
             streaming_callback: Callable[[StreamingEvent], None] | None = None,
             memory_manager: MemoryManager | None = None,
-            timeout: int = 30,
+            timeout: int = 90,
             seed: int | None = None,
             **model_kwargs: dict,
             ) -> None:
@@ -196,23 +196,11 @@ class OpenAIChat(ChatModel):
                 }
                 ```
         """  # noqa
-        def cost_calculator(input_tokens: int, response_tokens: int) -> float:
-            model_costs = MODEL_COST_PER_TOKEN[self.model_name]
-            return (input_tokens * model_costs['input']) + \
-                (response_tokens * model_costs['output'])
-
-        def token_calculator(messages: str | list[dict]) -> int:
-            if isinstance(messages, str):
-                return num_tokens(model_name=model_name, value=messages)
-            if isinstance(messages, list):
-                return num_tokens_from_messages(model_name=model_name, messages=messages)
-            raise NotImplementedError(f"""token_calculator() is not implemented for messages of type {type(messages)}.""")  # noqa
-
         super().__init__(
             system_message=system_message,
             message_formatter=openai_message_formatter,
-            token_calculator=token_calculator,
-            cost_calculator=cost_calculator,
+            token_calculator=self._token_calc,
+            cost_calculator=self._cost_calc,
             memory_manager=memory_manager,
         )
         self.model_name = model_name
@@ -220,6 +208,22 @@ class OpenAIChat(ChatModel):
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed
+
+    def _cost_calc(self, input_tokens: int, response_tokens: int) -> float:
+        """
+        _cost_calc needs to be an instance method rather than e.g. defining inside __init__ so
+        it is picklable and can be used with multiprocessing.
+        """
+        model_costs = MODEL_COST_PER_TOKEN[self.model_name]  # TODO fixe
+        return (input_tokens * model_costs['input']) + \
+            (response_tokens * model_costs['output'])
+
+    def _token_calc(self, messages: str | list[dict]) -> int:
+        if isinstance(messages, str):
+            return num_tokens(model_name=self.model_name, value=messages)
+        if isinstance(messages, list):
+            return num_tokens_from_messages(model_name=self.model_name, messages=messages)
+        raise NotImplementedError(f"""token_calculator() is not implemented for messages of type {type(messages)}.""")  # noqa
 
     def _run(self, messages: list[dict]) -> tuple[str, dict]:
         """

@@ -1,4 +1,5 @@
 """Classes and functions to eval LLMs."""
+import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from textwrap import dedent, indent
@@ -209,10 +210,12 @@ class Eval(DictionaryEqualsMixin):
     def _generate_responses(self, candidate: Candidate | Callable | dict) -> None:
         """TODO: this is a seperate call from _execute_eval so we can async/parallelize."""
         self._candidate = self._to_candidate(candidate)
+        print(f'generating response for {self._candidate.uuid} and {self.uuid}')
         start = time.time()
         # time.sleep(2)
         self._responses = [self._candidate(p.prompt) for p in self.test_sequence]
         end = time.time()
+        print(f'finished generating response for {self._candidate.uuid} and {self.uuid}')
         self._duration = end - start
 
     def _execute_checks(self) -> EvalResult:
@@ -634,15 +637,30 @@ class EvalHarness:
             self.add_candidate_from_yaml(file_path)
 
     @staticmethod
+    def _generate_response(eval_obj: Eval, candidate: Candidate) -> Eval:
+        eval_obj = eval_obj.clone()
+        eval_obj._generate_responses(candidate.clone())
+        return eval_obj
+
+    @staticmethod
     def _run_evals(candidate: Candidate, evals: list[Eval]) -> list[EvalResult]:
         candidate_evals = []
-        # generate responses
-        for eval_obj in evals:
-            # ensure we don't mutate the original Eval object or reuse the same Candidate
-            # (i.e. the same underlying model)
-            cloned_eval = eval_obj.clone()
-            candidate_evals.append(cloned_eval)
-            cloned_eval._generate_responses(candidate.clone())
+        loop = asyncio.get_event_loop()# if async_mode else None
+        tasks = [
+            loop.run_in_executor(
+                None,
+                EvalHarness._generate_response,
+                eval_obj,
+                candidate,
+            )
+            for eval_obj in evals]
+        candidate_evals = list(loop.run_until_complete(asyncio.gather(*tasks)))
+        # for eval_obj in evals:
+        #     # ensure we don't mutate the original Eval object or reuse the same Candidate
+        #     # (i.e. the same underlying model)
+        #     cloned_eval = eval_obj.clone()
+        #     candidate_evals.append(cloned_eval)
+        #     cloned_eval._generate_responses(candidate.clone())
         # TODO: run after async
         # execute checks
         candidate_results = []
@@ -680,7 +698,10 @@ class EvalHarness:
         eval_list = [self.evals for _ in self.candidates]
         with ProcessPoolExecutor(max_workers=None) as executor:
             return list(executor.map(EvalHarness._run_evals, self.candidates, eval_list))
-
+        # results = []
+        # for candidate in self.candidates:
+        #     results.append(EvalHarness._run_evals(candidate, self.evals))
+        # return results
         # return [
         #     [eval_obj(candidate) for eval_obj in self.evals]
         #     for candidate in self.candidates
