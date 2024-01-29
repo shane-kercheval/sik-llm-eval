@@ -2,6 +2,7 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
+import os
 from textwrap import dedent, indent
 import time
 from typing import Callable, ForwardRef
@@ -270,7 +271,8 @@ class Eval(DictionaryEqualsMixin):
         # this is bad practice but we need to do this to support calling _generate_responses async
         # and then executing the checks afterwards
         results = self._execute_checks()
-        # these should be reset so we don't accidentally use them again; they should not be accessed
+        # these should be reset so we don't accidentally use them again; they should not be
+        # accessed
         # directly
         self._candidate = None
         self._responses = None
@@ -302,6 +304,7 @@ class Eval(DictionaryEqualsMixin):
         Reques
         """
         return Eval(**deepcopy(self.to_dict()))
+
 
 class EvalResult(DictionaryEqualsMixin):
     """
@@ -508,7 +511,9 @@ class EvalHarness:
     def __init__(
             self,
             evals: list[Eval] | list[dict] | None = None,
-            candidates: list[Candidate | Callable | dict] | None = None) -> None:
+            candidates: list[Candidate | Callable | dict] | None = None,
+            num_cpus: int | None = None,
+            run_async: bool = False) -> None:
         """
         Initializes the EvalHarness. The user can either pass in Eval and Candidate objects in the
         constructor or call
@@ -524,6 +529,9 @@ class EvalHarness:
         eval_objects = []
         candidates = candidates or []
         candidate_objects = []
+
+        self.num_cpus = num_cpus
+        self.run_async = run_async
 
         for eval_obj in evals:
             if isinstance(eval_obj, dict):
@@ -589,7 +597,7 @@ class EvalHarness:
         for file_path in glob.glob(path):
             self.add_eval_from_yaml(file_path)
 
-    def add_candidate(self, candidate: Candidate | dict) -> None:
+    def add_candidate(self, candidate: dict) -> None:
         """
         Adds a Candidate object. This method can be called multiple times to add additional
         Candidate objects.
@@ -643,18 +651,18 @@ class EvalHarness:
         return eval_obj
 
     @staticmethod
-    def _run_evals(candidate: Candidate, evals: list[Eval]) -> list[EvalResult]:
+    def _run_evals(candidate: Candidate, evals: list[Eval], run_async: bool) -> list[EvalResult]:
         candidate_evals = []
-        loop = asyncio.get_event_loop()# if async_mode else None
-        tasks = [
-            loop.run_in_executor(
-                None,
-                EvalHarness._generate_response,
-                eval_obj,
-                candidate,
-            )
-            for eval_obj in evals]
-        candidate_evals = list(loop.run_until_complete(asyncio.gather(*tasks)))
+        if run_async:
+            loop = asyncio.get_event_loop()# if async_mode else None
+            tasks = [
+                loop.run_in_executor(None, EvalHarness._generate_response, eval_obj, candidate)
+                for eval_obj in evals
+            ]
+            candidate_evals = list(loop.run_until_complete(asyncio.gather(*tasks)))
+        else:
+            for eval_obj in evals:
+                candidate_evals.append(EvalHarness._generate_response(eval_obj, candidate))
         # for eval_obj in evals:
         #     # ensure we don't mutate the original Eval object or reuse the same Candidate
         #     # (i.e. the same underlying model)
@@ -695,17 +703,35 @@ class EvalHarness:
                 ],
             ]
         """
+        num_cpus = self.num_cpus
+        if num_cpus == 1:
+            return [
+                EvalHarness._run_evals(candidate, self.evals, self.run_async)
+                for candidate in self.candidates
+            ]
+        if num_cpus is None or num_cpus < 1:
+            num_cpus = os.cpu_count()
+        print(f'running on {num_cpus} cpus')
         eval_list = [self.evals for _ in self.candidates]
-        with ProcessPoolExecutor(max_workers=None) as executor:
-            return list(executor.map(EvalHarness._run_evals, self.candidates, eval_list))
-        # results = []
-        # for candidate in self.candidates:
-        #     results.append(EvalHarness._run_evals(candidate, self.evals))
-        # return results
+        run_asyncs = [self.run_async for _ in self.candidates]
+        with ProcessPoolExecutor(max_workers=num_cpus) as executor:
+            return list(executor.map(
+                EvalHarness._run_evals,
+                self.candidates,
+                eval_list,
+                run_asyncs,
+            ))
+
+
         # return [
         #     [eval_obj(candidate) for eval_obj in self.evals]
         #     for candidate in self.candidates
         # ]
+
+
+
+
+
         # clone objects (the candidate in particular) so that each eval is run against a fresh
         # candidate (i.e. if the candidate maintains state/history between prompts, we don't want
         # to reuse the same candidate for each eval)

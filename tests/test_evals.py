@@ -394,7 +394,6 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert EvalResult(**result.to_dict()).to_dict() == result.to_dict()
     assert eval_config == fake_eval_sum_two_numbers  # make sure eval_config wasn't modified
 
-
 @Candidate.register('MockCandidate')
 class MockCandidate(Candidate):
     """
@@ -419,7 +418,6 @@ class MockCandidate(Candidate):
         value = super().to_dict()
         value['responses'] = self.responses
         return value
-
 
 def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
