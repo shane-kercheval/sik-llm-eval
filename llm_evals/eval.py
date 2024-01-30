@@ -18,6 +18,7 @@ from llm_evals.utilities.internal_utilities import (
     extract_code_blocks,
     extract_valid_parameters,
     get_callable_info,
+    has_property,
 )
 
 Eval = ForwardRef('Eval')
@@ -211,12 +212,12 @@ class Eval(DictionaryEqualsMixin):
     def _generate_responses(self, candidate: Candidate | Callable | dict) -> None:
         """TODO: this is a seperate call from _execute_eval so we can async/parallelize."""
         self._candidate = self._to_candidate(candidate)
-        print(f'generating response for {self._candidate.uuid} and {self.uuid}')
+        # print(f'generating response for {self._candidate.uuid} and {self.uuid}')
         start = time.time()
         # time.sleep(2)
         self._responses = [self._candidate(p.prompt) for p in self.test_sequence]
         end = time.time()
-        print(f'finished generating response for {self._candidate.uuid} and {self.uuid}')
+        # print(f'finished generating response for {self._candidate.uuid} and {self.uuid}')
         self._duration = end - start
 
     def _execute_checks(self) -> EvalResult:
@@ -244,9 +245,10 @@ class Eval(DictionaryEqualsMixin):
             eval_obj=self,
             candidate_obj=self._candidate,
             responses=self._responses,
-            results=results,
             total_time_seconds=self._duration,
             num_code_blocks=len(code_blocks),
+            cost = self._candidate.cost if has_property(self._candidate, 'cost') else None,
+            results=results,
         )
 
     def __call__(self, candidate: Candidate | Callable | dict) -> EvalResult:
@@ -322,6 +324,7 @@ class EvalResult(DictionaryEqualsMixin):
         responses: list[str],
         total_time_seconds: float,
         num_code_blocks: int,
+        cost : float | None,
         results: list[list[CheckResult | dict]]) -> None:
         """
         Initializes the EvalResult.
@@ -339,6 +342,9 @@ class EvalResult(DictionaryEqualsMixin):
                 The total time (in seconds) it took to run the Eval.
             num_code_blocks:
                 The total number of code blocks generated across all responses.
+            cost:
+                The cost associated with the candidate. This is optional and only applicable to
+                candidates that have a `cost` property.
             results:
                 A list of lists of CheckResult objects.
         """
@@ -358,6 +364,7 @@ class EvalResult(DictionaryEqualsMixin):
             raise ValueError("Total time must be greater than zero")
         self.total_time_seconds = total_time_seconds
         self.num_code_blocks = num_code_blocks
+        self.cost = cost
         results = results or []
         results_created = []
         # results is a list of lists of CheckResults (each list corresponds to a prompt/test)
@@ -418,9 +425,10 @@ class EvalResult(DictionaryEqualsMixin):
         return [r for result in self.results for r in result]
 
     def __str__(self) -> str:
+        cost_str = f'\nCost:                      ${self.cost}\n' if self.cost else ''
         return dedent(f"""
         EvalResult:
-            # of Prompts Tested:        {len(self.eval_obj.test_sequence)}
+            # of Prompts Tested:        {len(self.eval_obj.test_sequence)}{cost_str}
             Total Response Time:        {self.total_time_seconds:0.1f} seconds
             # of Response Characters:   {self.response_characters:,}
             # of Code Blocks Generated: {self.num_code_blocks}
@@ -438,6 +446,7 @@ class EvalResult(DictionaryEqualsMixin):
             'responses': self.responses,
             'total_time_seconds': self.total_time_seconds,
             'num_code_blocks': self.num_code_blocks,
+            'cost': self.cost,
             'results': [[r.to_dict() for r in result] for result in self.results],
         }
 
@@ -455,8 +464,10 @@ def eval_result_summarizer(result: EvalResult) -> dict:
     if result.candidate_obj.uuid:
         summary['candidate_uuid'] = result.candidate_obj.uuid
     summary['num_prompts'] = len(result.responses)
-    summary['response_characters'] = result.response_characters
+    if result.cost:
+        summary['cost'] = result.cost
     summary['total_time_seconds'] = result.total_time_seconds
+    summary['response_characters'] = result.response_characters
     summary['characters_per_second'] = result.characters_per_second
     summary['num_checks'] = result.num_checks
     summary['num_successful_checks'] = result.num_successful_checks
@@ -670,7 +681,6 @@ class EvalHarness:
         """TODO document."""
         eval_batch_size = len(evals) if async_batch_size is None else async_batch_size
         assert eval_batch_size >= 1
-        print(eval_batch_size)
         results = []
         for i in range(0, len(evals), eval_batch_size):
             eval_batch = evals[i:i + eval_batch_size]
@@ -733,7 +743,6 @@ class EvalHarness:
             ]
         if num_cpus is None or num_cpus < 1:
             num_cpus = os.cpu_count()
-        print(f'running on {num_cpus} cpus')
         results = []
         for i in range(0, len(self.candidates), num_cpus):
             candidate_batch = self.candidates[i:i + num_cpus]

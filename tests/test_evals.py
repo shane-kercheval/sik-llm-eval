@@ -197,7 +197,7 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     assert eval_result.prompts == [test.prompt for test in eval_obj.test_sequence]
     assert eval_result.ideal_responses == [test.ideal_response for test in eval_obj.test_sequence]
     assert eval_result.eval_obj.to_dict() == eval_dict
-
+    assert eval_result.cost is None
     assert eval_result.num_checks == 4
     assert eval_result.num_successful_checks == 2
     assert eval_result.perc_successful_checks == 2 / 4
@@ -380,6 +380,9 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert len(result.prompts) == 1
     assert result.prompts[0] == eval_config['test_sequence'][0]['prompt']
     assert len(result.results) == 1
+    assert result.cost == result.candidate_obj.cost
+    assert 'cost' in result.to_dict()
+    assert result.cost == result.to_dict()['cost']
     assert len(result.all_checks_results) == 2
     assert result.all_checks_results[0].success
     assert result.all_checks_results[0].metadata['check_type'] == CheckType.CONTAINS.name
@@ -534,7 +537,6 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
 
-
 def callback(x: EvalResult) -> None:
     """
     Test the callback function by saving the result to a yaml file in the 'test/temp'
@@ -544,7 +546,6 @@ def callback(x: EvalResult) -> None:
     eval_id = x.eval_obj.uuid
     with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
         yaml.dump(x.to_dict(), f, default_flow_style=False)
-
 
 def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
