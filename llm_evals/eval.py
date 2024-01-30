@@ -513,7 +513,7 @@ class EvalHarness:
             evals: list[Eval] | list[dict] | None = None,
             candidates: list[Candidate | Callable | dict] | None = None,
             num_cpus: int | None = None,
-            async_batch_size: int | None = 50,
+            async_batch_size: int | None = 50,  # TODO: document None means async = # of evals
             callback: Callable | None = None) -> None:
         """
         Initializes the EvalHarness. The user can either pass in Eval and Candidate objects in the
@@ -647,78 +647,63 @@ class EvalHarness:
             self.add_candidate_from_yaml(file_path)
 
     @staticmethod
-    def _generate_response(eval_obj: Eval, candidate: Candidate) -> Eval:
+    def _generate_response(candidate: Candidate, eval_obj: Eval) -> Eval:
         eval_obj = eval_obj.clone()
         eval_obj._generate_responses(candidate.clone())
         return eval_obj
 
     @staticmethod
-    async def _async_generate_responses(evals, candidate):
+    async def _async_generate_responses(candidate: Candidate, evals: list[Eval]) -> list[Eval]:
         loop = asyncio.get_event_loop()
         tasks = [
-            loop.run_in_executor(None, EvalHarness._generate_response, eval_obj, candidate)
+            loop.run_in_executor(None, EvalHarness._generate_response, candidate, eval_obj)
             for eval_obj in evals
         ]
         return await asyncio.gather(*tasks)
 
     @staticmethod
-    def _run_evals(candidate: Candidate, evals: list[Eval], async_batch_size: int | None = 50, callback=None) -> list[EvalResult]:
-        batch_size = 1 if async_batch_size is None else async_batch_size
-        print(batch_size)
+    def _run_evals(
+        candidate: Candidate,
+        evals: list[Eval],
+        async_batch_size: int | None = 50,
+        callback: Callable | None = None) -> list[EvalResult]:
+        """TODO document."""
+        eval_batch_size = len(evals) if async_batch_size is None else async_batch_size
+        print(eval_batch_size)
         results = []
-        for i in range(0, len(evals), batch_size):
-            eval_batch = evals[i:i + batch_size]
-            if batch_size > 1:
+        for i in range(0, len(evals), eval_batch_size):
+            eval_batch = evals[i:i + eval_batch_size]
+            # generate responses, potentially async
+            if eval_batch_size > 1:
                 loop = asyncio.get_event_loop()
                 responses = loop.run_until_complete(
-                    EvalHarness._async_generate_responses(eval_batch, candidate),
+                    EvalHarness._async_generate_responses(candidate, eval_batch),
                 )
             else:
                 responses = [
-                    EvalHarness._generate_response(eval_obj, candidate)
+                    EvalHarness._generate_response(candidate, eval_obj)
                     for eval_obj in eval_batch
                 ]
-
+            # Run tasks that are heavier on the CPU and shouldn't be async
             for response in responses:
-                eval_result = response._execute_checks()  # Heavy CPU usage part runs synchronously
+                eval_result = response._execute_checks()
                 results.append(eval_result)
                 if callback:
                     callback(eval_result)
-
         return results
-
-    # @staticmethod
-    # def _run_evals(candidate: Candidate, evals: list[Eval], run_async: bool) -> list[EvalResult]:
-    #     candidate_evals = []
-    #     if run_async:
-    #         loop = asyncio.get_event_loop()# if async_mode else None
-    #         tasks = [
-    #             loop.run_in_executor(None, EvalHarness._generate_response, eval_obj, candidate)
-    #             for eval_obj in evals
-    #         ]
-    #         candidate_evals = list(loop.run_until_complete(asyncio.gather(*tasks)))
-    #     else:
-    #         for eval_obj in evals:
-    #             candidate_evals.append(EvalHarness._generate_response(eval_obj, candidate))
-
-    #     candidate_results = []
-    #     for eval_obj in candidate_evals:
-    #         candidate_results.append(eval_obj._execute_checks())
-    #     return candidate_results
 
     def __call__(self) -> list[list[EvalResult]]:
         """
         Evaluates the Evals against the Candidates.
 
-        Returns
-            A list of lists of EvalResults. Each index of the outer list corresponds to a
-            particular candidate (in the order they were added to the EvalHarness). Each
-            index/candidate contains a list of EvalResults (in the order they were added to the
-            EvalHarness).
+        Returns a list of lists of EvalResults. Each index of the outer list corresponds to a
+        particular candidate (in the order they were added to the EvalHarness). Each
+        index/candidate contains a list of EvalResults (in the order they were added to the
+        EvalHarness).
 
-            So if [{candidate_1}, {candidate_2}] were added to the EvalHarness and [{eval_1},
-            {eval_2}, {eval_3}] were added to the EvalHarness, the returned EvalResult object
-            would be in the following order:
+        So if [{candidate_1}, {candidate_2}] were added to the EvalHarness and [{eval_1},
+        {eval_2}, {eval_3}] were added to the EvalHarness, the returned EvalResult object
+        would be in the following order:
 
             [
                 [
@@ -732,6 +717,7 @@ class EvalHarness:
                     {eval_3 result for candidate_2}
                 ],
             ]
+
         """
         num_cpus = self.num_cpus
         if num_cpus == 1:
@@ -742,15 +728,6 @@ class EvalHarness:
         if num_cpus is None or num_cpus < 1:
             num_cpus = os.cpu_count()
         print(f'running on {num_cpus} cpus')
-        # eval_list = [self.evals for _ in self.candidates]
-        # run_asyncs = [self.run_async for _ in self.candidates]
-        # with ProcessPoolExecutor(max_workers=num_cpus) as executor:
-        #     return list(executor.map(
-        #         EvalHarness._run_evals,
-        #         self.candidates,
-        #         eval_list,
-        #         run_asyncs,
-        #     ))
         results = []
         for i in range(0, len(self.candidates), num_cpus):
             candidate_batch = self.candidates[i:i + num_cpus]
@@ -768,39 +745,3 @@ class EvalHarness:
                 results.extend(batch_results)
 
         return results
-
-
-        # return [
-        #     [eval_obj(candidate) for eval_obj in self.evals]
-        #     for candidate in self.candidates
-        # ]
-
-
-
-
-
-        # clone objects (the candidate in particular) so that each eval is run against a fresh
-        # candidate (i.e. if the candidate maintains state/history between prompts, we don't want
-        # to reuse the same candidate for each eval)
-
-
-        # results: list[list[EvalResult]] = []
-        # # eval_objs: list[list[Eval]] = []
-        # for candidate in self.candidates:
-        #     # TODO: run each candidate on a different CPU
-        #     candidate_evals = []
-        #     # generate responses
-        #     # TODO: run async
-        #     for eval_obj in self.evals:
-        #         # ensure we don't mutate the original Eval object or reuse the same Candidate
-        #         # (i.e. the same underlying model)
-        #         cloned_eval = eval_obj.clone()
-        #         candidate_evals.append(cloned_eval)
-        #         cloned_eval._generate_responses(candidate.clone())
-        #     # TODO: run after async
-        #     # execute checks
-        #     candidate_results = []
-        #     for eval_obj in candidate_evals:
-        #         candidate_results.append(eval_obj._execute_checks())
-        #     results.append(candidate_results)
-        # return results
