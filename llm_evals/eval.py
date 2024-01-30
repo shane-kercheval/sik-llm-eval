@@ -513,7 +513,8 @@ class EvalHarness:
             evals: list[Eval] | list[dict] | None = None,
             candidates: list[Candidate | Callable | dict] | None = None,
             num_cpus: int | None = None,
-            run_async: bool = False) -> None:
+            async_batch_size: int | None = 50,
+            callback: Callable | None = None) -> None:
         """
         Initializes the EvalHarness. The user can either pass in Eval and Candidate objects in the
         constructor or call
@@ -531,7 +532,8 @@ class EvalHarness:
         candidate_objects = []
 
         self.num_cpus = num_cpus
-        self.run_async = run_async
+        self.async_batch_size = async_batch_size
+        self.callback = callback
 
         for eval_obj in evals:
             if isinstance(eval_obj, dict):
@@ -660,12 +662,13 @@ class EvalHarness:
         return await asyncio.gather(*tasks)
 
     @staticmethod
-    def _run_evals(candidate: Candidate, evals: list[Eval], run_async: bool, batch_size: int = 10, callback=None) -> list[EvalResult]:
+    def _run_evals(candidate: Candidate, evals: list[Eval], async_batch_size: int | None = 50, callback=None) -> list[EvalResult]:
+        batch_size = 1 if async_batch_size is None else async_batch_size
+        print(batch_size)
         results = []
         for i in range(0, len(evals), batch_size):
             eval_batch = evals[i:i + batch_size]
-
-            if run_async:
+            if batch_size > 1:
                 loop = asyncio.get_event_loop()
                 responses = loop.run_until_complete(
                     EvalHarness._async_generate_responses(eval_batch, candidate),
@@ -733,7 +736,7 @@ class EvalHarness:
         num_cpus = self.num_cpus
         if num_cpus == 1:
             return [
-                EvalHarness._run_evals(candidate, self.evals, self.run_async)
+                EvalHarness._run_evals(candidate, self.evals, self.async_batch_size)
                 for candidate in self.candidates
             ]
         if num_cpus is None or num_cpus < 1:
@@ -752,13 +755,15 @@ class EvalHarness:
         for i in range(0, len(self.candidates), num_cpus):
             candidate_batch = self.candidates[i:i + num_cpus]
             eval_list = [self.evals for _ in candidate_batch]
-            run_asyncs = [self.run_async for _ in candidate_batch]
+            batch_sizes = [self.async_batch_size for _ in candidate_batch]
+            callbacks = [self.callback for _ in candidate_batch]
             with ProcessPoolExecutor(max_workers=num_cpus) as executor:
                 batch_results = list(executor.map(
                     EvalHarness._run_evals,
                     candidate_batch,
                     eval_list,
-                    run_asyncs,
+                    batch_sizes,
+                    callbacks,
                 ))
                 results.extend(batch_results)
 
