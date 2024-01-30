@@ -1,8 +1,10 @@
 """Tests for the evals module."""
 from copy import deepcopy
 import os
+import shutil
 from textwrap import dedent
 import pytest
+import yaml
 from llm_evals.candidates import Candidate, CandidateType
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
 from llm_evals.eval import Eval, EvalHarness, EvalResult, PromptTest, eval_result_summarizer
@@ -532,9 +534,29 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
 
+
+def callback(x: EvalResult) -> None:
+    """
+    Test the callback function by saving the result to a yaml file in the 'test/temp'
+    directory. Assume directory already exists.
+    """
+    candidate_id = x.candidate_obj.uuid
+    eval_id = x.eval_obj.uuid
+    with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
+        yaml.dump(x.to_dict(), f, default_flow_style=False)
+
+
 def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
     sum_config = fake_eval_sum_two_numbers.copy()
+
+    dir_path = "tests/__temp__"
+    def recreate_temp_dir() -> None:
+        if os.path.exists(dir_path):
+            shutil.rmtree(dir_path)
+        os.makedirs(dir_path)
+        assert os.path.exists(dir_path)
+    recreate_temp_dir()
 
     response_subtract_0 = 'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```'  # noqa
     response_subtract_1 = 'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```'  # noqa
@@ -565,8 +587,17 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
         num_cpus=200,
         async_batch_size=200,
     )
+    eval_harness_multi_with_callback = EvalHarness(
+        evals=[subtract_config, sum_config],
+        candidates=[candidate_1_dict, candidate_2_dict],
+        num_cpus=200,
+        async_batch_size=200,
+        callback=callback,
+    )
+
     results_sequential = eval_harness_sequential()
     results_async_multiprocessing = eval_harness_async_multiprocessing()
+    results_multi_with_callback = eval_harness_multi_with_callback()
 
     assert len(results_sequential) == 2
     assert len(results_sequential[0]) == 2
@@ -576,31 +607,61 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     assert len(results_async_multiprocessing[0]) == 2
     assert len(results_async_multiprocessing[1]) == 2
 
+    assert len(results_multi_with_callback) == 2
+    assert len(results_multi_with_callback[0]) == 2
+    assert len(results_multi_with_callback[1]) == 2
+
+    # check that the results have been saved and are the same as the results from the sequential
+    eval_ids = [fake_eval_subtract_two_numbers['uuid'], fake_eval_sum_two_numbers['uuid']]
+    candidate_ids = ['candidate_1', 'candidate_2']
+    for eval_index, eval_id in enumerate(eval_ids):
+        for candidate_index, candidate_id in enumerate(candidate_ids):
+            path = f'{dir_path}/result-{candidate_id}-{eval_id}.yaml'
+            assert os.path.exists(path)
+            with open(path) as f:
+                result = yaml.safe_load(f)
+            expected_dict = deepcopy(results_sequential[candidate_index][eval_index].to_dict())
+            del expected_dict['total_time_seconds']
+            del result['total_time_seconds']
+            assert result == expected_dict
+
     # for each result, the dictionary (which contains eval, candidate, and results/checks) should
     # be the same (except for the total_time_seconds)
-    s_dict = results_sequential[0][0].to_dict().copy()
+    s_dict = deepcopy(results_sequential[0][0].to_dict())
     del s_dict['total_time_seconds']
-    am_dict = results_async_multiprocessing[0][0].to_dict().copy()
+    am_dict = deepcopy(results_async_multiprocessing[0][0].to_dict())
     del am_dict['total_time_seconds']
+    c_dict = deepcopy(results_multi_with_callback[0][0].to_dict())
+    del c_dict['total_time_seconds']
     assert s_dict == am_dict
+    assert s_dict == c_dict
 
-    s_dict = results_sequential[0][1].to_dict().copy()
+    s_dict = deepcopy(results_sequential[0][1].to_dict())
     del s_dict['total_time_seconds']
-    am_dict = results_async_multiprocessing[0][1].to_dict().copy()
+    am_dict = deepcopy(results_async_multiprocessing[0][1].to_dict())
     del am_dict['total_time_seconds']
+    c_dict = deepcopy(results_multi_with_callback[0][1].to_dict())
+    del c_dict['total_time_seconds']
     assert s_dict == am_dict
+    assert s_dict == c_dict
 
-    s_dict = results_sequential[1][0].to_dict().copy()
+    s_dict = deepcopy(results_sequential[1][0].to_dict())
     del s_dict['total_time_seconds']
-    am_dict = results_async_multiprocessing[1][0].to_dict().copy()
+    am_dict = deepcopy(results_async_multiprocessing[1][0].to_dict())
     del am_dict['total_time_seconds']
+    c_dict = deepcopy(results_multi_with_callback[1][0].to_dict())
+    del c_dict['total_time_seconds']
     assert s_dict == am_dict
+    assert s_dict == c_dict
 
-    s_dict = results_sequential[1][1].to_dict().copy()
+    s_dict = deepcopy(results_sequential[1][1].to_dict())
     del s_dict['total_time_seconds']
-    am_dict = results_async_multiprocessing[1][1].to_dict().copy()
+    am_dict = deepcopy(results_async_multiprocessing[1][1].to_dict())
     del am_dict['total_time_seconds']
+    c_dict = deepcopy(results_multi_with_callback[1][1].to_dict())
+    del c_dict['total_time_seconds']
     assert s_dict == am_dict
+    assert s_dict == c_dict
 
     # The underlying candidate objects should have the same values but should be different objects
     # because each candidate object (against a specific eval) is responsible for storing its own
@@ -623,3 +684,31 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     assert results_sequential[1][0].eval_obj is not results_async_multiprocessing[1][0].eval_obj
     assert results_sequential[1][1].eval_obj == results_async_multiprocessing[1][1].eval_obj
     assert results_sequential[1][1].eval_obj is not results_async_multiprocessing[1][1].eval_obj
+
+
+    # test the callback when running sequentially since it's a different execution path
+    # there was actually a bug where we weren't passing in the callback
+    eval_harness_sequential_with_callback = EvalHarness(
+        evals=[subtract_config, sum_config],
+        candidates=[candidate_1_dict, candidate_2_dict],
+        num_cpus=1,
+        async_batch_size=1,
+        callback=callback,
+    )
+    recreate_temp_dir()
+    eval_harness_sequential_with_callback()
+    # check that the results have been saved and are the same as the results from the sequential
+    eval_ids = [fake_eval_subtract_two_numbers['uuid'], fake_eval_sum_two_numbers['uuid']]
+    candidate_ids = ['candidate_1', 'candidate_2']
+    for eval_index, eval_id in enumerate(eval_ids):
+        for candidate_index, candidate_id in enumerate(candidate_ids):
+            path = f'{dir_path}/result-{candidate_id}-{eval_id}.yaml'
+            assert os.path.exists(path)
+            with open(path) as f:
+                result = yaml.safe_load(f)
+            expected_dict = deepcopy(results_sequential[candidate_index][eval_index].to_dict())
+            del expected_dict['total_time_seconds']
+            del result['total_time_seconds']
+            assert result == expected_dict
+
+    shutil.rmtree(dir_path)

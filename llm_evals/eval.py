@@ -723,7 +723,12 @@ class EvalHarness:
         num_cpus = self.num_cpus
         if num_cpus == 1:
             return [
-                EvalHarness._run_evals(candidate, self.evals, self.async_batch_size)
+                EvalHarness._run_evals(
+                    candidate=candidate,
+                    evals=self.evals,
+                    async_batch_size=self.async_batch_size,
+                    callback=self.callback,
+                )
                 for candidate in self.candidates
             ]
         if num_cpus is None or num_cpus < 1:
