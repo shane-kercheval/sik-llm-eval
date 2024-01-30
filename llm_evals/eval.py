@@ -669,6 +669,7 @@ class EvalHarness:
         callback: Callable | None = None) -> list[EvalResult]:
         """TODO document."""
         eval_batch_size = len(evals) if async_batch_size is None else async_batch_size
+        assert eval_batch_size >= 1
         print(eval_batch_size)
         results = []
         for i in range(0, len(evals), eval_batch_size):

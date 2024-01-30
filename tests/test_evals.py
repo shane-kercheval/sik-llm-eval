@@ -443,15 +443,22 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     eval_harness_via_dicts = EvalHarness(
         evals=[subtract_config, sum_config],
         candidates=[candidate_1_dict, candidate_2_dict],
+        num_cpus=1,
+        async_batch_size=1,
     )
     eval_harness_via_objects = EvalHarness(
         evals=[Eval(**subtract_config), Eval(**sum_config)],
         candidates=[Candidate.from_dict(candidate_1_dict), Candidate.from_dict(candidate_2_dict)],
+        num_cpus=1,
+        async_batch_size=1,
     )
     assert eval_harness_via_dicts.evals == eval_harness_via_objects.evals
     assert eval_harness_via_dicts.candidates == eval_harness_via_objects.candidates
 
-    eval_harness = EvalHarness()
+    eval_harness = EvalHarness(
+        num_cpus=1,
+        async_batch_size=1,
+    )
     assert eval_harness.evals != eval_harness_via_dicts.evals
     assert eval_harness.candidates != eval_harness_via_dicts.candidates
     eval_harness.add_eval(Eval(**subtract_config))
@@ -521,3 +528,98 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert cand_2_results.num_checks == 2
     assert cand_2_results.num_successful_checks == 2
     assert cand_2_results.perc_successful_checks == 1
+
+    assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
+    assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
+
+def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+    subtract_config = fake_eval_subtract_two_numbers.copy()
+    sum_config = fake_eval_sum_two_numbers.copy()
+
+    response_subtract_0 = 'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```'  # noqa
+    response_subtract_1 = 'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```'  # noqa
+    response_sum_0 = 'This is the response.\n\n```\ndef sum_two_numbers(a, b):\n    return a + b\n```'  # noqa
+    responses_lookup = {
+        fake_eval_subtract_two_numbers['test_sequence'][0]['prompt']: response_subtract_0,
+        fake_eval_subtract_two_numbers['test_sequence'][1]['prompt']: response_subtract_1,
+        fake_eval_sum_two_numbers['test_sequence'][0]['prompt']: response_sum_0,
+    }
+
+    candidate_1_dict = {
+        'uuid': 'candidate_1',
+        'candidate_type': 'MockCandidate',
+        'responses': responses_lookup,
+    }
+    candidate_2_dict = candidate_1_dict.copy()
+    candidate_2_dict['uuid'] = 'candidate_2'
+
+    eval_harness_sequential = EvalHarness(
+        evals=[subtract_config, sum_config],
+        candidates=[candidate_1_dict, candidate_2_dict],
+        num_cpus=1,
+        async_batch_size=1,
+    )
+    eval_harness_async_multiprocessing = EvalHarness(
+        evals=[subtract_config, sum_config],
+        candidates=[candidate_1_dict, candidate_2_dict],
+        num_cpus=200,
+        async_batch_size=200,
+    )
+    results_sequential = eval_harness_sequential()
+    results_async_multiprocessing = eval_harness_async_multiprocessing()
+
+    assert len(results_sequential) == 2
+    assert len(results_sequential[0]) == 2
+    assert len(results_sequential[1]) == 2
+
+    assert len(results_async_multiprocessing) == 2
+    assert len(results_async_multiprocessing[0]) == 2
+    assert len(results_async_multiprocessing[1]) == 2
+
+    # for each result, the dictionary (which contains eval, candidate, and results/checks) should
+    # be the same (except for the total_time_seconds)
+    s_dict = results_sequential[0][0].to_dict().copy()
+    del s_dict['total_time_seconds']
+    am_dict = results_async_multiprocessing[0][0].to_dict().copy()
+    del am_dict['total_time_seconds']
+    assert s_dict == am_dict
+
+    s_dict = results_sequential[0][1].to_dict().copy()
+    del s_dict['total_time_seconds']
+    am_dict = results_async_multiprocessing[0][1].to_dict().copy()
+    del am_dict['total_time_seconds']
+    assert s_dict == am_dict
+
+    s_dict = results_sequential[1][0].to_dict().copy()
+    del s_dict['total_time_seconds']
+    am_dict = results_async_multiprocessing[1][0].to_dict().copy()
+    del am_dict['total_time_seconds']
+    assert s_dict == am_dict
+
+    s_dict = results_sequential[1][1].to_dict().copy()
+    del s_dict['total_time_seconds']
+    am_dict = results_async_multiprocessing[1][1].to_dict().copy()
+    del am_dict['total_time_seconds']
+    assert s_dict == am_dict
+
+    # The underlying candidate objects should have the same values but should be different objects
+    # because each candidate object (against a specific eval) is responsible for storing its own
+    # history/conversation and the history should be different for each eval.
+    assert results_sequential[0][0].candidate_obj == results_async_multiprocessing[0][0].candidate_obj  # noqa
+    assert results_sequential[0][0].candidate_obj is not results_async_multiprocessing[0][0].candidate_obj  # noqa
+    assert results_sequential[0][1].candidate_obj == results_async_multiprocessing[0][1].candidate_obj  # noqa
+    assert results_sequential[0][1].candidate_obj is not results_async_multiprocessing[0][1].candidate_obj  # noqa
+    assert results_sequential[1][0].candidate_obj == results_async_multiprocessing[1][0].candidate_obj  # noqa
+    assert results_sequential[1][0].candidate_obj is not results_async_multiprocessing[1][0].candidate_obj  # noqa
+    assert results_sequential[1][1].candidate_obj == results_async_multiprocessing[1][1].candidate_obj  # noqa
+    assert results_sequential[1][1].candidate_obj is not results_async_multiprocessing[1][1].candidate_obj  # noqa
+
+    # eval objects across candidates should have same values (same eval) but different objects
+    assert results_sequential[0][0].eval_obj == results_async_multiprocessing[0][0].eval_obj
+    assert results_sequential[0][0].eval_obj is not results_async_multiprocessing[0][0].eval_obj
+    assert results_sequential[0][1].eval_obj == results_async_multiprocessing[0][1].eval_obj
+    assert results_sequential[0][1].eval_obj is not results_async_multiprocessing[0][1].eval_obj
+    assert results_sequential[1][0].eval_obj == results_async_multiprocessing[1][0].eval_obj
+    assert results_sequential[1][0].eval_obj is not results_async_multiprocessing[1][0].eval_obj
+    assert results_sequential[1][1].eval_obj == results_async_multiprocessing[1][1].eval_obj
+    assert results_sequential[1][1].eval_obj is not results_async_multiprocessing[1][1].eval_obj
