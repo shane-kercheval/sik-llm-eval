@@ -425,7 +425,7 @@ class EvalResult(DictionaryEqualsMixin):
         return [r for result in self.results for r in result]
 
     def __str__(self) -> str:
-        cost_str = f'\nCost:                      ${self.cost}\n' if self.cost else ''
+        cost_str = f'\n{" " * 12}Cost:{" " * 22} ${self.cost:.4f}' if self.cost else ''
         return dedent(f"""
         EvalResult:
             # of Prompts Tested:        {len(self.eval_obj.test_sequence)}{cost_str}
