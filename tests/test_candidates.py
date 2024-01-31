@@ -187,6 +187,7 @@ def test__candidate__multiple_model_params_returns_multiple_candidates():  # noq
     for e, c in zip(expected_params, candidates):
         assert c.model.llm_parameters == e
         assert c.model_parameters == e
+    assert candidates[0].metadata is not candidates[1].metadata
 
     # test multiple model parameters that are lists
     test_params = {
@@ -220,6 +221,9 @@ def test__candidate__multiple_model_params_returns_multiple_candidates():  # noq
     for e, c in zip(expected_params, candidates):
         assert c.model.llm_parameters == e
         assert c.model_parameters == e
+    assert candidates[0].metadata is not candidates[1].metadata
+    assert candidates[0].metadata is not candidates[2].metadata
+    assert candidates[1].metadata is not candidates[2].metadata
 
     # test without any metadata
     multi_candidate_dict = {

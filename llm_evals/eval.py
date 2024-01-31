@@ -133,7 +133,7 @@ class Eval(DictionaryEqualsMixin):
             metadata:
                 Metadata associated with the Eval.
         """
-        self.metadata = metadata
+        self.metadata = deepcopy(metadata)
         self._candidate = None
         self._responses = None
         self._duration = None
@@ -572,6 +572,7 @@ class EvalHarness:
         """
         if isinstance(eval_obj, dict):
             eval_obj = Eval(**eval_obj)
+        assert isinstance(eval_obj, Eval), "eval_obj must be an Eval or a dictionary"
         self.evals.append(eval_obj)
 
     def add_eval_from_yaml(self, path: str) -> None:
@@ -604,7 +605,7 @@ class EvalHarness:
         for file_path in glob.glob(path):
             self.add_eval_from_yaml(file_path)
 
-    def add_candidate(self, candidate: dict) -> None:
+    def add_candidate(self, candidate: Candidate | dict) -> None:
         """
         Adds a Candidate object. This method can be called multiple times to add additional
         Candidate objects.
@@ -616,7 +617,12 @@ class EvalHarness:
                 The dictionary needs a `candidate_type` key with the registration value.
         """
         if isinstance(candidate, dict):
+            # Candidate.from_dict can potentially return a list of Candidates
             candidate = Candidate.from_dict(candidate)
+            if isinstance(candidate, list):
+                self.candidates.extend(candidate)
+                return
+        assert isinstance(candidate, Candidate), "candidate must be a Candidate or a dictionary"
         self.candidates.append(candidate)
 
     def add_candidate_from_yaml(self, path: str) -> None:

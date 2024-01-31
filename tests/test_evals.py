@@ -410,8 +410,12 @@ class MockCandidate(Candidate):
     response for the given prompt.
     """  # noqa: D404
 
-    def __init__(self, responses: dict, metadata: dict | None = None):
-        super().__init__(metadata=metadata)
+    def __init__(
+            self,
+            responses: dict,
+            metadata: dict | None = None,
+            model_parameters: dict | None = None):
+        super().__init__(metadata=metadata, model_parameters=model_parameters)
         self.responses = responses.copy()
 
     def __call__(self, prompt: str) -> str:
@@ -741,3 +745,32 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
             assert result == expected_dict
 
     shutil.rmtree(dir_path)
+
+def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_create_multiple_candidates():  # noqa
+    test_params = {
+        'param_1': 'param_a',
+        'param_2': 'param_b',
+        'param_3': ['param_c', 'param_d', 'param_e'],
+    }
+    expected_params = [
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_c'},
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_d'},
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_e'},
+    ]
+    candidate_dict = {
+        'metadata': {'uuid': 'candidate_1'},
+        'candidate_type': 'MockCandidate',
+        'responses': {'prompt_a': 'response1', 'prompt_b': 'response2'},
+        'model_parameters': test_params,
+    }
+    eval_harness = EvalHarness()
+    assert eval_harness.candidates == []
+    eval_harness.add_candidate(candidate_dict)
+    assert len(eval_harness.candidates) == 3
+    for c, e in zip(eval_harness.candidates, expected_params):
+        assert c.model_parameters == e
+        assert c.responses == {'prompt_a': 'response1', 'prompt_b': 'response2'}
+        assert c.metadata == {'uuid': 'candidate_1'}
+    assert eval_harness.candidates[0].metadata is not eval_harness.candidates[1].metadata
+    assert eval_harness.candidates[0].metadata is not eval_harness.candidates[2].metadata
+    assert eval_harness.candidates[1].metadata is not eval_harness.candidates[2].metadata

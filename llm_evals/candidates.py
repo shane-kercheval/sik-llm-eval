@@ -51,8 +51,8 @@ class Candidate(ABC):
             metadata: A dictionary of metadata about the Candidate.
             model_parameters: A dictionary of parameters for the Candidate.
         """
-        self.metadata = metadata
-        self.model_parameters = model_parameters
+        self.metadata = deepcopy(metadata)
+        self.model_parameters = deepcopy(model_parameters)
 
     @abstractmethod
     def __call__(self, prompt: str) -> str:
