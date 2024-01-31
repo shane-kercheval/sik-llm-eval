@@ -462,6 +462,7 @@ class EvalResult(DictionaryEqualsMixin):
             config = yaml.safe_load(f)
         return EvalResult(**config)
 
+
 def eval_result_summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
     summary = {}
