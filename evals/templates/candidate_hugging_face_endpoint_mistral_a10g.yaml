@@ -2,6 +2,14 @@ uuid: 17E8B408-267F-4CA1-97CA-64BDC10BE5F7
 metadata:
   name: Llama-2-7b-chat-hf - NVIDIA A10G
   description: Llama-2-7b-chat running on HuggingFace Endpoints with 1 NVIDIA A10G GPU (24GB).
+  system_info:
+    platform: Huggingface Endpoints
+    quantization: None
+    gpus: 1
+    gpu_type: A10G
+    gpu_memory: 24
+    cpu: 1
+    memory: 16
 candidate_type: HUGGING_FACE_ENDPOINT
 model_parameters:
   endpoint_url: https://api-inference.huggingface.co/models/llama-2-7b-chat
@@ -12,11 +20,3 @@ model_parameters:
   prompt_format: '[INST] {prompt} [/INST]\n'
   response_format: '{response}\n'
   seed: 42  # optional
-system_info:
-  platform: Huggingface Endpoints
-  quantization: None
-  gpus: 1
-  gpu_type: A10G
-  gpu_memory: 24
-  cpu: 1
-  memory: 16

@@ -34,8 +34,7 @@ class MockCandidate(Candidate):
         uuid = kwargs.pop('uuid', None)
         metadata = kwargs.pop('metadata', None)
         model_parameters = kwargs.pop('model_parameters', None)
-        system_info = kwargs.pop('system_info', None)
-        super().__init__(model_parameters=model_parameters, metadata=metadata, uuid=uuid, system_info=system_info)  # noqa
+        super().__init__(model_parameters=model_parameters, metadata=metadata, uuid=uuid)
         self.model = None
         if model_parameters is not None:
             self.model = MockLMM(**model_parameters)
@@ -87,7 +86,6 @@ def test__candidate__to_from_dict():  # noqa
         'uuid': 'test_uuid',
         'metadata': {'name': 'test name'},
         'model_parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
-        'system_info': {'system_1': 'system_a', 'system_2': 'system_b'},
     }
     candidate_dict_no_type = deepcopy(candidate_dict)
     candidate_dict_no_type.pop('candidate_type')
@@ -120,7 +118,6 @@ def test__candidate__clone():  #noqa
         'uuid': 'test_uuid',
         'metadata': {'name': 'test name'},
         'model_parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
-        'system_info': {'system_1': 'system_a', 'system_2': 'system_b'},
     }
     candidate = Candidate.from_dict(candidate_dict)
     response = candidate('test')
@@ -137,7 +134,6 @@ def test__candidate__clone():  #noqa
     clone.uuid = 'test_uuid_2'
     clone.metadata['name'] = 'test name 2'
     clone.model_parameters['param_1'] = 'param_a_2'
-    clone.system_info['system_1'] = 'system_a_2'
     assert clone.to_dict() != candidate.to_dict()
     assert candidate.to_dict() == candidate_dict
     # ensure that using the clone doesn't affect the original
@@ -272,7 +268,6 @@ def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noq
     expected_candidate_parameters.pop('prompt_format')
     expected_candidate_parameters.pop('response_format')
     assert candidate.model_parameters == expected_candidate_parameters
-    assert candidate.system_info == template['system_info']
 
     # check .model_parameters on model
     assert candidate.model.model_parameters == expected_model_parameters

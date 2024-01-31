@@ -47,8 +47,7 @@ class Candidate(ABC):
         self,
         uuid: str | None = None,
         metadata: dict | None = None,
-        model_parameters: dict | None = None,
-        system_info: dict | None = None) -> None:
+        model_parameters: dict | None = None) -> None:
         """
         Initialize a Candidate object.
 
@@ -56,12 +55,10 @@ class Candidate(ABC):
             uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
             model_parameters: A dictionary of parameters for the Candidate.
-            system_info: A dictionary of system information about the Candidate.
         """
         self.uuid = uuid
         self.metadata = metadata
         self.model_parameters = model_parameters
-        self.system_info = system_info
 
     @abstractmethod
     def __call__(self, prompt: str) -> str:
@@ -99,8 +96,6 @@ class Candidate(ABC):
             value['metadata'] = deepcopy(self.metadata)
         if self.model_parameters:
             value['model_parameters'] = deepcopy(self.model_parameters)
-        if self.system_info:
-            value['system_info'] = self.system_info
         if self.candidate_type:
             value['candidate_type'] = self.candidate_type.upper()
         return value
@@ -128,12 +123,11 @@ class Candidate(ABC):
     def __str__(self) -> str:
         """Returns a string representation of the Candidate."""
         parameters = '' if not self.model_parameters else f'\n            model_parameters={self.model_parameters},'  # noqa
-        system_info = '' if not self.system_info else f'\n            system_info={self.system_info},'  # noqa
         return dedent(f"""
         {self.__class__.__name__}(
             uuid={self.uuid},
             metadata={self.metadata},
-            {parameters}{system_info}
+            {parameters}
         )
         """).strip()
 
@@ -171,8 +165,7 @@ class CallableCandidate(Candidate):
             model: Callable | None = None,
             uuid: str | None = None,
             metadata: dict | None = None,
-            parameters: dict | None = None,
-            system_info: dict | None = None) -> None:
+            parameters: dict | None = None) -> None:
         """
         Initialize a CallableCandidate object.
 
@@ -181,9 +174,8 @@ class CallableCandidate(Candidate):
             uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
             parameters: A dictionary of parameters for the Candidate.
-            system_info: A dictionary of system information about the Candidate.
         """
-        super().__init__(uuid, metadata, parameters, system_info)
+        super().__init__(uuid, metadata, parameters)
         self.model = model
 
     def __call__(self, prompt: str) -> str:
@@ -215,7 +207,6 @@ class OpenAICandidate(Candidate):
             uuid=uuid,
             metadata=metadata,
             model_parameters=model_parameters,
-            system_info=None,
         )
         if model_parameters is None:
             model_parameters = {}
@@ -257,8 +248,7 @@ class HuggingFaceEndpointCandidate(Candidate):
     def __init__(self,
         model_parameters: dict,
         uuid: str | None = None,
-        metadata: dict | None = None,
-        system_info: dict | None = None) -> None:
+        metadata: dict | None = None) -> None:
         """
         Initialize a HuggingFaceEndpointCandidate object.
 
@@ -266,7 +256,6 @@ class HuggingFaceEndpointCandidate(Candidate):
             uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
             model_parameters: A dictionary of parameters passed to Hugging Face.
-            system_info: A dictionary of system information about the Candidate.
         """
         model_parameters = deepcopy(model_parameters)
         self.system_format = model_parameters.pop('system_format')
@@ -276,7 +265,6 @@ class HuggingFaceEndpointCandidate(Candidate):
             uuid=uuid,
             metadata=metadata,
             model_parameters=model_parameters,
-            system_info=system_info,
         )
         message_formatter = create_message_formatter(
             system_format=self.system_format,
