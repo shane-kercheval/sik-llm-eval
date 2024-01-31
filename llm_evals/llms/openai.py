@@ -23,17 +23,25 @@ MODEL_COST_PER_TOKEN = {
     ####
     # Embedding models
     ####
+    # LATEST MODELS
+    # https://openai.com/blog/new-embedding-models-and-api-updates
+    'text-embedding-3-small': 0.00002 / 1_000,
+    'text-embedding-3-large': 0.00013 / 1_000,
+    # LEGACY MODELS
     'text-embedding-ada-002': 0.0001 / 1_000,
     ####
     # Chat Models
     ####
+    # LATEST MODELS
+    # GPT-4-Turbo 128K
+    'gpt-4-0125-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
+    # GPT-3.5 Turbo 16K
+    'gpt-3.5-turbo-0125': {'input': 0.0005 / 1_000, 'output': 0.0015 / 1_000},
+    # LEGACY MODELS
     # GPT-4-Turbo 128K
     'gpt-4-1106-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
     # GPT-3.5-Turbo 16K
     'gpt-3.5-turbo-1106': {'input': 0.001 / 1_000, 'output': 0.002 / 1_000},
-    ####
-    # legacy models
-    ####
     # GPT-4
     'gpt-4-0613': {'input': 0.03 / 1_000, 'output': 0.06 / 1_000},
     # GPT-4- 32K
@@ -102,7 +110,7 @@ class OpenAIEmbedding(EmbeddingModel):
 
     def __init__(
             self,
-            model_name: str = 'text-embedding-ada-002',
+            model_name: str = 'text-embedding-3-small',
             doc_prep: Callable[[str], str] = lambda x: x.strip().replace('\n', ' '),
             timeout: int = 10,
             ) -> None:
