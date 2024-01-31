@@ -1,25 +1,44 @@
 import os
+import shutil
 import time
-import yaml
-import asyncio
 from dotenv import load_dotenv
-from llm_evals.eval import Eval, Candidate, eval_result_summarizer
-from pprint import pprint
+from llm_evals.eval import EvalResult, eval_result_summarizer
+from llm_evals.eval import EvalHarness
+# import wandb
 
 load_dotenv()
 
-def print_result(result):
-    print(f"Finished {result.total_time_seconds}", flush=True)
+DIR_PATH = "__temp__"
 
-def main():
+def print_result(result: EvalResult) -> None:
+    """Print the result of an evaluation."""
+    print(result)
+    path = f"{DIR_PATH}/{result.candidate_obj.uuid}-{result.eval_obj.uuid}.yaml"
+    result.save_yaml(path)
+    print(f"Finished {result.total_time_seconds}, saved to {path}", flush=True)
+    # with open(f"{DIR_PATH}/{result.candidate_obj.uuid}-{result.eval_obj.uuid}.json", "w") as f:
+    #     f.write(result.to_json())
+    # print(f"Finished {result.total_time_seconds}", flush=True)
+    # print(eval_result_summarizer(result))
 
-    from llm_evals.candidates import Candidate
-    from llm_evals.eval import Eval, EvalHarness, eval_result_summarizer
+# def log_weights_and_biases(result: EvalResult) -> None:
+#     """Log the result of an evaluation to Weights and Biases."""
+#     wandb.log(eval_result_summarizer(result))
+#     # wandb.log({"accuracy": 1, "loss": 2})
 
+
+def main() -> None:
+    """Run the main function."""
+    # wandb.init(project="test-project")
+
+    if os.path.exists(DIR_PATH):
+        shutil.rmtree(DIR_PATH)
+    os.makedirs(DIR_PATH)
+    assert os.path.exists(DIR_PATH)
 
     eval_harness = EvalHarness(
-        num_cpus=None,
-        async_batch_size=50,
+        # num_cpus=None,
+        # async_batch_size=50,
         callback=print_result,
     )
     # eval_harness.add_eval_from_yamls('../evals/evals')
@@ -35,19 +54,10 @@ def main():
     start = time.time()
     results = eval_harness()
     end = time.time()
-    for r in results:
-        for a in r:
-            print(a)
+    # for r in results:
+    #     for a in r:
+    #         print(a)
     print(f"Total time: {end - start}")
-
-    # from llm_evals.checks import CheckType
-    # result = results[1][0]
-    # code_run_checks = [
-    #     r for r in result.all_checks_results
-    #     if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
-    # ]
-    # sum(c.metadata['num_code_block_checks'] for c in code_run_checks)
-    # sum(c.metadata['num_code_block_checks_successful'] for c in code_run_checks)
 
 
 if __name__ == "__main__":
