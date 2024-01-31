@@ -14,7 +14,7 @@ def print_result(result: EvalResult) -> None:
     """Print the result of an evaluation."""
     print(result)
     path = f"{DIR_PATH}/{result.candidate_obj.uuid}-{result.eval_obj.uuid}.yaml"
-    result.save_yaml(path)
+    result.to_yaml(path)
     print(f"Finished {result.total_time_seconds}, saved to {path}", flush=True)
     # with open(f"{DIR_PATH}/{result.candidate_obj.uuid}-{result.eval_obj.uuid}.json", "w") as f:
     #     f.write(result.to_json())
