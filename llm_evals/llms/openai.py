@@ -216,6 +216,8 @@ class OpenAIChat(ChatModel):
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed
+        from openai import OpenAI
+        self.client = OpenAI()
 
     def _cost_calc(self, input_tokens: int, response_tokens: int) -> float:
         """
@@ -244,11 +246,9 @@ class OpenAIChat(ChatModel):
         The use of a streaming callback does not change the output returned from calling the object
         (i.e. a ExchangeRecord object).
         """
-        from openai import OpenAI
-        client = OpenAI()
         if self.streaming_callback:
             response = retry_handler()(
-                client.chat.completions.create,
+                self.client.chat.completions.create,
                 model=self.model_name,
                 messages=messages,
                 timeout=self.timeout,
@@ -269,7 +269,7 @@ class OpenAIChat(ChatModel):
                     response_message += delta
         else:
             response = retry_handler()(
-                client.chat.completions.create,
+                self.client.chat.completions.create,
                 model=self.model_name,
                 messages=messages,
                 timeout=self.timeout,
@@ -294,3 +294,37 @@ class OpenAIChat(ChatModel):
         object's lifetime.
         """
         return MODEL_COST_PER_TOKEN[self.model_name]
+
+
+class OpenAIServerChat(OpenAIChat):
+    """TODO Document."""
+
+    def __init__(
+            self,
+            base_url: str,
+            system_message: str = 'You are a helpful AI assistant.',
+            streaming_callback: Callable[[StreamingEvent], None] | None = None,
+            memory_manager: MemoryManager | None = None,
+            timeout: int = 90,
+            seed: int | None = None,
+            **model_kwargs: dict,
+            ) -> None:
+        """TODO document."""
+        super().__init__(
+            system_message=system_message,
+            message_formatter=openai_message_formatter,
+            # token_calculator=len,
+            # cost_calculator=None,
+            memory_manager=memory_manager,
+        )
+        # override ChatGPT's token/cost calculator
+        self._token_calculator = len
+        self._cost_calculator = None
+        # model name is not applicable
+        self.model_name = 'local-model'
+        self.model_parameters = model_kwargs or {}
+        self.streaming_callback = streaming_callback
+        self.timeout = timeout
+        self.seed = seed
+        from openai import OpenAI
+        self.client = OpenAI(base_url=base_url, api_key='none')
