@@ -503,36 +503,58 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert results[0][1].eval_obj is not results[1][1].eval_obj
 
     # candidate 1 - subtract eval
-    cand_1_results = results[0][0]
-    assert cand_1_results.responses == [response_subtract_0, response_subtract_1]
-    assert cand_1_results.num_code_blocks == 2
-    assert cand_1_results.num_checks == 5
-    assert cand_1_results.num_successful_checks == 4
-    assert cand_1_results.perc_successful_checks == 4 / 5
+    cand_1_results_subtract = results[0][0]
+    assert cand_1_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_1_results_subtract.num_code_blocks == 2
+    assert cand_1_results_subtract.num_checks == 5
+    assert cand_1_results_subtract.num_successful_checks == 4
+    assert cand_1_results_subtract.perc_successful_checks == 4 / 5
 
     # candidate 1 - sum eval
-    cand_1_results = results[0][1]
-    assert cand_1_results.responses == [response_sum_0]
-    assert cand_1_results.num_code_blocks == 1
-    assert cand_1_results.num_checks == 2
-    assert cand_1_results.num_successful_checks == 2
-    assert cand_1_results.perc_successful_checks == 1
+    cand_1_results_sum = results[0][1]
+    assert cand_1_results_sum.responses == [response_sum_0]
+    assert cand_1_results_sum.num_code_blocks == 1
+    assert cand_1_results_sum.num_checks == 2
+    assert cand_1_results_sum.num_successful_checks == 2
+    assert cand_1_results_sum.perc_successful_checks == 1
 
     # candidate 2 - subtract eval
-    cand_2_results = results[1][0]
-    assert cand_2_results.responses == [response_subtract_0, response_subtract_1]
-    assert cand_2_results.num_code_blocks == 2
-    assert cand_2_results.num_checks == 5
-    assert cand_2_results.num_successful_checks == 4
-    assert cand_2_results.perc_successful_checks == 4 / 5
+    cand_2_results_subtract = results[1][0]
+    assert cand_2_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_2_results_subtract.num_code_blocks == 2
+    assert cand_2_results_subtract.num_checks == 5
+    assert cand_2_results_subtract.num_successful_checks == 4
+    assert cand_2_results_subtract.perc_successful_checks == 4 / 5
 
     # candidate 2 - sum eval
-    cand_2_results = results[1][1]
-    assert cand_2_results.responses == [response_sum_0]
-    assert cand_2_results.num_code_blocks == 1
-    assert cand_2_results.num_checks == 2
-    assert cand_2_results.num_successful_checks == 2
-    assert cand_2_results.perc_successful_checks == 1
+    cand_2_results_sum = results[1][1]
+    assert cand_2_results_sum.responses == [response_sum_0]
+    assert cand_2_results_sum.num_code_blocks == 1
+    assert cand_2_results_sum.num_checks == 2
+    assert cand_2_results_sum.num_successful_checks == 2
+    assert cand_2_results_sum.perc_successful_checks == 1
+
+    # the eval results of candidate 1 should be the same as the eval results of candidate 2,
+    # except the seconds it took to run the evals and the uuid of the candidate
+    cand_1_results_subtract_dict = deepcopy(cand_1_results_subtract.to_dict())
+    del cand_1_results_subtract_dict['total_time_seconds']
+    del cand_1_results_subtract_dict['candidate_obj']['uuid']
+    cand_2_results_subtract_dict = deepcopy(cand_2_results_subtract.to_dict())
+    del cand_2_results_subtract_dict['total_time_seconds']
+    del cand_2_results_subtract_dict['candidate_obj']['uuid']
+    assert cand_1_results_subtract_dict == cand_2_results_subtract_dict
+
+    cand_1_results_subtract.to_yaml('__temp__.yaml')
+    result_from_yaml = cand_1_results_subtract.from_yaml('__temp__.yaml')
+    assert result_from_yaml == cand_1_results_subtract
+    assert result_from_yaml.to_dict() == cand_1_results_subtract.to_dict()
+    os.remove('__temp__.yaml')
+
+    cand_1_results_sum.to_yaml('__temp__.yaml')
+    result_from_yaml = cand_1_results_sum.from_yaml('__temp__.yaml')
+    assert result_from_yaml == cand_1_results_sum
+    assert result_from_yaml.to_dict() == cand_1_results_sum.to_dict()
+    os.remove('__temp__.yaml')
 
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified

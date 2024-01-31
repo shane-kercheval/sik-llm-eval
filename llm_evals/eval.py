@@ -450,11 +450,17 @@ class EvalResult(DictionaryEqualsMixin):
             'results': [[r.to_dict() for r in result] for result in self.results],
         }
 
-    def save_yaml(self, file_path: str) -> None:
+    def to_yaml(self, file_path: str) -> None:
         """Saves the EvalResult to a YAML file."""
         with open(file_path, 'w') as f:
             yaml.dump(self.to_dict(), f)
 
+    @classmethod
+    def from_yaml(cls, path: str) -> EvalResult:  # noqa: ANN102
+        """Creates an EvalResult object from a YAML file."""
+        with open(path) as f:
+            config = yaml.safe_load(f)
+        return EvalResult(**config)
 
 def eval_result_summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
