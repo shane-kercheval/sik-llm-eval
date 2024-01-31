@@ -8,7 +8,7 @@ from typing import Callable, ForwardRef, Type
 from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
 from llm_evals.llms.message_formatters import create_message_formatter
 from llm_evals.llms.openai import OpenAIChat
-from llm_evals.utilities.internal_utilities import EnumMixin, Registry, generate_dict_combinations
+from llm_evals.utilities.internal_utilities import DictionaryEqualsMixin, EnumMixin, Registry, generate_dict_combinations
 
 
 Candidate = ForwardRef('Candidate')
@@ -27,7 +27,7 @@ class CandidateType(EnumMixin, Enum):
     CALLABLE_NO_SERIALIZE = auto()
 
 
-class Candidate(ABC):
+class Candidate(DictionaryEqualsMixin, ABC):
     """
     A Candidate describes an LLM (or specific implementation of an LLM interface (e.g.
     history/context management)) along wiht optional parameters or hardware.
@@ -122,7 +122,7 @@ class Candidate(ABC):
         return None
 
     @classmethod
-    def from_yaml(cls, path: str) -> Candidate:  # noqa: ANN102
+    def from_yaml(cls, path: str) -> Candidate | list[Candidate]:  # noqa: ANN102
         """
         Creates a Candidate object from a YAML file. This method requires the Candidate subclass to
         be registered via `Candidate.register(...)` before calling this method. It also requires
@@ -142,12 +142,6 @@ class Candidate(ABC):
             {parameters}
         )
         """).strip()
-
-    def __eq__(self, other: object) -> bool:
-        """Returns True if the two Candidates are equal."""
-        if not isinstance(other, Candidate):
-            return False
-        return self.to_dict() == other.to_dict()
 
     def clone(self) -> Candidate:
         """

@@ -774,3 +774,14 @@ def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_crea
     assert eval_harness.candidates[0].metadata is not eval_harness.candidates[1].metadata
     assert eval_harness.candidates[0].metadata is not eval_harness.candidates[2].metadata
     assert eval_harness.candidates[1].metadata is not eval_harness.candidates[2].metadata
+
+    # ensure that the candidates are the same when added from yaml
+    # save to yaml and load from yaml
+    with open('__temp__.yaml', 'w') as f:
+        yaml.dump(candidate_dict, f, default_flow_style=False)
+    eval_harness_from_yaml = EvalHarness()
+    try:
+        eval_harness_from_yaml.add_candidate_from_yaml('__temp__.yaml')
+    finally:
+        os.remove('__temp__.yaml')
+    assert eval_harness_from_yaml.candidates == eval_harness.candidates

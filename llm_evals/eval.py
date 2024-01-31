@@ -638,7 +638,9 @@ class EvalHarness:
             path:
                 Path to the YAML file.
         """
-        self.add_candidate(Candidate.from_yaml(path))
+        with open(path) as f:
+            config = yaml.safe_load(f)
+        self.add_candidate(config)
 
     def add_candidates_from_yamls(self, path: str) -> None:
         """
