@@ -8,7 +8,7 @@ from typing import Callable, ForwardRef, Type
 from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
 from llm_evals.llms.message_formatters import create_message_formatter
 from llm_evals.llms.openai import OpenAIChat
-from llm_evals.utilities.internal_utilities import EnumMixin, Registry
+from llm_evals.utilities.internal_utilities import EnumMixin, Registry, generate_dict_combinations
 
 
 Candidate = ForwardRef('Candidate')
@@ -79,13 +79,26 @@ class Candidate(ABC):
         decorator before calling this method. It also requires that the dictionary has a
         `candidate_type` field that matches the type name of the registered Candidate subclass.
         """
-        data_copy = deepcopy(data)
-        candidate_type = data_copy.pop('candidate_type', '')
-
-
-
+        data = deepcopy(data)
+        candidate_type = data.pop('candidate_type', '')
         if candidate_type in cls.registry:
-            return cls.registry.create_instance(type_name=candidate_type, **data_copy)
+            # check if any of the model parameters (values) are lists
+            params_are_lists = 'model_parameters' in data \
+                and any(isinstance(v, list) for v in data['model_parameters'].values())
+            if params_are_lists:
+                    # create a list of all combinations of the model parameters
+                    # `data` will potentially have `metadata` or other fields
+                    model_parameters = data.pop('model_parameters')
+                    model_parameters = generate_dict_combinations(deepcopy(model_parameters))
+                    return [
+                        cls.registry.create_instance(
+                            type_name=candidate_type,
+                            # merge the original data with the model parameters
+                            **(data | {'model_parameters': p}),
+                        )
+                        for p in model_parameters
+                    ]
+            return cls.registry.create_instance(type_name=candidate_type, **data)
         raise ValueError(f"Unknown type {candidate_type}")
 
     def to_dict(self) -> dict:

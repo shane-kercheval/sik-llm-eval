@@ -5,6 +5,7 @@ from abc import abstractmethod
 from enum import Enum
 from inspect import isclass, ismethod, signature, isfunction
 import datetime
+from itertools import product
 from types import FunctionType
 import hashlib
 from collections.abc import Callable
@@ -12,7 +13,7 @@ import re
 import io
 import contextlib
 from textwrap import dedent
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar
 import tenacity
 
 
@@ -138,6 +139,24 @@ def execute_code_blocks(
         except Exception as e:
             block_results.append(e)
     return block_results
+
+
+def generate_dict_combinations(value: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Generate all possible combinations of values from a dictionary where values can be either a
+    single value or a list of values.
+
+    Args:
+        value: A dictionary where values are either a single value or a list of values.
+    """
+    params_lists = {
+        key: value if isinstance(value, list) else [value]
+        for key, value in value.items()
+    }
+    # Generate all combinations of parameter values
+    combinations = product(*params_lists.values())
+    # Convert each combination back into a dictionary format
+    return [dict(zip(params_lists.keys(), combination)) for combination in combinations]
 
 
 def extract_variables(value: str) -> set[str]:

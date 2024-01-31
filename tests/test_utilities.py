@@ -14,6 +14,7 @@ from llm_evals.utilities.internal_utilities import (
     extract_code_blocks,
     extract_valid_parameters,
     extract_variables,
+    generate_dict_combinations,
     has_method,
     has_property,
     retry_handler,
@@ -702,6 +703,62 @@ def test__execute_code_blocks__with_env_namespace__inject_objects_into_namespace
     assert env_namespace['num_combinations'] == 6
     assert '__list_of_lists__' in env_namespace
     assert env_namespace['__list_of_lists__'] == list_to_inject
+
+def test__generate_dict_combinations():  # noqa
+    # test all single parameters; should return a list with one dict
+    test_params = {
+        'param_1': 'param_a',
+        'param_2': 'param_b',
+        'param_3': 'param_c',
+    }
+    expected_output = [
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_c'},
+    ]
+    generated_combinations = generate_dict_combinations(test_params)
+    assert isinstance(generated_combinations, list)
+    assert all(isinstance(comb, dict) for comb in generated_combinations)
+    assert len(generated_combinations) == len(expected_output)
+    assert generated_combinations == expected_output
+
+    # test single list parameter
+    test_params = {
+        'param_1': 'param_a',
+        'param_2': 'param_b',
+        'param_3': ['param_c', 'param_d'],
+    }
+    expected_output = [
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_c'},
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_d'},
+    ]
+    generated_combinations = generate_dict_combinations(test_params)
+    assert isinstance(generated_combinations, list)
+    assert all(isinstance(comb, dict) for comb in generated_combinations)
+    assert len(generated_combinations) == len(expected_output)
+    assert generated_combinations == expected_output
+
+    # test all list parameters
+    test_params = {
+        'param_1': ['param_a', 'param_b'],
+        'param_2': ['param_c', 'param_d'],
+        'param_3': ['param_e', 'param_f'],
+    }
+    expected_output = [
+        {'param_1': 'param_a', 'param_2': 'param_c', 'param_3': 'param_e'},
+        {'param_1': 'param_a', 'param_2': 'param_c', 'param_3': 'param_f'},
+        {'param_1': 'param_a', 'param_2': 'param_d', 'param_3': 'param_e'},
+        {'param_1': 'param_a', 'param_2': 'param_d', 'param_3': 'param_f'},
+        {'param_1': 'param_b', 'param_2': 'param_c', 'param_3': 'param_e'},
+        {'param_1': 'param_b', 'param_2': 'param_c', 'param_3': 'param_f'},
+        {'param_1': 'param_b', 'param_2': 'param_d', 'param_3': 'param_e'},
+        {'param_1': 'param_b', 'param_2': 'param_d', 'param_3': 'param_f'},
+    ]
+    # test that no dictionaries are duplicated in expected_output
+    assert len(expected_output) == len({tuple(sorted(d.items())) for d in expected_output})
+    generated_combinations = generate_dict_combinations(test_params)
+    assert isinstance(generated_combinations, list)
+    assert all(isinstance(comb, dict) for comb in generated_combinations)
+    assert len(generated_combinations) == len(expected_output)
+    assert generated_combinations == expected_output
 
 def test__extract_variables():  # noqa
     assert extract_variables('') == set()

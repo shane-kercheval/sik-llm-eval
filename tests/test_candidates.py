@@ -37,6 +37,8 @@ class MockCandidate(Candidate):
         self.model = None
         if model_parameters is not None:
             self.model = MockLMM(**model_parameters)
+        else:
+            self.model = MockLMM()
 
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
@@ -52,7 +54,7 @@ def test__candidate__registration():  # noqa
     assert 'MOCK_MODEL' in Candidate.registry
     assert 'mock_model' in Candidate.registry
 
-    assert MockCandidate().model is None  # only create model when called with parameters
+    assert MockCandidate().model.llm_parameters == {}
     assert MockCandidate() == Candidate.from_dict({'candidate_type': 'MOCK_MODEL'})
     assert MockCandidate().to_dict() == {'candidate_type': 'MOCK_MODEL'}
 
@@ -144,7 +146,112 @@ def test__CallableCandidate():  # noqa
     assert candidate.to_dict() == {'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name}
 
 def test__candidate__multiple_model_params_returns_multiple_candidates():  # noqa
-    pass
+    test_params = {'param_1': 'param_a', 'param_2': 'param_b'}
+    candidate_dict = {
+        'candidate_type': 'MOCK_MODEL',
+        'metadata': {'name': 'test name'},
+        'model_parameters': test_params,
+    }
+    # create a single Candidate object from dictionary without multiple model parameters
+    candidate = Candidate.from_dict(candidate_dict)
+    assert isinstance(candidate, MockCandidate)
+    assert candidate.metadata == {'name': 'test name'}
+    assert candidate.model.llm_parameters == test_params
+    response = candidate('test')
+    assert response == 'test'
+    assert candidate.model.prompts == ['test']
+
+    # test a single model parameter that is a list
+    test_params = {
+        'param_1': 'param_a',
+        'param_2': 'param_b',
+        'param_3': ['param_c', 'param_d'],
+    }
+    expected_params = [
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_c'},
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_d'},
+    ]
+    multi_candidate_dict = {
+        'candidate_type': 'MOCK_MODEL',
+        'metadata': {'name': 'test name'},
+        'model_parameters': test_params,
+    }
+    candidates = Candidate.from_dict(multi_candidate_dict)
+    assert isinstance(candidates, list)
+    assert len(candidates) == len(expected_params)
+    assert all(isinstance(c, MockCandidate) for c in candidates)
+    assert candidates[0].model is not candidates[1].model
+    # all candidates should have the same metadata
+    assert all(c.metadata == {'name': 'test name'} for c in candidates)
+    # check expected model parameter values
+    for e, c in zip(expected_params, candidates):
+        assert c.model.llm_parameters == e
+        assert c.model_parameters == e
+
+    # test multiple model parameters that are lists
+    test_params = {
+        'param_1': ['param_a', 'param_b'],
+        'param_2': ['param_c', 'param_d'],
+        'param_3': ['param_e', 'param_f'],
+    }
+    expected_params = [
+        {'param_1': 'param_a', 'param_2': 'param_c', 'param_3': 'param_e'},
+        {'param_1': 'param_a', 'param_2': 'param_c', 'param_3': 'param_f'},
+        {'param_1': 'param_a', 'param_2': 'param_d', 'param_3': 'param_e'},
+        {'param_1': 'param_a', 'param_2': 'param_d', 'param_3': 'param_f'},
+        {'param_1': 'param_b', 'param_2': 'param_c', 'param_3': 'param_e'},
+        {'param_1': 'param_b', 'param_2': 'param_c', 'param_3': 'param_f'},
+        {'param_1': 'param_b', 'param_2': 'param_d', 'param_3': 'param_e'},
+        {'param_1': 'param_b', 'param_2': 'param_d', 'param_3': 'param_f'},
+    ]
+    multi_candidate_dict = {
+        'candidate_type': 'MOCK_MODEL',
+        'metadata': {'name': 'test name'},
+        'model_parameters': test_params,
+    }
+    candidates = Candidate.from_dict(multi_candidate_dict)
+    assert isinstance(candidates, list)
+    assert len(candidates) == len(expected_params)
+    assert all(isinstance(c, MockCandidate) for c in candidates)
+    assert candidates[0].model is not candidates[1].model
+    # all candidates should have the same metadata
+    assert all(c.metadata == {'name': 'test name'} for c in candidates)
+    # check expected model parameter values
+    for e, c in zip(expected_params, candidates):
+        assert c.model.llm_parameters == e
+        assert c.model_parameters == e
+
+    # test without any metadata
+    multi_candidate_dict = {
+        'candidate_type': 'MOCK_MODEL',
+        # 'metadata': {'name': 'test name'},
+        'model_parameters': test_params,
+    }
+    candidates = Candidate.from_dict(multi_candidate_dict)
+    assert isinstance(candidates, list)
+    assert len(candidates) == len(expected_params)
+    assert all(isinstance(c, MockCandidate) for c in candidates)
+    assert candidates[0].model is not candidates[1].model
+    # all candidates should have the same metadata
+    assert all(c.metadata is None for c in candidates)
+    # check expected model parameter values
+    for e, c in zip(expected_params, candidates):
+        assert c.model.llm_parameters == e
+        assert c.model_parameters == e
+
+    # test without model parameters
+    candidate_dict_no_params = {
+        'candidate_type': 'MOCK_MODEL',
+        # 'metadata': {'name': 'test name'},
+        # 'model_parameters': test_params,
+    }
+    candidate_no_params = Candidate.from_dict(candidate_dict_no_params)
+    assert isinstance(candidate_no_params, MockCandidate)
+    assert candidate_no_params.metadata is None
+    assert candidate_no_params.model_parameters is None
+    response = candidate_no_params('test')
+    assert response == 'test'
+    assert candidate_no_params.model.prompts == ['test']
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAI__default__no_model_parameters():  # noqa
