@@ -46,9 +46,9 @@ def main() -> None:
 
     eval_harness.add_eval_from_yaml('../evals/evals/mask_emails.yaml')
     eval_harness.add_eval_from_yaml('../evals/evals/mask_emails.yaml')
-    eval_harness.add_candidate_from_yaml('../evals/templates/candidate_openai_3.5_1106.yaml')
-    eval_harness.add_candidate_from_yaml('../evals/templates/candidate_openai_3.5_1106.yaml')
-    # eval_harness.add_candidate_from_yaml('../evals/templates/candidate_openai_4.0_1106.yaml')
+    eval_harness.add_candidate_from_yaml('../examples/candidates/openai_3.5_1106.yaml')
+    eval_harness.add_candidate_from_yaml('../examples/candidates/openai_3.5_1106.yaml')
+    # eval_harness.add_candidate_from_yaml('../examples/candidates/openai_4.0_1106.yaml')
 
     print('start')
     start = time.time()

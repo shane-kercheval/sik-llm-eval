@@ -410,8 +410,8 @@ class MockCandidate(Candidate):
     response for the given prompt.
     """  # noqa: D404
 
-    def __init__(self, responses: dict, uuid: str, metadata: dict | None = None):
-        super().__init__(uuid=uuid, metadata=metadata)
+    def __init__(self, responses: dict, metadata: dict | None = None):
+        super().__init__(metadata=metadata)
         self.responses = responses.copy()
 
     def __call__(self, prompt: str) -> str:
@@ -438,12 +438,12 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     }
 
     candidate_1_dict = {
-        'uuid': 'candidate_1',
+        'metadata': {'uuid': 'candidate_1'},
         'candidate_type': 'MockCandidate',
         'responses': responses_lookup,
     }
-    candidate_2_dict = candidate_1_dict.copy()
-    candidate_2_dict['uuid'] = 'candidate_2'
+    candidate_2_dict = deepcopy(candidate_1_dict)
+    candidate_2_dict['metadata']['uuid'] = 'candidate_2'
 
     eval_harness_via_dicts = EvalHarness(
         evals=[subtract_config, sum_config],
@@ -538,10 +538,10 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     # except the seconds it took to run the evals and the uuid of the candidate
     cand_1_results_subtract_dict = deepcopy(cand_1_results_subtract.to_dict())
     del cand_1_results_subtract_dict['total_time_seconds']
-    del cand_1_results_subtract_dict['candidate_obj']['uuid']
+    del cand_1_results_subtract_dict['candidate_obj']['metadata']['uuid']
     cand_2_results_subtract_dict = deepcopy(cand_2_results_subtract.to_dict())
     del cand_2_results_subtract_dict['total_time_seconds']
-    del cand_2_results_subtract_dict['candidate_obj']['uuid']
+    del cand_2_results_subtract_dict['candidate_obj']['metadata']['uuid']
     assert cand_1_results_subtract_dict == cand_2_results_subtract_dict
 
     cand_1_results_subtract.to_yaml('__temp__.yaml')
@@ -564,8 +564,8 @@ def callback(x: EvalResult) -> None:
     Test the callback function by saving the result to a yaml file in the 'test/temp'
     directory. Assume directory already exists.
     """
-    candidate_id = x.candidate_obj.uuid
-    eval_id = x.eval_obj.uuid
+    candidate_id = x.candidate_obj.metadata['uuid']
+    eval_id = x.eval_obj.metadata['uuid']
     with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
         yaml.dump(x.to_dict(), f, default_flow_style=False)
 
@@ -591,12 +591,12 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     }
 
     candidate_1_dict = {
-        'uuid': 'candidate_1',
+        'metadata': {'uuid': 'candidate_1'},
         'candidate_type': 'MockCandidate',
         'responses': responses_lookup,
     }
-    candidate_2_dict = candidate_1_dict.copy()
-    candidate_2_dict['uuid'] = 'candidate_2'
+    candidate_2_dict = deepcopy(candidate_1_dict)
+    candidate_2_dict['metadata']['uuid'] = 'candidate_2'
 
     eval_harness_sequential = EvalHarness(
         evals=[subtract_config, sum_config],
@@ -635,7 +635,10 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     assert len(results_multi_with_callback[1]) == 2
 
     # check that the results have been saved and are the same as the results from the sequential
-    eval_ids = [fake_eval_subtract_two_numbers['uuid'], fake_eval_sum_two_numbers['uuid']]
+    eval_ids = [
+        fake_eval_subtract_two_numbers['metadata']['uuid'],
+        fake_eval_sum_two_numbers['metadata']['uuid'],
+    ]
     candidate_ids = ['candidate_1', 'candidate_2']
     for eval_index, eval_id in enumerate(eval_ids):
         for candidate_index, candidate_id in enumerate(candidate_ids):
@@ -721,7 +724,10 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     recreate_temp_dir()
     eval_harness_sequential_with_callback()
     # check that the results have been saved and are the same as the results from the sequential
-    eval_ids = [fake_eval_subtract_two_numbers['uuid'], fake_eval_sum_two_numbers['uuid']]
+    eval_ids = [
+        fake_eval_subtract_two_numbers['metadata']['uuid'],
+        fake_eval_sum_two_numbers['metadata']['uuid'],
+    ]
     candidate_ids = ['candidate_1', 'candidate_2']
     for eval_index, eval_id in enumerate(eval_ids):
         for candidate_index, candidate_id in enumerate(candidate_ids):

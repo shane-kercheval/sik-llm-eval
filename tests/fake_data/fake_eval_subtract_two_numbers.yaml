@@ -1,6 +1,6 @@
-uuid: 4BC12172-7FB7-4CDB-A2C2-B9BFD6044AB1
-version: 1
 metadata:
+  uuid: 4BC12172-7FB7-4CDB-A2C2-B9BFD6044AB1
+  version: 1
   name: Test Eval
   description: This is a test eval. Two out of three checks should pass.
   difficulty: 1  # 1-5

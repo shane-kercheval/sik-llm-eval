@@ -1,6 +1,6 @@
-uuid: 8F9FBF37-C18D-46AD-8C34-A0196739643D
-version: 1
 metadata:
+  uuid: 8F9FBF37-C18D-46AD-8C34-A0196739643D
+  version: 1
   name: Test Eval
   description: This is a test eval.
   difficulty: 1  # 1-5

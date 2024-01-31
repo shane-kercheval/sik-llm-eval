@@ -1,9 +1,8 @@
-uuid: 0E454A44-627C-4B56-915B-8DCFE9DF2A55
 metadata:
-  name: OpenAI GPT-3.5-Turbo (1106)
+  name: OpenAI GPT-4.0-Turbo (1106)
 candidate_type: OPENAI
 model_parameters:
-  model_name: gpt-3.5-turbo-1106
+  model_name: gpt-4-1106-preview
   system_message: You are a helpful AI assistant.
   temperature: 0.01
   max_tokens: 4096

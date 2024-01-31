@@ -1,0 +1,11 @@
+metadata:
+  name: OpenAI GPT-3.5-Turbo (1106)
+candidate_type: OPENAI
+model_parameters:
+  model_name: gpt-3.5-turbo-1106
+  system_message:
+    - You are a helpful AI assistant.
+    - You are a helpful AI assistant and an expert in python, data science, and machine learning. Give accurate, clear, and consise explanations.
+  temperature: 0.01
+  max_tokens: 4096
+  seed: 42

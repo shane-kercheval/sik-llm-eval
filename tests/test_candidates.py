@@ -31,10 +31,9 @@ class MockCandidate(Candidate):
 
     def __init__(self, **kwargs: dict) -> None:
         """Initialize a MockCandidate object."""
-        uuid = kwargs.pop('uuid', None)
         metadata = kwargs.pop('metadata', None)
         model_parameters = kwargs.pop('model_parameters', None)
-        super().__init__(model_parameters=model_parameters, metadata=metadata, uuid=uuid)
+        super().__init__(model_parameters=model_parameters, metadata=metadata)
         self.model = None
         if model_parameters is not None:
             self.model = MockLMM(**model_parameters)
@@ -45,7 +44,7 @@ class MockCandidate(Candidate):
 
 
 def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa
-    candidate = Candidate.from_yaml('evals/templates/candidate_openai_3.5_1106.yaml')
+    candidate = Candidate.from_yaml('examples/candidates/openai_3.5_1106.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.to_dict() == openai_candidate_template
 
@@ -83,7 +82,6 @@ def test__candidate__registration():  # noqa
 def test__candidate__to_from_dict():  # noqa
     candidate_dict = {
         'candidate_type': 'MOCK_MODEL',
-        'uuid': 'test_uuid',
         'metadata': {'name': 'test name'},
         'model_parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
     }
@@ -115,7 +113,6 @@ def test__candidate__to_from_dict():  # noqa
 def test__candidate__clone():  #noqa
     candidate_dict = {
         'candidate_type': 'MOCK_MODEL',
-        'uuid': 'test_uuid',
         'metadata': {'name': 'test name'},
         'model_parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
     }
@@ -131,7 +128,6 @@ def test__candidate__clone():  #noqa
     assert candidate.model.prompts == ['test']
     assert clone.model.prompts == []
     # ensure that changing values on the clone doesn't affect the original
-    clone.uuid = 'test_uuid_2'
     clone.metadata['name'] = 'test name 2'
     clone.model_parameters['param_1'] = 'param_a_2'
     assert clone.to_dict() != candidate.to_dict()
@@ -146,6 +142,9 @@ def test__CallableCandidate():  # noqa
     candidate = CallableCandidate(model=lambda x: x)
     assert candidate('test') == 'test'
     assert candidate.to_dict() == {'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name}
+
+def test__candidate__multiple_model_params_returns_multiple_candidates():  # noqa
+    pass
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAI__default__no_model_parameters():  # noqa
@@ -188,7 +187,6 @@ def test__OpenAI__default__no_model_parameters():  # noqa
 def test__OpenAI__config():  # noqa
     """Test that the various config options for an OpenAI candidate work."""
     config = {
-        'uuid': 'test uuid',
         'metadata': {'name': 'Test Name'},
         'candidate_type': CandidateType.OPENAI.name,
         'model_parameters': {
@@ -200,7 +198,6 @@ def test__OpenAI__config():  # noqa
         },
     }
     candidate = Candidate.from_dict(config)
-    assert candidate.uuid == config['uuid']
     assert candidate.metadata == config['metadata']
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.model_parameters == config['model_parameters']

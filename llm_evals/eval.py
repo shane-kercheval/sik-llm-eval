@@ -123,9 +123,7 @@ class Eval(DictionaryEqualsMixin):
     def __init__(
             self,
             test_sequence: list[PromptTest | dict] | dict | PromptTest,
-            metadata: dict | None = None,
-            uuid: str | None = None,
-            version: str | int | float | None = None) -> None:
+            metadata: dict | None = None) -> None:
         """
         Initializes the Eval.
 
@@ -134,15 +132,8 @@ class Eval(DictionaryEqualsMixin):
                 A list of prompts and tests to run against the LLM.
             metadata:
                 Metadata associated with the Eval.
-            uuid:
-                Used to uniquely identify the Eval which is ultimately used to avoid running the
-                same Eval (against the same Candidate/llm) more than once.
-            version:
-                Version of the Eval.
         """
         self.metadata = metadata
-        self.uuid = uuid
-        self.version = version
         self._candidate = None
         self._responses = None
         self._duration = None
@@ -163,10 +154,6 @@ class Eval(DictionaryEqualsMixin):
     def to_dict(self) -> dict:
         """Return a dictionary representation of the PromptTest."""
         value = {'test_sequence': [t.to_dict() for t in self.test_sequence]}
-        if self.uuid:
-            value['uuid'] = self.uuid
-        if self.version:
-            value['version'] = self.version
         if self.metadata:
             value['metadata'] = self.metadata
         return value
@@ -212,12 +199,9 @@ class Eval(DictionaryEqualsMixin):
     def _generate_responses(self, candidate: Candidate | Callable | dict) -> None:
         """TODO: this is a seperate call from _execute_eval so we can async/parallelize."""
         self._candidate = self._to_candidate(candidate)
-        # print(f'generating response for {self._candidate.uuid} and {self.uuid}')
         start = time.time()
-        # time.sleep(2)
         self._responses = [self._candidate(p.prompt) for p in self.test_sequence]
         end = time.time()
-        # print(f'finished generating response for {self._candidate.uuid} and {self.uuid}')
         self._duration = end - start
 
     def _execute_checks(self) -> EvalResult:
@@ -290,11 +274,10 @@ class Eval(DictionaryEqualsMixin):
             test_sequence += '\n            ]'
         else:
             test_sequence = '[]'
-        metadata = '' if not self.metadata else f'\n            metadata={self.metadata},'
+        metadata = '' if not self.metadata else f'            metadata={self.metadata},\n{" " * 12}'  # noqa
         return dedent(f"""
         Eval(
-            uuid={self.uuid},{metadata}
-            test_sequence={test_sequence},
+            {metadata}test_sequence={test_sequence},
         )
         """).strip()
 
@@ -466,10 +449,14 @@ class EvalResult(DictionaryEqualsMixin):
 def eval_result_summarizer(result: EvalResult) -> dict:
     """Simple summarizer that returns a dictionary of summary statistics."""
     summary = {}
-    if result.eval_obj.uuid:
-        summary['eval_uuid'] = result.eval_obj.uuid
-    if result.candidate_obj.uuid:
-        summary['candidate_uuid'] = result.candidate_obj.uuid
+    if 'uuid' in result.eval_obj.metadata:
+        summary['eval_uuid'] = result.eval_obj.metadata['uuid']
+    if 'name' in result.eval_obj.metadata:
+        summary['eval_name'] = result.eval_obj.metadata['name']
+    if 'uuid' in result.candidate_obj.metadata:
+        summary['candidate_uuid'] = result.candidate_obj.metadata['uuid']
+    if 'name' in result.candidate_obj.metadata:
+        summary['candidate_name'] = result.candidate_obj.metadata['name']
     summary['num_prompts'] = len(result.responses)
     if result.cost:
         summary['cost'] = result.cost

@@ -1,5 +1,5 @@
-uuid: F392362B-BB18-425B-84F3-385D7B39A0EB
 metadata:
+  uuid: F392362B-BB18-425B-84F3-385D7B39A0EB
   name: Fibonacci
   description: Create a function that returns the nth fibonacci number. Then, create a set of assertion states to test the function.
   author: Anaconda

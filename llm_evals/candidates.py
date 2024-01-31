@@ -43,20 +43,14 @@ class Candidate(ABC):
 
     registry = Registry()
 
-    def __init__(
-        self,
-        uuid: str | None = None,
-        metadata: dict | None = None,
-        model_parameters: dict | None = None) -> None:
+    def __init__(self, metadata: dict | None = None, model_parameters: dict | None = None) -> None:
         """
         Initialize a Candidate object.
 
         Args:
-            uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
             model_parameters: A dictionary of parameters for the Candidate.
         """
-        self.uuid = uuid
         self.metadata = metadata
         self.model_parameters = model_parameters
 
@@ -75,13 +69,21 @@ class Candidate(ABC):
         return decorator
 
     @classmethod
-    def from_dict(cls, data: dict):  # noqa: ANN102
+    def from_dict(cls, data: dict) -> Candidate | list[Candidate]:  # noqa: ANN102
         """
-        Create a Candidate object from a dictionary. This method requires that the Candidate
-        subclass has been registered with the `register` decorator.
+        Creates a Candidate object (or multiple objects) from a dictionary. If any of the values
+        within the `model_parameters` dict is a list (i.e. multiple parameters to evaluate
+        against), this method will return a list of Candidates.
+
+        This method requires that the Candidate subclass has been registered with the `register`
+        decorator before calling this method. It also requires that the dictionary has a
+        `candidate_type` field that matches the type name of the registered Candidate subclass.
         """
         data_copy = deepcopy(data)
         candidate_type = data_copy.pop('candidate_type', '')
+
+
+
         if candidate_type in cls.registry:
             return cls.registry.create_instance(type_name=candidate_type, **data_copy)
         raise ValueError(f"Unknown type {candidate_type}")
@@ -90,8 +92,6 @@ class Candidate(ABC):
         """Return a dictionary representation of the Candidate."""
         # value = self.model_dump(exclude_defaults=True, exclude_none=True)
         value = {}
-        if self.uuid:
-            value['uuid'] = self.uuid
         if self.metadata:
             value['metadata'] = deepcopy(self.metadata)
         if self.model_parameters:
@@ -125,7 +125,6 @@ class Candidate(ABC):
         parameters = '' if not self.model_parameters else f'\n            model_parameters={self.model_parameters},'  # noqa
         return dedent(f"""
         {self.__class__.__name__}(
-            uuid={self.uuid},
             metadata={self.metadata},
             {parameters}
         )
@@ -163,7 +162,6 @@ class CallableCandidate(Candidate):
     def __init__(
             self,
             model: Callable | None = None,
-            uuid: str | None = None,
             metadata: dict | None = None,
             parameters: dict | None = None) -> None:
         """
@@ -171,11 +169,10 @@ class CallableCandidate(Candidate):
 
         Args:
             model: The callable model.
-            uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
             parameters: A dictionary of parameters for the Candidate.
         """
-        super().__init__(uuid, metadata, parameters)
+        super().__init__(metadata, parameters)
         self.model = model
 
     def __call__(self, prompt: str) -> str:
@@ -192,22 +189,16 @@ class OpenAICandidate(Candidate):
     """
 
     def __init__(self,
-        uuid: str | None = None,
         metadata: dict | None = None,
         model_parameters: dict | None = None) -> None:
         """
         Initialize a OpenAICandidate object.
 
         Args:
-            uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
             model_parameters: A dictionary of parameters passed to OpenAI.
         """
-        super().__init__(
-            uuid=uuid,
-            metadata=metadata,
-            model_parameters=model_parameters,
-        )
+        super().__init__(metadata=metadata, model_parameters=model_parameters)
         if model_parameters is None:
             model_parameters = {}
         self.model = OpenAIChat(**model_parameters)
@@ -247,13 +238,11 @@ class HuggingFaceEndpointCandidate(Candidate):
 
     def __init__(self,
         model_parameters: dict,
-        uuid: str | None = None,
         metadata: dict | None = None) -> None:
         """
         Initialize a HuggingFaceEndpointCandidate object.
 
         Args:
-            uuid: A unique identifier for the Candidate.
             metadata: A dictionary of metadata about the Candidate.
             model_parameters: A dictionary of parameters passed to Hugging Face.
         """
@@ -261,11 +250,7 @@ class HuggingFaceEndpointCandidate(Candidate):
         self.system_format = model_parameters.pop('system_format')
         self.prompt_format = model_parameters.pop('prompt_format')
         self.response_format = model_parameters.pop('response_format')
-        super().__init__(
-            uuid=uuid,
-            metadata=metadata,
-            model_parameters=model_parameters,
-        )
+        super().__init__(metadata=metadata, model_parameters=model_parameters)
         message_formatter = create_message_formatter(
             system_format=self.system_format,
             prompt_format=self.prompt_format,
