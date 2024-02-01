@@ -1,4 +1,15 @@
-"""Defines a registration system for Candidate models."""
+"""
+Defines classes for different types of built-in Candidates and a corresponding registry system for
+custom Candidates.
+
+A Candidate encapsulates the underlying LLM and corresponding client the user is interested in
+evaluating the prompts (Evals) against. Examples of candidates are ChatGPT 4.0 (LLM & client/API
+are synonymous), Llama-2-7b-Chat (LLM) running on Hugging Face Endpoints with Nvidia 10G (client),
+Llama-2-7b-Chat Q6_K.gguf (LLM) running locally on LM Studio (client). The latter two are examples
+of the same underlying model running on different hardware. They are likely to have very similar
+quality of responses (but this is also determined by the quantization) but may have very different
+performance (e.g. characters per second).
+"""
 import yaml
 from copy import deepcopy
 from abc import ABC, abstractmethod
@@ -17,30 +28,26 @@ from llm_evals.utilities.internal_utilities import (
 
 
 class CandidateType(EnumMixin, Enum):
-    """
-    Defines the types of Candidates. This could be a specific LLM or a specific implementation
-    of an LLM interface (e.g. history/context management).
-    """
+    """Provides a typesafe representation of the built-in types of Candidates."""
 
     OPENAI = auto()
     HUGGING_FACE_ENDPOINT = auto()
-    LLAMA_CPP_SERVER = auto()
-    API = auto()
     CALLABLE_NO_SERIALIZE = auto()
 
 
 class Candidate(DictionaryEqualsMixin, ABC):
     """
-    A Candidate describes an LLM (or specific implementation of an LLM interface (e.g.
-    history/context management)) along wiht optional parameters or hardware.
+    A Candidate describes an LLM and the client for interfacing with the LLM (or specific
+    implementation of an LLM interface (e.g. history/context management)) along with optional
+    model parameters.
 
-    A Candidate is a callable that takes a prompt and returns a response.
+    A Candidate is a callable object that takes a prompt and returns a response.
 
     NOTE: If a candidate is being evaluated against multiple prompts (i.e. multiple PromptTest
-    objects) in the same Eval, the assumption those prompts are testing a conversation (i.e.
-    sequentially building on each other). This means that the candidate should be able to
-    maintain state between prompts (e.g. history/context) and a single Candidate object should
-    be created for a single Eval object, and not reused across multiple Eval objects.
+    objects) in the same Eval, the assumption is that those prompts are testing a conversation
+    (i.e. sequential prompt/response exchanges). This means that the candidate/client should be
+    able to maintain state between prompts (e.g. history/context) and a single Candidate object
+    should be created for a single Eval object, and not reused across multiple Eval objects.
     """
 
     registry = Registry()
@@ -75,7 +82,8 @@ class Candidate(DictionaryEqualsMixin, ABC):
         """
         Creates a Candidate object (or multiple objects) from a dictionary. If any of the values
         within the `model_parameters` dict is a list (i.e. multiple parameters to evaluate
-        against), this method will return a list of Candidates.
+        against), this method will return a list of Candidates corresponding to all combinations of
+        model parameters.
 
         This method requires that the Candidate subclass has been registered with the `register`
         decorator before calling this method. It also requires that the dictionary has a
@@ -162,10 +170,10 @@ class CallableCandidate(Candidate):
     and for testing.
 
     NOTE: This class is registered with the Candidate registry and can be created from a dictionary
-    using `Candidate.from_dict(...)`. However, since the model is a callable, it cannot be
-    serialized and is not included in the dict representation of the Candidate. When creating a
-    CallableCandidate from a dictionary, the `model` field will be `None`. Therefore, it can
-    be reloded from a dictionary but will not be able to run evaluations.
+    using `Candidate.from_dict(...)`. However, since the model is a callable defined at runtime,
+    it cannot be serialized (to/from dict) and is not included in the dict representation of the
+    Candidate. When creating a CallableCandidate from a dictionary, the `model` field will be
+    `None`. Therefore, it can be reloded from a dictionary but will not be able to run evaluations.
     """
 
     def __init__(
@@ -192,7 +200,10 @@ class CallableCandidate(Candidate):
 @Candidate.register(CandidateType.OPENAI)
 class OpenAICandidate(Candidate):
     """
-    Wrapper around OpenAI API.
+    Wrapper around the OpenAI API that allows the user to create an OpenAI candidate from a
+    dictionary. The client is a callable object that takes a prompt and returns a response. It will
+    also track the history/messages, supporting stateful conversations, which is needed to evaluate
+    multiple prompts in a single Eval object.
 
     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
@@ -204,8 +215,13 @@ class OpenAICandidate(Candidate):
         Initialize a OpenAICandidate object.
 
         Args:
-            metadata: A dictionary of metadata about the Candidate.
-            model_parameters: A dictionary of parameters passed to OpenAI.
+            metadata:
+                A dictionary of metadata about the Candidate.
+            model_parameters:
+                A dictionary of parameters passed to OpenAI. `model_name` (e.g.
+                'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
+                such as `system_message` and model-specific parameters (e.g. `temperature`) can be
+                passed.
         """
         super().__init__(metadata=metadata, model_parameters=model_parameters)
         if model_parameters is None:
@@ -240,7 +256,10 @@ class OpenAICandidate(Candidate):
 @Candidate.register(CandidateType.HUGGING_FACE_ENDPOINT)
 class HuggingFaceEndpointCandidate(Candidate):
     """
-    Wrapper around Hugging Face Inference API.
+    Wrapper around the Hugging Face Endpoint API that allows the user to create the candidate from
+    a dictionary. The client is a callable object that takes a prompt and returns a response. It
+    will also track the history/messages, supporting stateful conversations, which is needed to
+    evaluate multiple prompts in a single Eval object.
 
     NOTE: the `HUGGING_FACE_API_KEY` environment variable must be set to use this class.
     """
@@ -248,12 +267,25 @@ class HuggingFaceEndpointCandidate(Candidate):
     def __init__(self,
         model_parameters: dict,
         metadata: dict | None = None) -> None:
-        """
+        r"""
         Initialize a HuggingFaceEndpointCandidate object.
 
         Args:
-            metadata: A dictionary of metadata about the Candidate.
-            model_parameters: A dictionary of parameters passed to Hugging Face.
+            metadata:
+                A dictionary of metadata about the Candidate.
+            model_parameters:
+                A dictionary of parameters passed to OpenAI. `endpoint_url`, `system_format`,
+                `prompt_format`, and `response_format` are required parameters. Other parameters
+                such as `system_message` and model-specific parameters (e.g. `temperature`) can be
+                passed.
+
+                An example of system/prompt/response formats is:
+
+                ```
+                system_format: '[INST] <<SYS>> {system_message} <</SYS>> [/INST]\n'
+                prompt_format: '[INST] {prompt} [/INST]\n'
+                response_format: '{response}\n'
+                ```
         """
         model_parameters = deepcopy(model_parameters)
         self.system_format = model_parameters.pop('system_format')
