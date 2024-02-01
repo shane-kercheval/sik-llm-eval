@@ -1,4 +1,4 @@
-"""Classes and functions to eval LLMs."""
+"""Classes and functions to evaluate LLMs."""
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
@@ -25,14 +25,17 @@ from llm_evals.utilities.internal_utilities import (
 class PromptTest(DictionaryEqualsMixin):
     """
     A PromptTest represents a prompt, an optional ideal response, and a list of checks to run
-    against the response.
+    against the response. There can be one or more PromptTests in an Eval. If more than one
+    PromptTest is provided, the intent is evaluate a conversation and, therefore, it's expected
+    that the underlying Candidate (model/client) will maintain state between multiple
+    prompt/response exchanges.
 
     Checks are optional because even a test without checks still collects performance information
     (e.g. characters per second) as well as responses (which can be visually/subjectively compared
     against either the ideal response or the responses from other LLMs).
 
-    A PromptTest only contains information, it is not directly callable. An Eval object is
-    responsible for calling the PromptTest(s), executing the checks, and returning a TestResult
+    A PromptTest only contains information (it is not directly callable). An Eval object is
+    responsible for calling the PromptTest(s), executing the checks, and returning a EvalResult
     object.
     """
 
@@ -103,18 +106,16 @@ class PromptTest(DictionaryEqualsMixin):
 
 class Eval(DictionaryEqualsMixin):
     """
-    An Eval defines a set of one or more prompts and tests that can be used to evaluate an LLM. If
-    more than one prompt is provided, the intent is evaluate the the conversation and, therefore,
-    it's expected that the underlying model/object will maintain state between prompts.
+    An Eval is single scenario (i.e. one or more prompts) that the user is interested in
+    evaluating. Multiple prompts can be used to test conversations (i.e. sequential
+    prompt/response exchanges where the assumption is the LLM client maintains conversational
+    history). Additionally, each Eval is associated with custom "checks". Examples of checks are:
+    if the response matches an exact value, if it contain a particular value, if it contain code
+    blocks, if those code blocks run, if the variables/functions/etc created by those code blocks
+    contain the expected values/behavior.
 
-    The Eval object is evaluated by calling it with a single model_id and a callable (wrapping the
-    LLM) that takes a prompt (string) and returns a response (string).
-
-    An Eval corresponds to a set of prompts, while the result of the Eval corresponds to the Eval
-    and a specific LLM, and potentially specific to the hardware used to run the LLM.
-
-    The tests are ran after all the prompts have been evaluated. Each test is passed a list of
-    responses (strings) and returns a TestResult object.
+    An Eval is a callable object that is executed by calling it with a Candidate object, or a
+    dictionary representing a Candidate that has been registered via `Candidate.register(...)`.
     """
 
     def __init__(
@@ -126,7 +127,7 @@ class Eval(DictionaryEqualsMixin):
 
         Args:
             test_sequence:
-                A list of prompts and tests to run against the LLM.
+                A list of PromptTest objects (prompt/check pairs) to run against the LLM.
             metadata:
                 Metadata associated with the Eval.
         """
@@ -145,7 +146,9 @@ class Eval(DictionaryEqualsMixin):
             elif isinstance(test, PromptTest):
                 tests_created.append(test)
             else:
-                raise TypeError("test_sequence must be either a PromptTest instance or a dictionary")  # noqa
+                raise TypeError(
+                    "test_sequence must be either a PromptTest instance or a dictionary",
+                )
         self.test_sequence = tests_created
 
     def to_dict(self) -> dict:
@@ -179,6 +182,7 @@ class Eval(DictionaryEqualsMixin):
 
     @staticmethod
     def _to_candidate(candidate: Candidate | Callable | dict) -> Candidate:
+        """Converts a candidate to a Candidate object."""
         if isinstance(candidate, dict):
             candidate = Candidate.from_dict(candidate)
         elif not isinstance(candidate, Candidate) and isinstance(candidate, Callable):
@@ -192,9 +196,16 @@ class Eval(DictionaryEqualsMixin):
                 "candidate must be either a Candidate, callable, or a dictionary"
         return candidate
 
-    # OR INSTEAD OF THIS HAVE SOME WAY OF INJECTING RESPONSES/DURATION SO WE CAN DELEGATE TO ASYNC
     def _generate_responses(self, candidate: Candidate | Callable | dict) -> None:
-        """TODO: this is a seperate call from _execute_eval so we can async/parallelize."""
+        """
+        _generate_responses is responsible for generating responses from the Candidate/LLM. It is a
+        separate function from _execute_checks so that we can async the generation of responses
+        and then execute the checks (which are heavier on the CPU and shouldn't be async).
+
+        This method has side effects of setting self._responses, self._duration, and
+        self._candidate, which are used by _execute_checks. This is bad practice but we need to do
+        this to support calling _generate_responses async and then executing the checks afterwards.
+        """
         self._candidate = self._to_candidate(candidate)
         start = time.time()
         self._responses = [self._candidate(p.prompt) for p in self.test_sequence]
@@ -202,7 +213,12 @@ class Eval(DictionaryEqualsMixin):
         self._duration = end - start
 
     def _execute_checks(self) -> 'EvalResult':
-        """TODO: this is a seperate call from _generate_responses so we can async/parallelize."""
+        """
+        Executes the checks against the responses and returns an EvalResult object. This method
+        should only be called after _generate_responses has been called. This method is separate
+        from _generate_responses so that we can async the generation of responses and then execute
+        the checks (which are heavier on the CPU and shouldn't be async).
+        """
         assert self._responses
         assert self._duration
         assert self._candidate
@@ -249,14 +265,14 @@ class Eval(DictionaryEqualsMixin):
                 be serialized.
         """
         self._generate_responses(candidate)
-        # _generate_responses has side effects of setting self.responses, self.duration, and
-        # self.candidate that _execute_check relies on;
+        # _generate_responses has side effects of setting self._responses, self._duration, and
+        # self._candidate that _execute_check relies on;
         # this is bad practice but we need to do this to support calling _generate_responses async
         # and then executing the checks afterwards
         results = self._execute_checks()
-        # these should be reset so we don't accidentally use them again; they should not be
-        # accessed
-        # directly
+        # these fields should be reset so we don't accidentally use them again; they should not be
+        # accessed directly; they are only used to store information between running
+        # _generate_responses and _execute_checks
         self._candidate = None
         self._responses = None
         self._duration = None
@@ -290,11 +306,8 @@ class Eval(DictionaryEqualsMixin):
 
 class EvalResult(DictionaryEqualsMixin):
     """
-    An EvalResult is the result of evaluating a specific LLM against a specific Eval, potentially
-    using specific hardware. The hardware is not applicable for services like OpenAI's API, but
-    would be applicable for running locally or against specific/configurable hardware like Hugging
-    Face Endpoints or a custom server. The quality of responses might not change between hardware,
-    but the speed of responses could.
+    An EvalResult is the result of evaluating a specific Candidate/LLM against a specific
+    Eval.
     """
 
     def __init__(
@@ -483,31 +496,27 @@ def eval_result_summarizer(result: EvalResult) -> dict:
 
 class EvalHarness:
     """
-    An EvalHarness provides a interface for evaluating a list of Evals against a list of
-    Candidates.
+    An EvalHarness provides a interface for evaluating multiple Evals against multiple
+    Candidates/LLMs.
 
     Candidates must be registered so that we can clone them. This is necessary because we need to
-    clone the Candidate for each Eval so that we can run each Eval against a fresh Candidate
-    (i.e. if the Candidate maintains state/history between prompts, we don't want to reuse the
-    same candidate for each eval).
+    clone the Candidate for each Eval so that we can run each Eval against a unique Candidate in
+    memory (i.e. if the Candidate maintains state/history between prompts, we don't want to reuse
+    the same candidate for each eval).
 
     The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
     collection of EvalResults.
 
-    TODO: for OpenAI, it's probably fine to launch many tasks async and not effect individual
-    performance. For hugging face, it might be better to launch same eval across different
-    endpoints. For local, it might be better to run one at a time to avoid performance issues.
+    By default, the EvalHarness will run each Candidate (and the corresponding Evals) in parallel
+    on different CPUs. The number of CPUs can be set via the `num_cpus` parameter. If `num_cpus` is
+    set to 1, the EvalHarness will run each Candidate (and the corresponding Evals) sequentially.
 
-    TODO: A single Candidate object should ONLY be used on an individual Eval object and not
-    reused. For Evals that contain multiple prompts (i.e. PromptTest objects), the assumption is
-    that the prompts sequentially build on eachother and the Candidate's should maintain
-    state/history).
-
-    TODO: consider how to async and/or parallelize(?)
-
-
-    TODO: how do check for duplicate candidates and evals? full dict? Even if full dict, someone
-    could be passing in minimum values required and could be different. Maybe don't check.
+    Additionally, for each Candidate, the EvalHarness will run all Evals in asynchronous batches.
+    The user must be careful to set the `async_batch_size` parameter to a value that is appropriate
+    for the underlying Candidate. For example, if the Candidate is a remote API that can handle a
+    very large number of requests such as OpenAI, the `async_batch_size` can be set to a large
+    number. If the Candidate is a local model, the `async_batch_size` should be set to a small
+    number to avoid performance issues (which will effect metrics such as characters per second).
     """
 
     def __init__(
@@ -658,12 +667,20 @@ class EvalHarness:
 
     @staticmethod
     def _generate_response(candidate: Candidate, eval_obj: Eval) -> Eval:
+        """
+        Generates the responses from the Candidate/LLM for a particular Eval. Ensure that the
+        Candidate and Eval objects are cloned before calling this method. This is especially
+        important for the Candidate object to ensure that each Eval is run against a unique
+        Candidate in memory (i.e. if the Candidate maintains state/history between prompts, we
+        don't want to reuse the same candidate for each eval).
+        """
         eval_obj = eval_obj.clone()
         eval_obj._generate_responses(candidate.clone())
         return eval_obj
 
     @staticmethod
     async def _async_generate_responses(candidate: Candidate, evals: list[Eval]) -> list[Eval]:
+        """Generates the responses from the Candidate/LLM for a list of Evals asynchronously."""
         loop = asyncio.get_event_loop()
         tasks = [
             loop.run_in_executor(None, EvalHarness._generate_response, candidate, eval_obj)
@@ -677,7 +694,11 @@ class EvalHarness:
         evals: list[Eval],
         async_batch_size: int | None = 50,
         callback: Callable | None = None) -> list[EvalResult]:
-        """TODO document."""
+        """
+        Evaluates the Evals against a Candidate. This method is responsible creating the batches
+        of Evals and running them asynchronously. It is also responsible for executing the checks
+        and returning the EvalResults.
+        """
         eval_batch_size = len(evals) if async_batch_size is None else async_batch_size
         assert eval_batch_size >= 1
         results = []
@@ -728,6 +749,8 @@ class EvalHarness:
                 ],
             ]
 
+        If a callback has been set, the callback will be called for each EvalResult after the
+        corresponding checks have been executed for that Eval.
         """
         num_cpus = self.num_cpus
         if num_cpus == 1:
