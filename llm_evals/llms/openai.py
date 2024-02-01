@@ -216,8 +216,6 @@ class OpenAIChat(ChatModel):
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed
-        from openai import OpenAI
-        self.client = OpenAI()
 
     def _cost_calc(self, input_tokens: int, response_tokens: int) -> float:
         """
@@ -235,6 +233,16 @@ class OpenAIChat(ChatModel):
             return num_tokens_from_messages(model_name=self.model_name, messages=messages)
         raise NotImplementedError(f"""token_calculator() is not implemented for messages of type {type(messages)}.""")  # noqa
 
+    def _create_client(self) -> object:
+        """
+        _create_client is used to create the OpenAI client. We cannot define this in __init__
+        because it is not picklable and cannot be used with multiprocessing. Additionally, this
+        function lets OpenAIServerChat override the client creation and set the base_url to use
+        with a local server.
+        """
+        from openai import OpenAI
+        return OpenAI()
+
     def _run(self, messages: list[dict]) -> tuple[str, dict]:
         """
         `client.chat.completions.create` expects a list of messages with various roles (i.e.
@@ -246,9 +254,10 @@ class OpenAIChat(ChatModel):
         The use of a streaming callback does not change the output returned from calling the object
         (i.e. a ExchangeRecord object).
         """
+        client = self._create_client()
         if self.streaming_callback:
             response = retry_handler()(
-                self.client.chat.completions.create,
+                client.chat.completions.create,
                 model=self.model_name,
                 messages=messages,
                 timeout=self.timeout,
@@ -269,7 +278,7 @@ class OpenAIChat(ChatModel):
                     response_message += delta
         else:
             response = retry_handler()(
-                self.client.chat.completions.create,
+                client.chat.completions.create,
                 model=self.model_name,
                 messages=messages,
                 timeout=self.timeout,
@@ -326,5 +335,8 @@ class OpenAIServerChat(OpenAIChat):
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed
+        self.base_url = base_url
+
+    def _create_client(self) -> object:
         from openai import OpenAI
-        self.client = OpenAI(base_url=base_url, api_key='none')
+        return OpenAI(base_url=self.base_url, api_key='none')
