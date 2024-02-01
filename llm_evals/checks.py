@@ -1,9 +1,10 @@
 """
 Defines classes for different types of checks and corresponding registry system.
 
-A "check" is a single test/check defined in an Eval (an Eval can have multiple checks). The check
-is responsible for evaluating the response to the prompts. The intent of the check can range from
-simple matching (i.e. does the LLM response exactly match the expected value provided) to using an
+A "check" is a single test defined within an Eval corresponding to a specific prompt. The goal of a
+check is to test various aspects of the LLMs response to the prompt. (An Eval can have multiple
+prompts; each prompt can have multiple checks.) The intent of the check can range from simple
+matching (i.e. does the LLM response exactly match the expected value provided) to using an
 LLM to evaluate the response.
 """
 from abc import ABC, abstractmethod
@@ -28,7 +29,7 @@ class CheckType(EnumMixin, Enum):
 
 
 class CheckResultsType(EnumMixin, Enum):
-    """Provides a typesafe representation of the built-in types of CheckReturn classes."""
+    """Provides a typesafe representation of the built-in types of CheckResult classes."""
 
     PASS_FAIL = auto()
     SCORE = auto()
@@ -36,7 +37,7 @@ class CheckResultsType(EnumMixin, Enum):
 
 class CheckResult(BaseModel, ABC):
     """
-    Encapsulates the result of an individual Check. There are different types of
+    Encapsulates the result and metadata of an individual Check. There are different types of
     checks and corresponding results, making large-scale summarization difficult if results are not
     standardized. The CheckResult class is a mechanism to standardize the results of checks.
 
@@ -46,6 +47,14 @@ class CheckResult(BaseModel, ABC):
     The `value` property should be a simple type that represents the underlying result (which
     "success" is based on). The `metadata` property can be used to store additional information
     about the result.
+
+    CheckResult objects can be saved to and loaded from a dictionary (e.g. from an underlying yaml
+    file). If the user wants to load the CheckResult into memory and into the original subclass
+    (either directly or by saving/loading an EvalResult which contains all checks associated with
+    an Eval) the CheckResult subclass must be registered with the `register` decorator. This allows
+    the CheckResult to be created from a dictionary by calling `from_dict` with the name of the
+    check in the dictionary with key `result_type` (registered with the decorator) and any
+    parameters for the CheckResult.
     """
 
     registry: ClassVar[Registry] = Registry()
@@ -105,7 +114,7 @@ class PassFailResult(CheckResult):
 
     def __init__(self, **data):  # noqa: ANN003
         super().__init__(**data)
-        # definition of success is simply the value
+        # definition of success is simply the value in the case of a pass/fail result
         self.success = self.value
 
 
@@ -138,18 +147,18 @@ class ScoreResult(CheckResult):
 
 class Check(BaseModel, ABC):
     """
-    Represents a single check/test in an Eval. Each Eval can test multiple/sequential prompts, and
+    Represents a single check in an Eval. Each Eval can test multiple/sequential prompts, and
     each prompt can have multiple checks. The check is responsible for evaluating the response to
     the prompt. The intent of the check can range from simple matching (i.e. does the LLM response
     exactly match the expected value provided) to using custom logic (e.g. using an LLM to evaluate
     the response).
 
-    The Check class defines a registry system that allows users to register custom checks. The
-    registry system is used to dynamically create checks from a config (dictionary or yaml). Any
-    user can register a new check by decorating a class with the `register` decorator. A Check
-    object can then be created from a dictionary by calling `from_dict` with the name of the check
-    in the dictionary with key `check_type` (registered with the decorator) and any parameters for
-    the Check.
+    A Check can be saved to and loaded from a dictionary (e.g. from an underlying yaml file). If
+    the user wants to load the Check into memory and into the original subclass (either directly or
+    by saving/loading an Eval or EvalResult which contains all checks associated with an Eval) the
+    Check subclass must be registered with the `register` decorator. This allows the Check to be
+    created from a dictionary by calling `from_dict` with the name of the check in the dictionary
+    with key `check_type` (registered with the decorator) and any parameters for the Check.
     """
 
     registry: ClassVar[Registry] = Registry()
@@ -195,10 +204,6 @@ class Check(BaseModel, ABC):
     def __str__(self) -> str:
         """String representation of the Check."""
         return f"{self.__class__.__name__}(metadata={self.metadata})"
-
-    # def to_dict(self) -> dict:
-    #     """Return a dictionary representation of the Check."""
-    #     return self.model_dump(exclude_defaults=True, exclude_none=True)
 
 
 @Check.register(CheckType.MATCH)
@@ -270,56 +275,11 @@ class RegexCheck(Check):
         return f"{self.__class__.__name__}(pattern='{self.pattern}', metadata={self.metadata})"
 
 
-@Check.register(CheckType.PYTHON_FUNCTION)
-class PythonFunctionCheck(Check):
-    """
-    Runs a Python function (using the LLM response as input). A Python function is either
-    provided as a string, or the name of the function and the file path containing the function.
-    A Python function test could be used for anything from a simple regex check to using an LLM
-    to evaluate the response.
-
-    TODO: document, named parameters are required for the function so we can pass in correct
-    parameters.
-    """
-
-    def __init__(self,
-            function: Callable[[str, str, str], list[CheckResult]],
-            metadata: dict | None = None) -> None:
-        """
-        TODO document.
-
-        Args:
-            function: function definition as string value. If not provided, function_name and
-                function_file must be provided.
-            function_name: The name of the function to import from `function_file`.
-            function_file: The file containing the function to import.
-            metadata: TODO document.
-        """
-        super().__init__(metadata=metadata)
-        self._function = function
-
-    def __call__(
-            self,
-            **kwargs) -> CheckResult:  # noqa: ANN003
-        """
-        Calls the function based on the named parameters of the function supplied during object
-        creation.
-
-        The named parameters of the function can be kwargs (which passes all options below to the
-        function) or any combination of the following:
-            - prompt
-            - ideal_response
-            - response
-            - code_blocks
-        """
-        return self._function(**kwargs)
-
-
 @Check.register(CheckType.PYTHON_CODE_BLOCKS_PRESENT)
 class PythonCodeBlocksPresent(Check):
     """
     Checks that the response contains code blocks. The code blocks do not necessary need to run
-    successfully, but they must be present.
+    successfully (this check does not run the code blocks), but they must be present.
     """
 
     min_code_blocks: int = Field(
@@ -356,31 +316,37 @@ class PythonCodeBlocksPresent(Check):
 @Check.register(CheckType.PYTHON_CODE_BLOCKS_RUN)
 class PythonCodeBlocksRun(Check):
     """
+    Checks that the code blocks contained within the response run successfully. This check will
+    execute the code blocks and then run the (optional) custom functions defined in the test in the
+    same environment as the code blocks. These functions are passed the code blocks as a parameter
+    so the functions can either test the environment and/or the code blocks directly.
+
+    The user can define the `code_setup` which is a string containing a block of python code that
+    will be executed before the code blocks are executed. Both the setup code and the code blocks
+    are ran in an isolated environment. The setup code can be used to set up the environment for
+    the code blocks (e.g. importing libraries, defining variables, etc.). The intent of the setup
+    code is to prevent the checks from failing due to errors in the code blocks that are not
+    related to the LLM response.
+
+    NOTE: If the code within the `code_setup` raises an exception, the exception will be raised to
+    the main environment and execution of the Eval will stop. This is because the setup code is
+    assumed to work and if it doesn't, the check is not valid. If the code blocks raise any errors,
+    the errors will be captured and returned as part of the check result, but the Eval will
+    continue to run.
+
     Unlike other checks, this check aggregates several metrics into a single result.
-        - how many code blocks were generated
-        - how many code blocks ran successfully
-        - how custom functions ran successfully
 
-    TODO: document the fact that failures during code_setup will cause the check to fail, but
-    failtures from functions will not cause the check to fail. This is because failures from
-    functions could be due to the response from the llm (e.g. not naming the expected
-    value/function correctly)
+        - number of code blocks were generated
+        - number of code blocks that ran successfully
+        - number of custom checks that ran successfully
 
-    TODO: document that the success_threshold includes code blocks successes and function
-    checks
-
+    The `success_threshold` is the minimum **percent** of successfully executed code blocks *and*
+    function checks (if `functions` is used) required for the check to be considered successful.
+    
     NOTE: this check will run all code blocks. If you have multiple PythonCodeBlocksRun (e.g. one
-    for each PromptTest, then the code blocks will be run multiple times. It's recommended to
-    only have one PythonCodeBlocksRun which is ran on the last PromptTest.)
-
-    # This class is responsible for executing Python code blocks returned by the LLM and then
-    # running the python function(s) defined in the test in the same environment as code blocks.
-    # For example, if the code blocks define a pandas DataFrame, the function could be used to
-    # check that the shape or data of the DataFrame matches expectations.
-
-    # The difference between this class and PythonFunctionTest is that this class is responsible
-    # for running tests against the code blocks returned by the LLM, whereas PythonFunctionTest
-    # is responsible for running tests against the (string) response returned by the LLM.
+    for each PromptTest), then the code blocks from previous responses will be ran multiple times.
+    Therefore, it's **recommended to only have one PythonCodeBlocksRun which is ran on the last
+    PromptTest.
     """  # noqa
 
     success_threshold: float = Field(
@@ -397,7 +363,11 @@ class PythonCodeBlocksRun(Check):
     )
 
     def __call__(self, code_blocks: list[str]) -> ScoreResult:
-        """TODO document."""
+        """
+        Executes the check on the response and returns a ScoreResult containing the success rate of
+        the code blocks and function checks (if `functions` is used), along with additional
+        metadata (e.g. the code blocks, errors, etc.).
+        """
         code_blocks = code_blocks or []
         code_block_errors = []
         function_results = []
