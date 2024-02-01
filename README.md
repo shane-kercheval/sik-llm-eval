@@ -1,11 +1,17 @@
 # llm-eval
 
-Framework for evaluating performance and quality of responses from various LLMs.
+`llm-eval` is a framework for evaluating the performance (e.g. characters generated per second) and quality (e.g. number of code blocks generated that successfully run) of responses from various LLMs.
 
+There are two key concepts in this framework.
+
+- `Eval`: A Eval is single scenario (i.e. one or more prompts) that the user is interested in evaluating. Multiple prompts can be used to test conversations (multiple prompt/response exchanges where the assumption is the LLM client maintains conversational history). Additionally, each Eval is associated with custom "checks" (e.g. if the response matches an exact value, if it contain a particular value, if it contain code blocks, if those code blocks run, if the variables/functions/etc. in created by those code blocks contain the expected values/behavior).
+- `Candidate`: The underlying LLM and corresponding client the user is interested in evaluating the prompts (Eval) against. Examples of candidates are ChatGPT 4.0 (API & LLM are synonymous), Llama-2-7b-Chat running on Hugging Face Endpoints with Nvidia 10G, Llama-2-7b-Chat Q6_K.gguf running locally on LM Studio. The latter two are examples of the same underlying model running on different hardware. They are likely to have very similar quality of responses (but this is also determined by the quantization) but may have very different performance (e.g. characters per second).
+
+# Examples
 
 # Setup
 
-# Environment Variables / API Keys
+## Environment Variables / API Keys
 
 The following environment variables need to be set (e.g. via `.env` file) if the corresponding services are used: 
 
