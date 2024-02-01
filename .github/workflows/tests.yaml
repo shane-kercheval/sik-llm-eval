@@ -37,7 +37,7 @@ jobs:
       - name: linting
         run: |
           ruff check llm_evals/
-        	ruff check tests/
+          ruff check tests/
       - name: tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
