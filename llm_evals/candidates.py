@@ -4,7 +4,7 @@ from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Callable, ForwardRef, Type
+from typing import Callable, List, Type, Union
 from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
 from llm_evals.llms.message_formatters import create_message_formatter
 from llm_evals.llms.openai import OpenAIChat
@@ -14,9 +14,6 @@ from llm_evals.utilities.internal_utilities import (
     Registry,
     generate_dict_combinations,
 )
-
-
-Candidate = ForwardRef('Candidate')
 
 
 class CandidateType(EnumMixin, Enum):
@@ -74,7 +71,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
         return decorator
 
     @classmethod
-    def from_dict(cls, data: dict) -> Candidate | list[Candidate]:  # noqa: ANN102
+    def from_dict(cls, data: dict) -> Union['Candidate', List['Candidate']]:  # noqa: ANN102
         """
         Creates a Candidate object (or multiple objects) from a dictionary. If any of the values
         within the `model_parameters` dict is a list (i.e. multiple parameters to evaluate
@@ -127,7 +124,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
         return None
 
     @classmethod
-    def from_yaml(cls, path: str) -> Candidate | list[Candidate]:  # noqa: ANN102
+    def from_yaml(cls, path: str) -> Union['Candidate', List['Candidate']]:  # noqa: ANN102
         """
         Creates a Candidate object from a YAML file. This method requires the Candidate subclass to
         be registered via `Candidate.register(...)` before calling this method. It also requires
@@ -148,7 +145,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
         )
         """).strip()
 
-    def clone(self) -> Candidate:
+    def clone(self) -> 'Candidate':
         """
         Returns a copy of the Candidate with the same state but with a different instance of the
         underlying model (e.g. same parameters but reset history/context).

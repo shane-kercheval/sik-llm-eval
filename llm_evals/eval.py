@@ -5,7 +5,7 @@ from copy import deepcopy
 import os
 from textwrap import dedent, indent
 import time
-from typing import Callable, ForwardRef
+from typing import Callable
 import yaml
 from llm_evals.candidates import CallableCandidate, Candidate
 from llm_evals.checks import (
@@ -20,9 +20,6 @@ from llm_evals.utilities.internal_utilities import (
     get_callable_info,
     has_property,
 )
-
-Eval = ForwardRef('Eval')
-EvalResult = ForwardRef('EvalResult')
 
 
 class PromptTest(DictionaryEqualsMixin):
@@ -159,7 +156,7 @@ class Eval(DictionaryEqualsMixin):
         return value
 
     @classmethod
-    def from_yaml(cls, path: str) -> Eval:  # noqa: ANN102
+    def from_yaml(cls, path: str) -> 'Eval':  # noqa: ANN102
         """
         Creates an Eval object from a YAML file.
 
@@ -204,7 +201,7 @@ class Eval(DictionaryEqualsMixin):
         end = time.time()
         self._duration = end - start
 
-    def _execute_checks(self) -> EvalResult:
+    def _execute_checks(self) -> 'EvalResult':
         """TODO: this is a seperate call from _generate_responses so we can async/parallelize."""
         assert self._responses
         assert self._duration
@@ -235,7 +232,7 @@ class Eval(DictionaryEqualsMixin):
             results=results,
         )
 
-    def __call__(self, candidate: Candidate | Callable | dict) -> EvalResult:
+    def __call__(self, candidate: Candidate | Callable | dict) -> 'EvalResult':
         """
         Evaluates the model against the prompts and tests.
 
@@ -281,7 +278,7 @@ class Eval(DictionaryEqualsMixin):
         )
         """).strip()
 
-    def clone(self) -> Eval:
+    def clone(self) -> 'Eval':
         """
         Returns a copy of the Candidate with the same state but with a different instance of the
         underlying model (e.g. same parameters but reset history/context).
@@ -439,7 +436,7 @@ class EvalResult(DictionaryEqualsMixin):
             yaml.dump(self.to_dict(), f)
 
     @classmethod
-    def from_yaml(cls, path: str) -> EvalResult:  # noqa: ANN102
+    def from_yaml(cls, path: str) -> 'EvalResult':  # noqa: ANN102
         """Creates an EvalResult object from a YAML file."""
         with open(path) as f:
             config = yaml.safe_load(f)
