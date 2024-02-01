@@ -31,7 +31,6 @@ linting:
 	ruff check tests/
 
 unittests:
-	rm -f tests/test_files/log.log
 	# pytest tests
 	coverage run -m pytest --durations=0 tests
 	coverage html
@@ -40,11 +39,3 @@ doctests:
 	# python -m doctest llm_evals/evals.py
 
 tests: linting unittests doctests
-
-
-# docker_tests:
-# 	# run tests within docker container
-# 	docker compose run --no-deps --entrypoint "make tests" bash
-
-# open_coverage:
-# 	open 'htmlcov/index.html'
