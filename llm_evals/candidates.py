@@ -8,7 +8,12 @@ from typing import Callable, ForwardRef, Type
 from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
 from llm_evals.llms.message_formatters import create_message_formatter
 from llm_evals.llms.openai import OpenAIChat
-from llm_evals.utilities.internal_utilities import DictionaryEqualsMixin, EnumMixin, Registry, generate_dict_combinations
+from llm_evals.utilities.internal_utilities import (
+    DictionaryEqualsMixin,
+    EnumMixin,
+    Registry,
+    generate_dict_combinations,
+)
 
 
 Candidate = ForwardRef('Candidate')
