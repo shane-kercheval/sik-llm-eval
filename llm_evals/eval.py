@@ -132,7 +132,7 @@ class Eval(DictionaryEqualsMixin):
             metadata:
                 Metadata associated with the Eval.
         """
-        self.metadata = deepcopy(metadata)
+        self.metadata = deepcopy(metadata) or {}
         self._candidate = None
         self._responses = None
         self._duration = None
@@ -435,7 +435,7 @@ class EvalResult(DictionaryEqualsMixin):
             Characters per Second:      {self.characters_per_second:,.1f}
             # of Checks:                {self.num_checks}
             # of Successful Checks:     {self.num_successful_checks}
-            % of Successful Checks:     {self.perc_successful_checks:.1%}
+            % of Successful Checks:     {self.perc_successful_checks or 0:.1%}
         """).strip()  # noqa: E501
 
     def to_dict(self) -> dict:

@@ -144,6 +144,16 @@ def test__CallableCandidate():  # noqa
     candidate = CallableCandidate(model=lambda x: x)
     assert candidate('test') == 'test'
     assert candidate.to_dict() == {'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name}
+    assert str(candidate)  # ensure __str__ doesn't raise an error
+
+    candidate = CallableCandidate(model=lambda x: x, metadata={'name': 'test name'})
+    assert candidate('test') == 'test'
+    assert candidate.metadata == {'name': 'test name'}
+    assert candidate.to_dict() == {
+        'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name,
+        'metadata': {'name': 'test name'},
+    }
+    assert str(candidate)  # ensure __str__ doesn't raise an error
 
 def test__candidate__multiple_model_params_returns_multiple_candidates():  # noqa
     test_params = {'param_1': 'param_a', 'param_2': 'param_b'}
@@ -237,7 +247,7 @@ def test__candidate__multiple_model_params_returns_multiple_candidates():  # noq
     assert all(isinstance(c, MockCandidate) for c in candidates)
     assert candidates[0].model is not candidates[1].model
     # all candidates should have the same metadata
-    assert all(c.metadata is None for c in candidates)
+    assert all(not c.metadata for c in candidates)
     # check expected model parameter values
     for e, c in zip(expected_params, candidates):
         assert c.model.llm_parameters == e
@@ -251,7 +261,7 @@ def test__candidate__multiple_model_params_returns_multiple_candidates():  # noq
     }
     candidate_no_params = Candidate.from_dict(candidate_dict_no_params)
     assert isinstance(candidate_no_params, MockCandidate)
-    assert candidate_no_params.metadata is None
+    assert not candidate_no_params.metadata
     assert candidate_no_params.model_parameters is None
     response = candidate_no_params('test')
     assert response == 'test'

@@ -53,7 +53,7 @@ test_sequence:
                 return mask_emails(value) == value
 ```
 
-The Eval above defines a `PYTHON_CODE_BLOCKS_RUN` check, which runs the code blocks (generated from the LLM) in an isolated environment and tracks the number of code blocks that run successfully. Additionally, the user can define one or more functions (which return boolean values) that are ran in the same environment and can test variables or functions that are created from the code blocks. In the example above, the function tests that `mask_emails` function (assumed to be defined in the code block in the LLM response and created in the isolated enviroment) returns the original value if no emails are present.
+Additionally, the Eval above defines a `PYTHON_CODE_BLOCKS_RUN` check, which runs the code blocks (generated from the LLM) in an isolated environment and tracks the number of code blocks that run successfully. Additionally, the user can define one or more functions (which return boolean values indicating success/failure) that are ran in the same environment and can test variables or functions that are created from the code blocks. In the example above, the function tests that `mask_emails` function (expected to be defined in the code block in the LLM response and created in the isolated enviroment) returns the original value if no emails are present.
 
 The following code loads in the Candidate and Eval above (along with a ChatGPT 4 Candidate and additional Eval) and runs all of the Evals against each Candidate.
 
@@ -77,7 +77,7 @@ results = eval_harness()
 print(results[0][0])
 ```
 
-`results` contains a list of lists of EvalResults. The first list corresponds to results of the Evals associated with the first Candidate (ChatGPT 3.5). The second list corresponds to results of the Evals associated with the second Candidate (ChatGPT 4.0).
+`results` contains a list of lists of EvalResults. Each item in the outer list corresponds to a single candidate and contains a list of EvalResults for all Evals ran against the Candidate. In our example, `results` is `[[EvalResult, EvalResult], [EvalResult, EvalResult]]` where the first list corresponds to results of the Evals associated with the first Candidate (ChatGPT 3.5) and the second list corresponds to results of the Evals associated with the second Candidate (ChatGPT 4.0).
 
 `print(results[0][0])` will give:
 
@@ -117,6 +117,33 @@ eval_harness.add_candidate(candidate_chatgpt_40)
 results = eval_harness()
 print(results[0][0])
 ```
+
+### Executing a single Eval against a single Candidate
+
+If you are only interested in evaluating a particular Eval against a particular Candidate, you can create both objects and pass the Candidate object to the Eval object (which is callable).
+
+```python
+candidate = OpenAICandidate({'model_parameters': {'model_name': 'gpt-3.5-turbo-1106'}})
+eval_obj = Eval(test_sequence={'prompt': "Create a python function called `fib` that takes an integer `n` and returns the `n`th number in the Fibonacci sequence. Use type hints and docstrings."})
+result = eval_obj(candidate)
+print(result)
+```
+
+which gives:
+
+```
+EvalResult:
+    # of Prompts Tested:        1
+    Cost:                       $0.0005
+    Total Response Time:        4.4 seconds
+    # of Response Characters:   734
+    # of Code Blocks Generated: 1
+    Characters per Second:      168.3
+    # of Checks:                0
+    # of Successful Checks:     0
+```
+
+This minimal example does not give much insight into the quality of the response, but could still be used to compare the response time and cost of, for example, ChatGPT 3.5 vs 4.0, as well as visually compare the responses.
 
 ## Installing
 

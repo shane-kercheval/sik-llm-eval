@@ -5,7 +5,7 @@ import shutil
 from textwrap import dedent
 import pytest
 import yaml
-from llm_evals.candidates import Candidate, CandidateType
+from llm_evals.candidates import CallableCandidate, Candidate, CandidateType
 from llm_evals.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
 from llm_evals.eval import Eval, EvalHarness, EvalResult, PromptTest, eval_result_summarizer
 from llm_evals.utilities.internal_utilities import extract_code_blocks
@@ -179,6 +179,27 @@ def test__Eval__call__result__to_from_dict():  # noqa
     assert Candidate.from_dict(result_dict['candidate_obj']) == result.candidate_obj
     assert EvalResult(**result_dict) == result
     assert EvalResult(**result_dict).to_dict() == result.to_dict()
+
+def test__Eval__from_objects__minimal():  # noqa
+    candidate = CallableCandidate(model=lambda x: x)
+    prompt = "This is a prompt."
+    eval_obj = Eval(test_sequence={'prompt': prompt})
+    result = eval_obj(candidate)
+    assert str(result)  # make sure __str__ works
+    assert result.eval_obj == eval_obj
+    assert result.candidate_obj == candidate
+    assert result.responses == [prompt]
+    assert result.prompts == [prompt]
+    assert result.ideal_responses == [None]
+    assert result.response_characters == len(prompt)
+    assert result.num_checks == 0
+    assert result.num_successful_checks == 0
+    assert result.perc_successful_checks is None
+    assert result.results == [[]]
+    assert result.cost is None
+    assert result.num_code_blocks == 0
+    assert result.all_checks_results == []
+    assert result.total_time_seconds > 0
 
 def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  # noqa
     eval_dict = fake_eval_8f9fbf37.copy()

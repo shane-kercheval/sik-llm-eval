@@ -60,7 +60,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
             metadata: A dictionary of metadata about the Candidate.
             model_parameters: A dictionary of parameters for the Candidate.
         """
-        self.metadata = deepcopy(metadata)
+        self.metadata = deepcopy(metadata) or {}
         self.model_parameters = deepcopy(model_parameters)
 
     @abstractmethod
@@ -179,8 +179,7 @@ class CallableCandidate(Candidate):
     def __init__(
             self,
             model: Callable | None = None,
-            metadata: dict | None = None,
-            parameters: dict | None = None) -> None:
+            metadata: dict | None = None) -> None:
         """
         Initialize a CallableCandidate object.
 
@@ -189,7 +188,7 @@ class CallableCandidate(Candidate):
             metadata: A dictionary of metadata about the Candidate.
             parameters: A dictionary of parameters for the Candidate.
         """
-        super().__init__(metadata, parameters)
+        super().__init__(metadata=metadata, model_parameters=None)
         self.model = model
 
     def __call__(self, prompt: str) -> str:
