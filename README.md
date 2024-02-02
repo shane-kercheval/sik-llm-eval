@@ -1,6 +1,6 @@
 # llm-eval
 
-`llm-eval` is a framework for evaluating the performance (e.g. characters generated per second) and quality (e.g. number of code blocks generated that successfully run) of responses from various LLMs.
+`llm-eval` is a framework for evaluating the quality of responses from LLMs (e.g. the number of code blocks generated that successfully run), as well as the performance (e.g. characters generated per second).
 
 There are two key concepts in this framework.
 
@@ -11,9 +11,9 @@ There are two key concepts in this framework.
 
 ## Examples
 
-### From a yaml files
+### Loading Evals and Candidates from yaml files
 
-The following yaml file (found in `examples/candidates/openai_3.5_1106.yaml`) defines a ChatGPT Candidate. This file specifies that we want to use `gpt-3.5-turbo-1106` as well as other model parameters such as the system message and temperature. Similar file for ChatGPT 4 can be found in `examples/candidates/openai_4.0_1106.yaml`.
+The following yaml file (found in `examples/candidates/openai_3.5_1106.yaml`) defines a ChatGPT Candidate. This file specifies that we want to use `gpt-3.5-turbo-1106` as well as other model parameters such as the system message and temperature. The `candidate_type: OPENAI` entry allows the Candidate registry to create an instance of the OpenAICandidate class, and forwards the model parameters to OpenAI. A Similar file for ChatGPT 4 can be found in `examples/candidates/openai_4.0_1106.yaml`.
 
 ```yaml
 metadata:
@@ -27,7 +27,7 @@ model_parameters:
   seed: 42
 ```
 
-The following yaml file (found in `examples/evals/simple_example.yaml`) defines an Eval. Here, the goal is to have the LLM create a function that generates the Fibonacci sequence, and then have the LLM generate assertion statements that the function. Each prompt is associated with multiple checks that are ran against the corresponding responses from the LLM.
+The following yaml file (found in `examples/evals/simple_example.yaml`) defines an Eval. For this Eval, the goal is to have the LLM create a function that generates the Fibonacci sequence, and subsequentally generate assertion statements that test the function. Each prompt is associated with multiple checks that are ran against the corresponding responses from the LLM. 
 
 ```yaml
 metadata:
@@ -52,6 +52,8 @@ test_sequence:
                 value = 'This is a string with no email addresses'
                 return mask_emails(value) == value
 ```
+
+The Eval above defines a `PYTHON_CODE_BLOCKS_RUN` check, which runs the code blocks (generated from the LLM) in an isolated environment and tracks the number of code blocks that run successfully. Additionally, the user can define one or more functions (which return boolean values) that are ran in the same environment and can test variables or functions that are created from the code blocks. In the example above, the function tests that `mask_emails` function (assumed to be defined in the code block in the LLM response and created in the isolated enviroment) returns the original value if no emails are present.
 
 The following code loads in the Candidate and Eval above (along with a ChatGPT 4 Candidate and additional Eval) and runs all of the Evals against each Candidate.
 
