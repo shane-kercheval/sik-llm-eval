@@ -3,9 +3,9 @@ from typing import Callable
 from functools import cache
 import tiktoken
 from tiktoken import Encoding
-from llm_evals.llms.message_formatters import openai_message_formatter
-from llm_evals.utilities.internal_utilities import retry_handler
-from llm_evals.llms.base import (
+from llm_eval.llms.message_formatters import openai_message_formatter
+from llm_eval.utilities.internal_utilities import retry_handler
+from llm_eval.llms.base import (
     ChatModel,
     Document,
     EmbeddingModel,

@@ -5,8 +5,8 @@ import time
 import requests
 from typing import Callable
 from transformers import PreTrainedTokenizer, AutoTokenizer
-from llm_evals.utilities.internal_utilities import retry_handler
-from llm_evals.llms.base import ChatModel, ExchangeRecord, StreamingEvent
+from llm_eval.utilities.internal_utilities import retry_handler
+from llm_eval.llms.base import ChatModel, ExchangeRecord, StreamingEvent
 
 
 def query_hugging_face_endpoint(

@@ -3,13 +3,13 @@
 import os
 from openai import BadRequestError, OpenAI
 import pytest
-from llm_evals.llms.base import Document, EmbeddingRecord, ExchangeRecord, StreamingEvent
-from llm_evals.llms.memory import (
+from llm_eval.llms.base import Document, EmbeddingRecord, ExchangeRecord, StreamingEvent
+from llm_eval.llms.memory import (
     LastNExchangesManager,
     LastNTokensMemoryManager,
     MessageSummaryMemoryManager,
 )
-from llm_evals.llms.openai import (
+from llm_eval.llms.openai import (
     OpenAIChat,
     OpenAIEmbedding,
     openai_message_formatter,

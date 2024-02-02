@@ -1,6 +1,6 @@
 """Tests workflow functionality."""
 from time import sleep
-from llm_evals.llms.base import (
+from llm_eval.llms.base import (
     EmbeddingRecord,
     ExchangeRecord,
     Document,
@@ -10,7 +10,7 @@ from llm_evals.llms.base import (
     Workflow,
     Value,
 )
-from llm_evals.utilities.internal_utilities import has_property
+from llm_eval.utilities.internal_utilities import has_property
 from tests.conftest import MockChatModel, MockRandomEmbeddings
 
 

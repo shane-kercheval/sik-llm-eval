@@ -36,7 +36,7 @@ jobs:
           pip install -r requirements.txt
       - name: linting
         run: |
-          ruff check llm_evals/
+          ruff check llm_eval/
           ruff check tests/
       - name: tests
         env:

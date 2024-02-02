@@ -5,9 +5,9 @@ import pytest
 import requests
 import os
 from textwrap import dedent
-from llm_evals.utilities.exceptions import RequestError
-from llm_evals.llms.base import Document
-from llm_evals.utilities.internal_utilities import (
+from llm_eval.utilities.exceptions import RequestError
+from llm_eval.llms.base import Document
+from llm_eval.utilities.internal_utilities import (
     create_function,
     create_hash,
     execute_code_blocks,
@@ -20,7 +20,7 @@ from llm_evals.utilities.internal_utilities import (
     retry_handler,
     Timer,
 )
-from llm_evals.llms.utilities import (
+from llm_eval.llms.utilities import (
     DuckDuckGoSearch,
     StackOverflowSearchRecord,
     StackQuestion,

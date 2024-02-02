@@ -18,7 +18,7 @@ to the memory_manager variable when initializing the model object.
 """
 
 from typing import Any
-from llm_evals.llms.base import MemoryManager, ExchangeRecord, PromptModel
+from llm_eval.llms.base import MemoryManager, ExchangeRecord, PromptModel
 
 
 class LastNExchangesManager(MemoryManager):

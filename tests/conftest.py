@@ -12,8 +12,8 @@ from faker import Faker
 import numpy as np
 from dotenv import load_dotenv
 from unittest.mock import MagicMock
-from llm_evals.llms.message_formatters import LlamaMessageFormatter
-from llm_evals.llms.base import (
+from llm_eval.llms.message_formatters import LlamaMessageFormatter
+from llm_eval.llms.base import (
     ChatModel,
     Document,
     EmbeddingModel,

@@ -5,10 +5,10 @@ import shutil
 from textwrap import dedent
 import pytest
 import yaml
-from llm_evals.candidates import CallableCandidate, Candidate, CandidateType
-from llm_evals.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
-from llm_evals.eval import Eval, EvalHarness, EvalResult, PromptTest, eval_result_summarizer
-from llm_evals.utilities.internal_utilities import extract_code_blocks
+from llm_eval.candidates import CallableCandidate, Candidate, CandidateType
+from llm_eval.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
+from llm_eval.eval import Eval, EvalHarness, EvalResult, PromptTest, eval_result_summarizer
+from llm_eval.utilities.internal_utilities import extract_code_blocks
 
 
 def test__PromptTest():  # noqa

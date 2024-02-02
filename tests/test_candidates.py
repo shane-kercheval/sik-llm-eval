@@ -3,13 +3,13 @@ import os
 from copy import deepcopy
 from openai import BadRequestError
 import pytest
-from llm_evals.candidates import (
+from llm_eval.candidates import (
     CallableCandidate,
     Candidate,
     CandidateType,
     OpenAICandidate,
 )
-from llm_evals.llms.hugging_face import HuggingFaceRequestError
+from llm_eval.llms.hugging_face import HuggingFaceRequestError
 
 
 class MockLMM:

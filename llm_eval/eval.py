@@ -8,13 +8,13 @@ from textwrap import dedent, indent
 import time
 from typing import Callable
 import yaml
-from llm_evals.candidates import CallableCandidate, Candidate
-from llm_evals.checks import (
+from llm_eval.candidates import CallableCandidate, Candidate
+from llm_eval.checks import (
     Check,
     CheckResult,
     CheckType,
 )
-from llm_evals.utilities.internal_utilities import (
+from llm_eval.utilities.internal_utilities import (
     DictionaryEqualsMixin,
     extract_code_blocks,
     extract_valid_parameters,
@@ -170,7 +170,7 @@ class Eval(DictionaryEqualsMixin):
         For example:
 
         ```
-        from llm_evals.checks import register_check
+        from llm_eval.checks import register_check
 
         @register_check('my_custom_check)
         class MyCheck(EvalCheck):

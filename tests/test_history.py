@@ -1,6 +1,6 @@
 """Test history."""
 import pytest
-from llm_evals.llms.base import (
+from llm_eval.llms.base import (
     RecordKeeper,
     Record,
     EmbeddingRecord,

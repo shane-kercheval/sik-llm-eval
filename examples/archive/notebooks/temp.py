@@ -2,8 +2,8 @@ import os
 import shutil
 import time
 from dotenv import load_dotenv
-from llm_evals.eval import EvalResult, eval_result_summarizer
-from llm_evals.eval import EvalHarness
+from llm_eval.eval import EvalResult, eval_result_summarizer
+from llm_eval.eval import EvalHarness
 # import wandb
 from pprint import pprint
 

@@ -1,6 +1,6 @@
 """Contains helper functions for formatting LLM messages based on various types of models."""
 
-from llm_evals.llms.base import ExchangeRecord
+from llm_eval.llms.base import ExchangeRecord
 
 
 def openai_message_formatter(

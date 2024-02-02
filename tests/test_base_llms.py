@@ -1,6 +1,6 @@
-"""tests llm_evals.llms/models.py."""
+"""tests llm_eval.llms/models.py."""
 import pytest
-from llm_evals.llms.base import (
+from llm_eval.llms.base import (
     Document,
     Record,
     EmbeddingModel,
@@ -8,7 +8,7 @@ from llm_evals.llms.base import (
     ExchangeRecord,
     TokenUsageRecord,
 )
-from llm_evals.llms.message_formatters import LlamaMessageFormatter
+from llm_eval.llms.message_formatters import LlamaMessageFormatter
 from tests.conftest import (
     MockChatModel,
     MockCostMemoryManager,

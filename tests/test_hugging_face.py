@@ -7,16 +7,16 @@ from dotenv import load_dotenv
 
 
 import pytest
-from llm_evals.llms.message_formatters import LlamaMessageFormatter
-from llm_evals.llms.hugging_face import (
+from llm_eval.llms.message_formatters import LlamaMessageFormatter
+from llm_eval.llms.hugging_face import (
     HuggingFaceRequestError,
     HuggingFaceEndpointChat,
     get_tokenizer,
     num_tokens,
     query_hugging_face_endpoint,
 )
-from llm_evals.llms.base import ExchangeRecord, StreamingEvent
-from llm_evals.llms.memory import LastNExchangesManager, LastNTokensMemoryManager
+from llm_eval.llms.base import ExchangeRecord, StreamingEvent
+from llm_eval.llms.memory import LastNExchangesManager, LastNTokensMemoryManager
 from tests.conftest import pattern_found
 
 
@@ -24,8 +24,8 @@ load_dotenv()
 
 
 def test_query_hugging_face_endpoint(fake_retry_handler, fake_hugging_face_response):  # noqa
-    with patch('llm_evals.llms.hugging_face.requests.post', return_value=fake_hugging_face_response) as mock_post:  # noqa
-        with patch('llm_evals.llms.hugging_face.retry_handler', return_value=fake_retry_handler) as mock_retry_handler:  # noqa
+    with patch('llm_eval.llms.hugging_face.requests.post', return_value=fake_hugging_face_response) as mock_post:  # noqa
+        with patch('llm_eval.llms.hugging_face.retry_handler', return_value=fake_retry_handler) as mock_retry_handler:  # noqa
             endpoint_url = "https://fake.url"
             payload = {"text": "hello"}
             response = query_hugging_face_endpoint(endpoint_url, payload)

@@ -16,10 +16,10 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
 from typing import Callable, List, Type, Union
-from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
-from llm_evals.llms.message_formatters import MessageFormatter
-from llm_evals.llms.openai import OpenAIChat
-from llm_evals.utilities.internal_utilities import (
+from llm_eval.llms.hugging_face import HuggingFaceEndpointChat
+from llm_eval.llms.message_formatters import MessageFormatter
+from llm_eval.llms.openai import OpenAIChat
+from llm_eval.utilities.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
     Registry,

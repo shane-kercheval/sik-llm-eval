@@ -1,6 +1,6 @@
 """Tests the message formatters module."""
-from llm_evals.llms.base import ExchangeRecord
-from llm_evals.llms.message_formatters import (
+from llm_eval.llms.base import ExchangeRecord
+from llm_eval.llms.message_formatters import (
     PROMPT_FORMAT_LLAMA,
     RESPONSE_FORMAT_LLAMA,
     SYSTEM_FORMAT_LLAMA,

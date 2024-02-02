@@ -27,7 +27,7 @@ docker_zsh:
 ####
 # commands to run inside docker container
 linting:
-	ruff check llm_evals/
+	ruff check llm_eval/
 	ruff check tests/
 
 unittests:
@@ -36,6 +36,6 @@ unittests:
 	coverage html
 
 doctests:
-	# python -m doctest llm_evals/evals.py
+	# python -m doctest llm_eval/evals.py
 
 tests: linting unittests doctests

@@ -1,7 +1,7 @@
 """TODO: document."""
 from pydantic import ValidationError
 import pytest
-from llm_evals.checks import (
+from llm_eval.checks import (
     Check,
     CheckResult,
     CheckResultsType,

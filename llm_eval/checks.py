@@ -14,7 +14,7 @@ import re
 from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, Field
-from llm_evals.utilities.internal_utilities import EnumMixin, Registry, execute_code_blocks
+from llm_eval.utilities.internal_utilities import EnumMixin, Registry, execute_code_blocks
 
 
 class CheckType(EnumMixin, Enum):

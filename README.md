@@ -168,6 +168,6 @@ To set the required environment variables for corresponding services, follow the
 - `HUGGING_FACE_API_KEY`: Set this environment variable to your Hugging Face API key. This is necessary for using the HuggingFaceEndpointChat. You can set it in an .env file or your environment.
 - `OPENAI_API_KEY`: Set this environment variable to your OpenAI API key. It is required for using OpenAIChat. Similar to the Hugging Face API key, you can set it in an .env file or your environment.
 
-For testing the HuggingFaceEndpointChat in llm_evals/llms/hugging_face.py (via tests/test_hugging_face.py), you can set the `HUGGING_FACE_ENDPOINT_UNIT_TESTS` environment variable to a deployed model on Hugging Face Endpoints.
+For testing the HuggingFaceEndpointChat in llm_eval/llms/hugging_face.py (via tests/test_hugging_face.py), you can set the `HUGGING_FACE_ENDPOINT_UNIT_TESTS` environment variable to a deployed model on Hugging Face Endpoints.
 
 With these environment variables correctly configured, you can use the corresponding services seamlessly within the llm-eval framework.
