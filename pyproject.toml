@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-eval"
+version = "0.0.1"
+description = "Evaluate the performance and quality of Large Language Models (LLMs)"
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = []  # If you have keywords, list them here, e.g., ["NLP", "machine learning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+authors = [
+    {name = "Anaconda", email = "skercheval@anaconda.com"},
+]
+requires-python = ">=3.10"
+dependencies = [
+    "joblib",
+    "openai",
+    "pydantic",
+    "PyYAML",
+    "tenacity",
+    "transformers",
+    "torch",
+    "tiktoken",
+]
+
+[project.optional-dependencies]
+# Replace the below examples with your actual optional dependencies
+# dev = ["pytest>=6.0.0", "flake8>=3.8.0"]
+
+[project.urls]
+Homepage = "https://github.com/anaconda/llm-eval"
+"Bug Tracker" = "https://github.com/anaconda/llm-eval/issues"
