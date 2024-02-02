@@ -11,7 +11,7 @@ There are two key concepts in this framework.
 
 ## Examples
 
-### Loading Evals and Candidates from yaml files
+### Running Evals/Candidates from yaml files
 
 The following yaml file (found in `examples/candidates/openai_3.5_1106.yaml`) defines a ChatGPT Candidate. This file specifies that we want to use `gpt-3.5-turbo-1106` as well as other model parameters such as the system message and temperature. The `candidate_type: OPENAI` entry allows the Candidate registry to create an instance of the OpenAICandidate class, and forwards the model parameters to OpenAI. A similar file for ChatGPT 4 can be found in `examples/candidates/openai_4.0_1106.yaml`.
 
@@ -100,7 +100,7 @@ EvalResult:
 This is merely the string representation of the EvalResult object. The object itself will contain additional information associated with each individual check, allowing the user to understand the results at a deeper level.
 
 
-### From python objects
+### Reunning Evals/Candidates from Python objects
 
 The same example from above could be ran using dictionary (or Candidate/Eval objects) already loadded into memory.
 
@@ -153,10 +153,6 @@ Currently, the easiest way to install the `llm-eval` package is
 
 - `OPENAI_API_KEY` environment variable and api key is required to use `OpenAIChat`
 - `HUGGING_FACE_API_KEY` environment variable and api key is required to use `HuggingFaceEndpointChat`
-
-# Examples
-
-TODO
 
 # Development Setup
 
