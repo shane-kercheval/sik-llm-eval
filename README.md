@@ -63,12 +63,15 @@ The Eval above defines a `PYTHON_CODE_BLOCKS_RUN` check, which executes code blo
 The following code loads the Eval and Candidate from above (with the addition of a ChatGPT 4.0 Candidate and an Eval testing the creation of a "mask_emails" function). You can then run these Evals against Candidates with an `EvalHarness`:
 
 ```python
-eval_harness = EvalHarness(callback=print_result)
+from llm_eval.eval import EvalHarness
+
+eval_harness = EvalHarness()
 eval_harness.add_eval_from_yaml('examples/evals/simple_example.yaml')
 eval_harness.add_eval_from_yaml('examples/evals/mask_emails.yaml')
 eval_harness.add_candidate_from_yaml('examples/candidates/openai_3.5_1106.yaml')
 eval_harness.add_candidate_from_yaml('examples/candidates/openai_4.0_1106.yaml')
 results = eval_harness()
+
 print(results[0][0])
 ```
 
