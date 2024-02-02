@@ -93,7 +93,7 @@ class HuggingFaceRequestError(Exception):
         """
         if isinstance(error, dict):
             self.error_message = error['error'] if 'error' in error else str(error)
-            self.error_type = error['error_type'] if 'error_type' in error else None
+            self.error_type = error.get('error_type')
         else:
             self.error_message = str(error)
             self.error_type = None
