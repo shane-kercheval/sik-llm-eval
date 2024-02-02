@@ -42,7 +42,7 @@ RESPONSE_FORMAT_LLAMA = "{response}\n"
 #     I am doing well. How are you?
 #     [INST]I am doing well. How's the weather?[/INST]
 #     It is sunny today.
-SYSTEM_FORMAT_MISTRAL = None
+SYSTEM_FORMAT_MISTRAL = "{system_message}"
 PROMPT_FORMAT_MISTRAL = "[INST]{prompt}[/INST]"
 RESPONSE_FORMAT_MISTRAL = "{response}\n"
 
