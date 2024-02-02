@@ -13,7 +13,7 @@ There are two key concepts in this framework.
 
 ### Loading Evals and Candidates from yaml files
 
-The following yaml file (found in `examples/candidates/openai_3.5_1106.yaml`) defines a ChatGPT Candidate. This file specifies that we want to use `gpt-3.5-turbo-1106` as well as other model parameters such as the system message and temperature. The `candidate_type: OPENAI` entry allows the Candidate registry to create an instance of the OpenAICandidate class, and forwards the model parameters to OpenAI. A Similar file for ChatGPT 4 can be found in `examples/candidates/openai_4.0_1106.yaml`.
+The following yaml file (found in `examples/candidates/openai_3.5_1106.yaml`) defines a ChatGPT Candidate. This file specifies that we want to use `gpt-3.5-turbo-1106` as well as other model parameters such as the system message and temperature. The `candidate_type: OPENAI` entry allows the Candidate registry to create an instance of the OpenAICandidate class, and forwards the model parameters to OpenAI. A similar file for ChatGPT 4 can be found in `examples/candidates/openai_4.0_1106.yaml`.
 
 ```yaml
 metadata:
