@@ -19,15 +19,6 @@ def print_result(result: EvalResult) -> None:
     result.to_yaml(path)
     print(f"Finished {result.total_time_seconds}, saved to {path}", flush=True)
     print('-------------------', flush=True)
-    # with open(f"{DIR_PATH}/{result.candidate_obj.uuid}-{result.eval_obj.uuid}.json", "w") as f:
-    #     f.write(result.to_json())
-    # print(f"Finished {result.total_time_seconds}", flush=True)
-    # print(eval_result_summarizer(result))
-
-# def log_weights_and_biases(result: EvalResult) -> None:
-#     """Log the result of an evaluation to Weights and Biases."""
-#     wandb.log(eval_result_summarizer(result))
-#     # wandb.log({"accuracy": 1, "loss": 2})
 
 
 def main() -> None:
