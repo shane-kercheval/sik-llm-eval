@@ -91,9 +91,12 @@ class HuggingFaceRequestError(Exception):
             error:
                 The error returned from the Hugging Face API.
         """
-        self.error_message = error['error']
-        super().__init__(self.error_message)
-        self.error_type = error['error_type'] if 'error_type' in error else None
+        if isinstance(error, dict):
+            self.error_message = error['error'] if 'error' in error else str(error)
+            self.error_type = error['error_type'] if 'error_type' in error else None
+        else:
+            self.error_message = str(error)
+            self.error_type = None
 
 
 class HuggingFaceEndpointChat(ChatModel):
