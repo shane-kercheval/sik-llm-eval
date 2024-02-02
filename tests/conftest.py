@@ -12,7 +12,7 @@ from faker import Faker
 import numpy as np
 from dotenv import load_dotenv
 from unittest.mock import MagicMock
-from llm_evals.llms.message_formatters import llama_message_formatter
+from llm_evals.llms.message_formatters import LlamaMessageFormatter
 from llm_evals.llms.base import (
     ChatModel,
     Document,
@@ -129,7 +129,7 @@ class MockChatModel(ChatModel):
                 custom memory manager to manage memory
         """
         if message_formatter is None:
-            message_formatter = llama_message_formatter
+            message_formatter = LlamaMessageFormatter()
         super().__init__(
             system_message="This is a system message.",
             message_formatter=message_formatter,

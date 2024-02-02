@@ -11,16 +11,109 @@ There are two key concepts in this framework.
 
 ## Examples
 
-### From a yaml files 
+### From a yaml files
+
+The following yaml file (found in `examples/candidates/openai_3.5_1106.yaml`) defines a ChatGPT Candidate. This file specifies that we want to use `gpt-3.5-turbo-1106` as well as other model parameters such as the system message and temperature. Similar file for ChatGPT 4 can be found in `examples/candidates/openai_4.0_1106.yaml`.
 
 ```yaml
-
+metadata:
+  name: OpenAI GPT-3.5-Turbo (1106)
+candidate_type: OPENAI
+model_parameters:
+  model_name: gpt-3.5-turbo-1106
+  system_message: You are a helpful AI assistant.
+  temperature: 0.01
+  max_tokens: 4096
+  seed: 42
 ```
 
-### From python object
+The following yaml file (found in `examples/evals/simple_example.yaml`) defines an Eval. Here, the goal is to have the LLM create a function that generates the Fibonacci sequence, and then have the LLM generate assertion statements that the function. Each prompt is associated with multiple checks that are ran against the corresponding responses from the LLM.
+
+```yaml
+metadata:
+  name: Fibonacci Sequence
+test_sequence:
+  - prompt: Create a python function called `fib` that takes an integer `n` and returns the `n`th number in the Fibonacci sequence. Use type hints and docstrings.
+    checks:
+      - check_type: REGEX
+        pattern: "def fib\\([a-zA-Z_]+\\: int\\) -> int\\:"
+      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+  - prompt: Create a set of assertion statements that test the function.
+    checks:
+      - check_type: CONTAINS
+        value: assert fib(
+      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+      - check_type: PYTHON_CODE_BLOCKS_RUN
+        code_setup: |
+          import re
+        functions:
+          - |
+            def verify_mask_emails_with_no_email_returns_original_string(code_blocks: list[str]) -> bool:
+                value = 'This is a string with no email addresses'
+                return mask_emails(value) == value
+```
+
+The following code loads in the Candidate and Eval above (along with a ChatGPT 4 Candidate and additional Eval) and runs all of the Evals against each Candidate.
 
 ```python
+eval_harness = EvalHarness(callback=print_result)
+eval_harness.add_eval_from_yaml('examples/evals/simple_example.yaml')
+eval_harness.add_eval_from_yaml('examples/evals/mask_emails.yaml')
+eval_harness.add_candidate_from_yaml('examples/candidates/openai_3.5_1106.yaml')
+eval_harness.add_candidate_from_yaml('examples/candidates/openai_4.0_1106.yaml')
+results = eval_harness()
+print(results[0][0])
+```
 
+Also note that we could have loaded in all of the yaml files within a directory via `add_evals_from_yamls` and `add_candidates_from_yamls`.
+
+```python
+eval_harness = EvalHarness(callback=print_result)
+eval_harness.add_evals_from_yamls('examples/evals/*.yaml')
+eval_harness.add_candidate_from_yamls('examples/candidates/*.yaml')
+results = eval_harness()
+print(results[0][0])
+```
+
+`results` contains a list of lists of EvalResults. The first list corresponds to results of the Evals associated with the first Candidate (ChatGPT 3.5). The second list corresponds to results of the Evals associated with the second Candidate (ChatGPT 4.0).
+
+`print(results[0][0])` will give:
+
+
+```
+EvalResult:
+    Candidate:                  OpenAI GPT-3.5-Turbo (1106)
+    Eval:                       Fibonacci Sequence
+    # of Prompts Tested:        2
+    Cost:                       $0.0011
+    Total Response Time:        14.7 seconds
+    # of Response Characters:   1,336
+    # of Code Blocks Generated: 2
+    Characters per Second:      90.9
+    # of Checks:                4
+    # of Successful Checks:     4
+    % of Successful Checks:     100.0%
+```
+
+This is merely the string representation of the EvalResult object. The object itself will contain additional information associated with each individual check, allowing the user to understand the results at a deeper level.
+
+
+### From python objects
+
+The same example from above could be ran using dictionary (or Candidate/Eval objects) already loadded into memory.
+
+```python
+candidate_chatgpt_35 = {"metadata": {"name": "OpenAI GPT-3.5-Turbo (1106)" ... }
+candidate_chatgpt_40 = {"metadata": {"name": "OpenAI GPT-4.0-Turbo (1106)" ... }
+eval_simple = {metadata: ..., test_sequence: ...}
+eval_mask_email = {metadata: ..., test_sequence: ...}
+eval_harness = EvalHarness(callback=print_result)
+eval_harness.add_eval(eval_simple)
+eval_harness.add_eval(eval_mask_email)
+eval_harness.add_candidate(candidate_chatgpt_35)
+eval_harness.add_candidate(candidate_chatgpt_40)
+results = eval_harness()
+print(results[0][0])
 ```
 
 ## Installing

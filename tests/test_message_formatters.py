@@ -4,19 +4,19 @@ from llm_evals.llms.message_formatters import (
     PROMPT_FORMAT_LLAMA,
     RESPONSE_FORMAT_LLAMA,
     SYSTEM_FORMAT_LLAMA,
-    create_message_formatter,
-    llama_message_formatter,
+    MessageFormatter,
+    LlamaMessageFormatter,
 )
 
 
 def test__MessageFormatter__empty():  # noqa
-    message_formatter = create_message_formatter(
+    message_formatter = MessageFormatter(
         system_format=None,
         prompt_format=None,
         response_format=None,
     )
     assert message_formatter(None, None, None) == ''
-    message_formatter = create_message_formatter(
+    message_formatter = MessageFormatter(
         system_format=SYSTEM_FORMAT_LLAMA,
         prompt_format=PROMPT_FORMAT_LLAMA,
         response_format=RESPONSE_FORMAT_LLAMA,
@@ -24,7 +24,7 @@ def test__MessageFormatter__empty():  # noqa
     assert message_formatter(None, None, None) == ''
 
 def test_MessageFormatter():  # noqa
-    message_formatter = create_message_formatter(
+    message_formatter = MessageFormatter(
         system_format=SYSTEM_FORMAT_LLAMA,
         prompt_format=PROMPT_FORMAT_LLAMA,
         response_format=RESPONSE_FORMAT_LLAMA,
@@ -105,12 +105,11 @@ def test_MessageFormatter():  # noqa
     )
     assert actual_value == expected_value
 
+def test_LlamaMessageFormatter():  # noqa
+    assert LlamaMessageFormatter()(system_message=None, history=[], prompt=None) == ''
+    assert LlamaMessageFormatter()(system_message=None, history=None, prompt=None) == ''
 
-def test_llama_message_formatter():  # noqa
-    assert llama_message_formatter(system_message=None, history=[], prompt=None) == ''
-    assert llama_message_formatter(system_message=None, history=None, prompt=None) == ''
-
-    messages = llama_message_formatter(
+    messages = LlamaMessageFormatter()(
         system_message=None,
         history=[
             ExchangeRecord(prompt='a', response='b'),
@@ -121,7 +120,7 @@ def test_llama_message_formatter():  # noqa
     expected_value = '[INST] a [/INST]\nb\n[INST] c [/INST]\nd\n'
     assert messages == '[INST] a [/INST]\nb\n[INST] c [/INST]\nd\n'
 
-    messages = llama_message_formatter(
+    messages = LlamaMessageFormatter()(
         system_message='system',
         history=[
             ExchangeRecord(prompt='a', response='b'),
@@ -131,7 +130,7 @@ def test_llama_message_formatter():  # noqa
     )
     assert messages == '[INST] <<SYS>> system <</SYS>> [/INST]\n' + expected_value
 
-    messages = llama_message_formatter(
+    messages = LlamaMessageFormatter()(
         system_message='system',
         history=[
             ExchangeRecord(prompt='a', response='b'),

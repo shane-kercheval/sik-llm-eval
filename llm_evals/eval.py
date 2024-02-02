@@ -2,6 +2,7 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
+import glob
 import os
 from textwrap import dedent, indent
 import time
@@ -419,9 +420,15 @@ class EvalResult(DictionaryEqualsMixin):
 
     def __str__(self) -> str:
         cost_str = f'\n{" " * 12}Cost:{" " * 22} ${self.cost:.4f}' if self.cost else ''
+        candidate_name = self.candidate_obj.metadata.get('name', '')
+        if candidate_name:
+            candidate_name = f"Candidate:{' ' * 18}{candidate_name}\n{' ' * 12}"
+        eval_name = self.eval_obj.metadata.get('name', '')
+        if eval_name:
+            eval_name = f"Eval:{' ' * 23}{eval_name}\n{' ' * 12}"
         return dedent(f"""
         EvalResult:
-            # of Prompts Tested:        {len(self.eval_obj.test_sequence)}{cost_str}
+            {candidate_name}{eval_name}# of Prompts Tested:        {len(self.eval_obj.test_sequence)}{cost_str}
             Total Response Time:        {self.total_time_seconds:0.1f} seconds
             # of Response Characters:   {self.response_characters:,}
             # of Code Blocks Generated: {self.num_code_blocks}
@@ -429,7 +436,7 @@ class EvalResult(DictionaryEqualsMixin):
             # of Checks:                {self.num_checks}
             # of Successful Checks:     {self.num_successful_checks}
             % of Successful Checks:     {self.perc_successful_checks:.1%}
-        """).strip()
+        """).strip()  # noqa: E501
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the EvalResult."""
@@ -607,7 +614,6 @@ class EvalHarness:
             path:
                 Path to the directory of YAML files.
         """
-        import glob
         for file_path in glob.glob(path):
             self.add_eval_from_yaml(file_path)
 
@@ -661,7 +667,6 @@ class EvalHarness:
             path:
                 Path to the directory of YAML files.
         """
-        import glob
         for file_path in glob.glob(path):
             self.add_candidate_from_yaml(file_path)
 

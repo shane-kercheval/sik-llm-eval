@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 
 import pytest
-from llm_evals.llms.message_formatters import llama_message_formatter
+from llm_evals.llms.message_formatters import LlamaMessageFormatter
 from llm_evals.llms.hugging_face import (
     HuggingFaceRequestError,
     HuggingFaceEndpointChat,
@@ -43,7 +43,7 @@ def test_HuggingFaceEndpointChat__no_token_calculator(hugging_face_endpoint):  #
 
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         streaming_callback=streaming_callback,
     )
     assert len(model.history()) == 0
@@ -95,7 +95,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     model_parameters = {'temperature': 0.01, 'max_tokens': 4096}
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         **model_parameters,
     )
     assert model.model_parameters == model_parameters
@@ -111,7 +111,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
 
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         streaming_callback=streaming_callback,
         **model_parameters,
     )
@@ -125,7 +125,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     model_parameters = {'temperature': -10}
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         **model_parameters,
     )
     assert model.model_parameters == model_parameters
@@ -139,7 +139,7 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     model_parameters = {'temperature': -10}
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         streaming_callback=streaming_callback,
         **model_parameters,
     )
@@ -165,7 +165,7 @@ def test_HuggingFaceEndpointChat(hugging_face_endpoint):  # noqa
 
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         token_calculator=calc_num_tokens,
         streaming_callback=streaming_callback,
     )
@@ -273,7 +273,7 @@ def test_HuggingFaceEndpointChat__timeout(hugging_face_endpoint):  # noqa
 
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         streaming_callback=streaming_callback,
         max_streaming_tokens=30,
         # 1 second is only enough time for one call to the model and associated callback
@@ -329,7 +329,7 @@ def test_HuggingFaceEndpointChat__memory_manager__1000_tokens(hugging_face_endpo
         endpoint_url=hugging_face_endpoint,
         streaming_callback=streaming_callback,
         token_calculator=calc_num_tokens,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         memory_manager=LastNTokensMemoryManager(last_n_tokens=1000),
     )
     assert len(model.history()) == 0
@@ -433,7 +433,7 @@ def test_HuggingFaceEndpointChat__memory_manager__1_tokens(hugging_face_endpoint
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
         token_calculator=calc_num_tokens,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         memory_manager=LastNTokensMemoryManager(last_n_tokens=20),
     )
     assert len(model.history()) == 0
@@ -466,7 +466,7 @@ def test_HuggingFaceEndpointChat__memory_manager__100_tokens(hugging_face_endpoi
         endpoint_url=hugging_face_endpoint,
         token_calculator=calc_num_tokens,
         streaming_callback=streaming_callback,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         memory_manager=LastNTokensMemoryManager(last_n_tokens=75),
     )
     assert len(model.history()) == 0
@@ -578,7 +578,7 @@ def test_HuggingFaceEndpointChat__memory_manager__LastNExchangesManager_1(huggin
         endpoint_url=hugging_face_endpoint,
         streaming_callback=streaming_callback,
         token_calculator=calc_num_tokens,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         memory_manager=LastNExchangesManager(last_n_exchanges=1),
     )
     assert len(model.history()) == 0
@@ -686,7 +686,7 @@ def test_HuggingFaceEndpointChat__memory_manager__LastNExchangesManager_0(huggin
         endpoint_url=hugging_face_endpoint,
         streaming_callback=streaming_callback,
         token_calculator=calc_num_tokens,
-        message_formatter=llama_message_formatter,
+        message_formatter=LlamaMessageFormatter(),
         memory_manager=LastNExchangesManager(last_n_exchanges=0),
     )
     assert len(model.history()) == 0

@@ -17,7 +17,7 @@ from enum import Enum, auto
 from textwrap import dedent
 from typing import Callable, List, Type, Union
 from llm_evals.llms.hugging_face import HuggingFaceEndpointChat
-from llm_evals.llms.message_formatters import create_message_formatter
+from llm_evals.llms.message_formatters import MessageFormatter
 from llm_evals.llms.openai import OpenAIChat
 from llm_evals.utilities.internal_utilities import (
     DictionaryEqualsMixin,
@@ -292,7 +292,7 @@ class HuggingFaceEndpointCandidate(Candidate):
         self.prompt_format = model_parameters.pop('prompt_format')
         self.response_format = model_parameters.pop('response_format')
         super().__init__(metadata=metadata, model_parameters=model_parameters)
-        message_formatter = create_message_formatter(
+        message_formatter = MessageFormatter(
             system_format=self.system_format,
             prompt_format=self.prompt_format,
             response_format=self.response_format,
