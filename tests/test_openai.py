@@ -568,7 +568,7 @@ def test_OpenAIChat__LastNExchangesManager1():  # noqa
 
     ####
     # second interaction
-    # this shouldn't be any different
+    # It should know 'shane' since it was in the last response
     ####
     prompt = "What is my name?"
     response = model(prompt)
@@ -621,9 +621,10 @@ def test_OpenAIChat__LastNExchangesManager1():  # noqa
 
     ####
     # third interaction
-    # this shouldn't be any different
+    # ensure that the response doesn't contain the name shane so that we can test that the memory
+    # manager is working for the next interaction
     ####
-    prompt = "What is today's date?"
+    prompt = "What is today's date? Reply only in the format MM/DD/YYYY with no other text."
     response = model(prompt)
     assert 'shane' not in response.lower()
     assert isinstance(response, str)
@@ -666,9 +667,9 @@ def test_OpenAIChat__LastNExchangesManager1():  # noqa
 
     ####
     # 4th interaction
-    # this shouldn't contain the name shane because the last interaction was the first that didn't
+    # this shouldn't contain the name shane because the last interaction didn't
     ####
-    prompt = "What is today's date?"
+    prompt = "What is my name?"
     response = model(prompt)
     assert 'shane' not in response.lower()
     assert isinstance(response, str)
