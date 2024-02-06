@@ -494,10 +494,10 @@ def eval_result_summarizer(result: EvalResult) -> dict:
         )
         summary['perc_code_blocks_successful'] = \
             summary['num_code_blocks_successful'] / summary['num_code_blocks']
-        summary['num_code_block_checks'] = \
-            sum(c.metadata['num_code_block_checks'] for c in code_run_checks)
-        summary['num_code_block_checks_successful'] = \
-            sum(c.metadata['num_code_block_checks_successful'] for c in code_run_checks)
+        summary['num_code_tests'] = \
+            sum(c.metadata['num_code_tests'] for c in code_run_checks)
+        summary['num_code_tests_successful'] = \
+            sum(c.metadata['num_code_tests_successful'] for c in code_run_checks)
     return summary
 
 

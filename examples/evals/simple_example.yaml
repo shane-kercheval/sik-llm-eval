@@ -14,7 +14,7 @@ test_sequence:
       - check_type: PYTHON_CODE_BLOCKS_RUN
         code_setup: |
           import re
-        functions:
+        code_tests:
           - |
             def verify_mask_emails_with_no_email_returns_original_string(code_blocks: list[str]) -> bool:
                 value = 'This is a string with no email addresses'

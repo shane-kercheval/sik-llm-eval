@@ -313,7 +313,13 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     mock_llm_instance = mock_llm()
     eval_result = eval_obj(lambda _: next(mock_llm_instance))
 
-    assert eval_result.eval_obj.to_dict() == config
+    # we need to strip the code blocks of leading/trailing whitespace to compare them
+    expected_config = deepcopy(config)
+    expected_config['test_sequence'][1]['checks'][-1]['code_tests'] = [
+        dedent(x.strip()) for x in
+        expected_config['test_sequence'][1]['checks'][-1]['code_tests']
+    ]
+    assert eval_result.eval_obj.to_dict() == expected_config
     assert Eval(**eval_obj.to_dict()) == eval_obj
     # i need to compare strings because underlying error objects (i.e. instances) will not be same
     assert str(EvalResult(**eval_result.to_dict()).to_dict()) == str(eval_result.to_dict())
@@ -362,11 +368,11 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert eval_result.results[1][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name  # noqa
 
     # function checks
-    expected_code_block_checks = 6
-    expected_successful_code_block_checks = 4
-    expected_total_checks = expected_num_code_blocks + expected_code_block_checks
+    expected_code_tests = 6
+    expected_successful_code_tests = 4
+    expected_total_checks = expected_num_code_blocks + expected_code_tests
     expected_successful_checks = expected_successful_code_blocks + \
-        expected_successful_code_block_checks
+        expected_successful_code_tests
 
     assert eval_result.results[1][2].value == expected_successful_checks / expected_total_checks
     assert eval_result.results[1][2].success_threshold == 1
@@ -377,15 +383,15 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert eval_result.results[1][2].metadata['code_blocks'] == expected_code_blocks
     assert eval_result.results[1][2].metadata['code_block_errors'] == [None, None, None]
     # first function check should have run successfully, but second code block should have failed
-    assert eval_result.results[1][2].metadata['code_block_check_results'] == [True, True, False, True, True, False]  # noqa
-    assert eval_result.results[1][2].metadata['num_code_block_checks'] == expected_code_block_checks  # noqa
-    assert eval_result.results[1][2].metadata['num_code_block_checks_successful'] == expected_successful_code_block_checks  # noqa
-    assert eval_result.results[1][2].metadata['code_block_check_errors'][0] is None
-    assert eval_result.results[1][2].metadata['code_block_check_errors'][1] is None
-    assert eval_result.results[1][2].metadata['code_block_check_errors'][2] is None
-    assert eval_result.results[1][2].metadata['code_block_check_errors'][3] is None
-    assert eval_result.results[1][2].metadata['code_block_check_errors'][4] is None
-    assert isinstance(eval_result.results[1][2].metadata['code_block_check_errors'][5], NameError)
+    assert eval_result.results[1][2].metadata['code_test_results'] == [True, True, False, True, True, False]  # noqa
+    assert eval_result.results[1][2].metadata['num_code_tests'] == expected_code_tests
+    assert eval_result.results[1][2].metadata['num_code_tests_successful'] == expected_successful_code_tests  # noqa
+    assert eval_result.results[1][2].metadata['code_test_errors'][0] is None
+    assert eval_result.results[1][2].metadata['code_test_errors'][1] is None
+    assert eval_result.results[1][2].metadata['code_test_errors'][2] is None
+    assert eval_result.results[1][2].metadata['code_test_errors'][3] is None
+    assert eval_result.results[1][2].metadata['code_test_errors'][4] is None
+    assert isinstance(eval_result.results[1][2].metadata['code_test_errors'][5], NameError)
     assert eval_result_summarizer(eval_result)
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")

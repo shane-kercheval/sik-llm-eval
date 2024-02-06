@@ -13,7 +13,7 @@ from inspect import getsource
 import re
 from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, root_validator
 from llm_eval.utilities.internal_utilities import EnumMixin, Registry, execute_code_blocks
 
 
@@ -317,9 +317,9 @@ class PythonCodeBlocksPresent(Check):
 class PythonCodeBlocksRun(Check):
     """
     Checks that the code blocks contained within the response run successfully. This check will
-    execute the code blocks and then run the (optional) custom functions defined in the test in the
-    same environment as the code blocks. These functions are passed the code blocks as a parameter
-    so the functions can either test the environment and/or the code blocks directly.
+    execute the code blocks and then run the (optional) custom functions defined in `code_tests` in
+    the same environment as the code blocks. These functions are passed the code blocks as a
+    parameter, so the functions can either test the environment and/or the code blocks directly.
 
     The user can define the `code_setup` which is a string containing a block of python code that
     will be executed before the code blocks are executed. Both the setup code and the code blocks
@@ -341,7 +341,7 @@ class PythonCodeBlocksRun(Check):
         - number of custom checks that ran successfully
 
     The `success_threshold` is the minimum **percent** of successfully executed code blocks *and*
-    function checks (if `functions` is used) required for the check to be considered successful.
+    custom tests (if `code_tests` is used) required for the check to be considered successful.
     
     NOTE: this check will run all code blocks. If you have multiple PythonCodeBlocksRun (e.g. one
     for each PromptTest), then the code blocks from previous responses will be ran multiple times.
@@ -351,16 +351,39 @@ class PythonCodeBlocksRun(Check):
 
     success_threshold: float = Field(
         default=1.0,
-        description="The minimum **percent** of successfully executed code blocks and function checks (if `functions` is used) required for the check to be considered successful. Defaulted to 1.0 (i.e. 100% of code blocks must run successfully).",  # noqa
+        description="""
+        The minimum **percent** of successfully executed code blocks and custom tests (if
+        `code_tests` is used) required for the check to be considered successful. Defaulted to 1.0
+        (i.e. 100% of code blocks must run successfully).
+        """,
     )
     code_setup: str | None = Field(
         default=None,
         description="Python code that is executed before the code blocks are executed.",
     )
-    functions: list[str | Callable[[list[str]], bool]] | None = Field(
+    code_tests: list[str | Callable[[list[str]], bool]] | None = Field(
         default=None,
-        description="A list of callables (or strings representing callables). Each callable is passed the list of code blocks that were extracted from the response. The functions are executed in the same environment that the code blocks were executed in. The code blocks may or may not have executed successfully. The functions can test the enviroment or the code blocks.",  # noqa
+        description="""
+        A list of callables (or strings representing callables) that can test the code blocks and
+        return a boolean indicating if the test was successful. Each callable is passed the list
+        of code blocks that were extracted from the response. The callables are executed in the
+        same environment that the code blocks were executed in. The code blocks may or may not have
+        executed successfully. The callables can test the enviroment or the code blocks. The
+        callables should return a boolean indicating whether or not the test was successful.
+        """,
     )
+
+    @root_validator(pre=True)  # Use pre=True to modify data before it's validated
+    def strip_code_tests(cls, values: dict) -> dict:  # noqa: N805
+        """Strip whitespace from code_tests."""
+        code_tests = values.get('code_tests')
+        if code_tests is not None:
+            stripped_code_tests = [
+                dedent(test.strip()) if isinstance(test, str) else test
+                for test in code_tests
+            ]
+            values['code_tests'] = stripped_code_tests
+        return values
 
     def __call__(self, code_blocks: list[str]) -> ScoreResult:
         """
@@ -372,10 +395,11 @@ class PythonCodeBlocksRun(Check):
         code_block_errors = []
         function_results = []
         function_errors = []
+        functions = self.code_tests or []
 
         num_code_blocks = len(code_blocks)
-        num_code_block_checks = 0
-        num_code_block_checks_successful = 0
+        num_code_tests = 0
+        num_code_tests_successful = 0
 
         if code_blocks:
             code_blocks = code_blocks.copy()
@@ -395,9 +419,8 @@ class PythonCodeBlocksRun(Check):
 
             # run the custom/user functions with contain additional tests (they functions should
             # return boolean success/fail)
-            functions = self.functions or []
             for func in functions:
-                num_code_block_checks += 1
+                num_code_tests += 1
                 # we need to reset `__result__` to False in case one of the functions fails to
                 # execute (which means `__result__` will not be set) in order to avoid grabbing
                 # the result from the previous function check
@@ -431,14 +454,14 @@ class PythonCodeBlocksRun(Check):
                 assert isinstance(func_result, bool), \
                     f"Function {func_name} must return a boolean value"
                 if func_result:
-                    num_code_block_checks_successful += 1
+                    num_code_tests_successful += 1
                 function_results.append(func_result)
 
         num_code_blocks_successful = len([e for e in code_block_errors if e is None])
 
         if num_code_blocks > 0:
-            score = (num_code_blocks_successful + num_code_block_checks_successful) \
-                / (num_code_blocks + num_code_block_checks)
+            score = (num_code_blocks_successful + num_code_tests_successful) \
+                / (num_code_blocks + num_code_tests)
         else:
             score = 0.0
         return ScoreResult(
@@ -450,13 +473,14 @@ class PythonCodeBlocksRun(Check):
                 'num_code_blocks_successful': num_code_blocks_successful,
                 'code_blocks': code_blocks,
                 'code_block_errors': code_block_errors,
-                'num_code_block_checks': num_code_block_checks,
-                'num_code_block_checks_successful': num_code_block_checks_successful,
-                'code_block_check_results': function_results,
-                'code_block_check_errors': function_errors,
+                'code_tests': functions,
+                'num_code_tests': num_code_tests,
+                'num_code_tests_successful': num_code_tests_successful,
+                'code_test_results': function_results,
+                'code_test_errors': function_errors,
             },
         )
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self.__class__.__name__}(functions={self.functions}, metadata={self.metadata})"
+        return f"{self.__class__.__name__}(functions={self.code_tests}, metadata={self.metadata})"
