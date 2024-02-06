@@ -61,7 +61,7 @@ eval_obj:
       code_setup: 'import re
 
         '
-      functions:
+      code_tests:
       - "def verify_mask_emails_with_no_email_returns_original_string(code_blocks:\
         \ list[str]) -> bool:\n    value = 'This is a string with no email addresses'\n\
         \    return mask_emails(value) == value\n"
@@ -225,10 +225,10 @@ results:
     value: true
   - metadata:
       check_type: PYTHON_CODE_BLOCKS_RUN
-      code_block_check_errors:
+      code_test_errors:
       - null
       - null
-      code_block_check_results:
+      code_test_results:
       - true
       - false
       code_block_errors:
@@ -257,8 +257,8 @@ results:
 
         assert mask_emails("This is a sample text without any email") == "This is
         a sample text without any email"'
-      num_code_block_checks: 2
-      num_code_block_checks_successful: 1
+      num_code_tests: 2
+      num_code_tests_successful: 1
       num_code_blocks: 2
       num_code_blocks_successful: 2
     result_type: SCORE
