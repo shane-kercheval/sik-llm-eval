@@ -13,7 +13,7 @@ from inspect import getsource
 import re
 from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, model_validator
 from llm_eval.utilities.internal_utilities import EnumMixin, Registry, execute_code_blocks
 
 
@@ -373,7 +373,7 @@ class PythonCodeBlocksRun(Check):
         """,
     )
 
-    @root_validator(pre=True)  # Use pre=True to modify data before it's validated
+    @model_validator(mode='before')
     def strip_code_tests(cls, values: dict) -> dict:  # noqa: N805
         """Strip whitespace from code_tests."""
         code_tests = values.get('code_tests')
