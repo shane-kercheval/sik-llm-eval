@@ -590,6 +590,15 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
 
+def test__multiline_eval__dedents_prompt():  # noqa
+    prompt = """
+        - This is a multiline prompt.
+            - It needs to be dedented.
+    """
+    eval_obj = Eval(test_sequence=[PromptTest(prompt=prompt)])
+    result = eval_obj(lambda x: x)
+    assert result.responses[0] == dedent(prompt)
+
 def callback(x: EvalResult) -> None:
     """
     Test the callback function by saving the result to a yaml file in the 'test/temp'
