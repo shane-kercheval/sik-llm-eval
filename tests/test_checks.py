@@ -1068,17 +1068,6 @@ def test__PythonCodeBlocksRun__with_code_tests__all_code_blocks_fail__test_numbe
     check = PythonCodeBlocksRun(code_tests=code_tests)
     code_blocks = ['raise ValueError()', 'raise NameError()']
     result = check(code_blocks=code_blocks)
-
-    # 'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
-    # 'num_code_blocks': num_code_blocks,
-    # 'num_code_blocks_successful': num_code_blocks_successful,
-    # 'code_blocks': code_blocks,
-    # 'code_block_errors': code_block_errors,
-    # 'code_tests': functions,
-    # 'num_code_tests': num_code_tests,
-    # 'num_code_tests_successful': num_code_tests_successful,
-    # 'code_test_results': function_results,
-    # 'code_test_errors': function_errors,
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 0
