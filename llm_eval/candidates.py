@@ -52,16 +52,16 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
     registry = Registry()
 
-    def __init__(self, metadata: dict | None = None, model_parameters: dict | None = None) -> None:
+    def __init__(self, metadata: dict | None = None, parameters: dict | None = None) -> None:
         """
         Initialize a Candidate object.
 
         Args:
             metadata: A dictionary of metadata about the Candidate.
-            model_parameters: A dictionary of parameters for the Candidate.
+            parameters: A dictionary of parameters for the Candidate.
         """
         self.metadata = deepcopy(metadata) or {}
-        self.model_parameters = deepcopy(model_parameters)
+        self.parameters = deepcopy(parameters)
 
     @abstractmethod
     def __call__(self, prompt: str) -> str:
@@ -81,7 +81,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
     def from_dict(cls, data: dict) -> Union['Candidate', List['Candidate']]:  # noqa: ANN102
         """
         Creates a Candidate object (or multiple objects) from a dictionary. If any of the values
-        within the `model_parameters` dict is a list (i.e. multiple parameters to evaluate
+        within the `parameters` dict is a list (i.e. multiple parameters to evaluate
         against), this method will return a list of Candidates corresponding to all combinations of
         model parameters.
 
@@ -93,20 +93,20 @@ class Candidate(DictionaryEqualsMixin, ABC):
         candidate_type = data.pop('candidate_type', '')
         if candidate_type in cls.registry:
             # check if any of the model parameters (values) are lists
-            params_are_lists = 'model_parameters' in data \
-                and any(isinstance(v, list) for v in data['model_parameters'].values())
+            params_are_lists = 'parameters' in data \
+                and any(isinstance(v, list) for v in data['parameters'].values())
             if params_are_lists:
                     # create a list of all combinations of the model parameters
                     # `data` will potentially have `metadata` or other fields
-                    model_parameters = data.pop('model_parameters')
-                    model_parameters = generate_dict_combinations(deepcopy(model_parameters))
+                    parameters = data.pop('parameters')
+                    parameters = generate_dict_combinations(deepcopy(parameters))
                     return [
                         cls.registry.create_instance(
                             type_name=candidate_type,
                             # merge the original data with the model parameters
-                            **(data | {'model_parameters': p}),
+                            **(data | {'parameters': p}),
                         )
-                        for p in model_parameters
+                        for p in parameters
                     ]
             return cls.registry.create_instance(type_name=candidate_type, **data)
         raise ValueError(f"Unknown type {candidate_type}")
@@ -117,8 +117,8 @@ class Candidate(DictionaryEqualsMixin, ABC):
         value = {}
         if self.metadata:
             value['metadata'] = deepcopy(self.metadata)
-        if self.model_parameters:
-            value['model_parameters'] = deepcopy(self.model_parameters)
+        if self.parameters:
+            value['parameters'] = deepcopy(self.parameters)
         if self.candidate_type:
             value['candidate_type'] = self.candidate_type.upper()
         return value
@@ -145,7 +145,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
     def __str__(self) -> str:
         """Returns a string representation of the Candidate."""
-        parameters = '' if not self.model_parameters else f'\n            model_parameters={self.model_parameters},'  # noqa
+        parameters = '' if not self.parameters else f'\n            parameters={self.parameters},'
         return dedent(f"""
         {self.__class__.__name__}(
             metadata={self.metadata},
@@ -188,7 +188,7 @@ class CallableCandidate(Candidate):
             metadata: A dictionary of metadata about the Candidate.
             parameters: A dictionary of parameters for the Candidate.
         """
-        super().__init__(metadata=metadata, model_parameters=None)
+        super().__init__(metadata=metadata, parameters=None)
         self.model = model
 
     def __call__(self, prompt: str) -> str:
@@ -207,25 +207,26 @@ class OpenAICandidate(Candidate):
     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
-    def __init__(self,
-        metadata: dict | None = None,
-        model_parameters: dict | None = None) -> None:
+    def __init__(  # noqa: D417
+            self,
+            metadata: dict | None = None,
+            parameters: dict | None = None) -> None:
         """
         Initialize a OpenAICandidate object.
 
         Args:
             metadata:
                 A dictionary of metadata about the Candidate.
-            model_parameters:
+            parameters:
                 A dictionary of parameters passed to OpenAI. `model_name` (e.g.
                 'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
                 such as `system_message` and model-specific parameters (e.g. `temperature`) can be
                 passed.
-        """
-        super().__init__(metadata=metadata, model_parameters=model_parameters)
-        if model_parameters is None:
-            model_parameters = {}
-        self.model = OpenAIChat(**model_parameters)
+        """  # noqa
+        super().__init__(metadata=metadata, parameters=parameters)
+        if parameters is None:
+            parameters = {}
+        self.model = OpenAIChat(**parameters)
 
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
@@ -263,16 +264,17 @@ class HuggingFaceEndpointCandidate(Candidate):
     NOTE: the `HUGGING_FACE_API_KEY` environment variable must be set to use this class.
     """
 
-    def __init__(self,
-        model_parameters: dict,
-        metadata: dict | None = None) -> None:
+    def __init__(  # noqa: D417
+            self,
+            parameters: dict,
+            metadata: dict | None = None) -> None:
         r"""
         Initialize a HuggingFaceEndpointCandidate object.
 
         Args:
             metadata:
                 A dictionary of metadata about the Candidate.
-            model_parameters:
+            parameters:
                 A dictionary of parameters passed to OpenAI. `endpoint_url`, `system_format`,
                 `prompt_format`, and `response_format` are required parameters. Other parameters
                 such as `system_message` and model-specific parameters (e.g. `temperature`) can be
@@ -285,12 +287,12 @@ class HuggingFaceEndpointCandidate(Candidate):
                 prompt_format: '[INST] {prompt} [/INST]\n'
                 response_format: '{response}\n'
                 ```
-        """
-        model_parameters = deepcopy(model_parameters)
-        self.system_format = model_parameters.pop('system_format')
-        self.prompt_format = model_parameters.pop('prompt_format')
-        self.response_format = model_parameters.pop('response_format')
-        super().__init__(metadata=metadata, model_parameters=model_parameters)
+        """   # noqa
+        parameters = deepcopy(parameters)
+        self.system_format = parameters.pop('system_format')
+        self.prompt_format = parameters.pop('prompt_format')
+        self.response_format = parameters.pop('response_format')
+        super().__init__(metadata=metadata, parameters=parameters)
         message_formatter = MessageFormatter(
             system_format=self.system_format,
             prompt_format=self.prompt_format,
@@ -298,7 +300,7 @@ class HuggingFaceEndpointCandidate(Candidate):
         )
         self.model = HuggingFaceEndpointChat(
             message_formatter=message_formatter,
-            **model_parameters,
+            **parameters,
         )
 
     def __call__(self, prompt: str) -> str:
@@ -310,11 +312,11 @@ class HuggingFaceEndpointCandidate(Candidate):
         # value = self.model_dump(exclude_defaults=True, exclude_none=True)
         value = super().to_dict()
         if self.system_format:
-            value['model_parameters']['system_format'] = self.system_format
+            value['parameters']['system_format'] = self.system_format
         if self.prompt_format:
-            value['model_parameters']['prompt_format'] = self.prompt_format
+            value['parameters']['prompt_format'] = self.prompt_format
         if self.response_format:
-            value['model_parameters']['response_format'] = self.response_format
+            value['parameters']['response_format'] = self.response_format
         return value
 
     @property

@@ -212,7 +212,7 @@ class OpenAIChat(ChatModel):
             memory_manager=memory_manager,
         )
         self.model_name = model_name
-        self.model_parameters = model_kwargs or {}
+        self.parameters = model_kwargs or {}
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed
@@ -263,7 +263,7 @@ class OpenAIChat(ChatModel):
                 timeout=self.timeout,
                 stream=True,
                 seed=self.seed,
-                **self.model_parameters,
+                **self.parameters,
             )
             # extract the content/token from the streaming response and send to the callback
             # build up the message so that we can calculate usage/costs and send back the same
@@ -283,13 +283,13 @@ class OpenAIChat(ChatModel):
                 messages=messages,
                 timeout=self.timeout,
                 seed=self.seed,
-                **self.model_parameters,
+                **self.parameters,
             )
             response_message = response.choices[0].message.content
 
         metadata = {
             'model_name': self.model_name,
-            'model_parameters': self.model_parameters,
+            'parameters': self.parameters,
             'timeout': self.timeout,
         }
         return response_message, metadata
@@ -331,7 +331,7 @@ class OpenAIServerChat(OpenAIChat):
         self._cost_calculator = None
         # model name is not applicable
         self.model_name = 'local-model'
-        self.model_parameters = model_kwargs or {}
+        self.parameters = model_kwargs or {}
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed

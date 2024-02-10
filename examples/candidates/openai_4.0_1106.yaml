@@ -1,7 +1,7 @@
 metadata:
   name: OpenAI GPT-4.0-Turbo (1106)
 candidate_type: OPENAI
-model_parameters:
+parameters:
   model_name: gpt-4-1106-preview
   system_message: You are a helpful AI assistant.
   temperature: 0.01

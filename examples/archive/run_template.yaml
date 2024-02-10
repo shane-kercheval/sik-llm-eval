@@ -10,7 +10,7 @@ hardware:
   gpu_type: 3090
   gpu_memory: 24
   etc: ...
-model_parameters:
+parameters:
   system_message: You are a helpful AI assistant.
   temperature: 0.1
   top_p: 0.9
