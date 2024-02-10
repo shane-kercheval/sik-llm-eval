@@ -441,8 +441,8 @@ class MockCandidate(Candidate):
             self,
             responses: dict,
             metadata: dict | None = None,
-            model_parameters: dict | None = None):
-        super().__init__(metadata=metadata, model_parameters=model_parameters)
+            parameters: dict | None = None):
+        super().__init__(metadata=metadata, parameters=parameters)
         self.responses = responses.copy()
 
     def __call__(self, prompt: str) -> str:
@@ -589,6 +589,15 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
 
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
+
+def test__multiline_eval__dedents_prompt():  # noqa
+    prompt = """
+        - This is a multiline prompt.
+            - It needs to be dedented.
+    """
+    eval_obj = Eval(test_sequence=[PromptTest(prompt=prompt)])
+    result = eval_obj(lambda x: x)
+    assert result.responses[0] == dedent(prompt)
 
 def callback(x: EvalResult) -> None:
     """
@@ -788,14 +797,14 @@ def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_crea
         'metadata': {'uuid': 'candidate_1'},
         'candidate_type': 'MockCandidate',
         'responses': {'prompt_a': 'response1', 'prompt_b': 'response2'},
-        'model_parameters': test_params,
+        'parameters': test_params,
     }
     eval_harness = EvalHarness()
     assert eval_harness.candidates == []
     eval_harness.add_candidate(candidate_dict)
     assert len(eval_harness.candidates) == 3
     for c, e in zip(eval_harness.candidates, expected_params):
-        assert c.model_parameters == e
+        assert c.parameters == e
         assert c.responses == {'prompt_a': 'response1', 'prompt_b': 'response2'}
         assert c.metadata == {'uuid': 'candidate_1'}
     assert eval_harness.candidates[0].metadata is not eval_harness.candidates[1].metadata

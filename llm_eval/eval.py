@@ -431,8 +431,8 @@ class EvalResult(DictionaryEqualsMixin):
             {candidate_name}{eval_name}# of Prompts Tested:        {len(self.eval_obj.test_sequence)}{cost_str}
             Total Response Time:        {self.total_time_seconds:0.1f} seconds
             # of Response Characters:   {self.response_characters:,}
-            # of Code Blocks Generated: {self.num_code_blocks}
             Characters per Second:      {self.characters_per_second:,.1f}
+            # of Code Blocks Generated: {self.num_code_blocks}
             # of Checks:                {self.num_checks}
             # of Successful Checks:     {self.num_successful_checks}
             % of Successful Checks:     {self.perc_successful_checks or 0:.1%}

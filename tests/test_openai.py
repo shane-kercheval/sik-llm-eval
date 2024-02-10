@@ -214,12 +214,12 @@ def test_OpenAIChat():  # noqa
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test_OpenAIChat__with_parameters():  # noqa
     # test valid parameters for non-streaming
-    model_parameters = {'temperature': 0.01, 'max_tokens': 4096}
-    model = OpenAIChat(**model_parameters)
-    assert model.model_parameters == model_parameters
+    parameters = {'temperature': 0.01, 'max_tokens': 4096}
+    model = OpenAIChat(**parameters)
+    assert model.parameters == parameters
     response = model("What is the capital of France?")
     assert 'Paris' in response
-    assert model.history()[-1].metadata['model_parameters'] == model_parameters
+    assert model.history()[-1].metadata['parameters'] == parameters
 
     # test valid parameters for streaming
     callback_response = ''
@@ -227,24 +227,24 @@ def test_OpenAIChat__with_parameters():  # noqa
         nonlocal callback_response
         callback_response += record.response
 
-    model = OpenAIChat(streaming_callback=streaming_callback, **model_parameters)
-    assert model.model_parameters == model_parameters
+    model = OpenAIChat(streaming_callback=streaming_callback, **parameters)
+    assert model.parameters == parameters
     response = model("What is the capital of France?")
     assert 'Paris' in response
     assert response == callback_response
-    assert model.history()[-1].metadata['model_parameters'] == model_parameters
+    assert model.history()[-1].metadata['parameters'] == parameters
 
     # test invalid parameters so that we know we're actually sending them
-    model_parameters = {'temperature': -10}
-    model = OpenAIChat(**model_parameters)
-    assert model.model_parameters == model_parameters
+    parameters = {'temperature': -10}
+    model = OpenAIChat(**parameters)
+    assert model.parameters == parameters
     with pytest.raises(BadRequestError):
         _ = model("What is the capital of France?")
 
     # test invalid parameters for streaming
-    model_parameters = {'temperature': -10}
-    model = OpenAIChat(streaming_callback=streaming_callback, **model_parameters)
-    assert model.model_parameters == model_parameters
+    parameters = {'temperature': -10}
+    model = OpenAIChat(streaming_callback=streaming_callback, **parameters)
+    assert model.parameters == parameters
     with pytest.raises(BadRequestError):
         _ = model("What is the capital of France?")
 

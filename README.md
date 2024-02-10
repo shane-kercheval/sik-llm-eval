@@ -23,7 +23,7 @@ You can define Candidates and Evals using YAML files. Here's an example YAML fil
 metadata:
   name: OpenAI GPT-3.5-Turbo (1106)
 candidate_type: OPENAI
-model_parameters:
+parameters:
   model_name: gpt-3.5-turbo-1106
   system_message: You are a helpful AI assistant.
   temperature: 0.01
@@ -127,7 +127,7 @@ If you are interested in evaluating a specific Eval against a particular Candida
 
 ```python
 candidate = OpenAICandidate(
-    {'model_parameters': {'model_name': 'gpt-3.5-turbo-1106'}},
+    {'parameters': {'model_name': 'gpt-3.5-turbo-1106'}},
 )
 eval_obj = Eval(test_sequence={
     'prompt': "Create a python function called `fib` that takes an integer `n` and returns the `n`th number in the Fibonacci sequence. Use type hints and docstrings."

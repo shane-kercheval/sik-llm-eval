@@ -92,16 +92,16 @@ def test_HuggingFaceEndpointChat__no_token_calculator(hugging_face_endpoint):  #
 @pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
 def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     # test valid parameters for non-streaming
-    model_parameters = {'temperature': 0.01, 'max_tokens': 4096}
+    parameters = {'temperature': 0.01, 'max_tokens': 4096}
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
         message_formatter=LlamaMessageFormatter(),
-        **model_parameters,
+        **parameters,
     )
-    assert model.model_parameters == model_parameters
+    assert model.parameters == parameters
     response = model("What is the capital of France?")
     assert 'Paris' in response
-    assert model.history()[-1].metadata['model_parameters'] == model_parameters
+    assert model.history()[-1].metadata['parameters'] == parameters
 
     # test valid parameters for streaming
     callback_response = ''
@@ -113,22 +113,22 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
         endpoint_url=hugging_face_endpoint,
         message_formatter=LlamaMessageFormatter(),
         streaming_callback=streaming_callback,
-        **model_parameters,
+        **parameters,
     )
-    assert model.model_parameters == model_parameters
+    assert model.parameters == parameters
     response = model("What is the capital of France?")
     assert 'Paris' in response
     assert response == callback_response
-    assert model.history()[-1].metadata['model_parameters'] == model_parameters
+    assert model.history()[-1].metadata['parameters'] == parameters
 
     # test invalid parameters so that we know we're actually sending them
-    model_parameters = {'temperature': -10}
+    parameters = {'temperature': -10}
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
         message_formatter=LlamaMessageFormatter(),
-        **model_parameters,
+        **parameters,
     )
-    assert model.model_parameters == model_parameters
+    assert model.parameters == parameters
     with pytest.raises(HuggingFaceRequestError) as exception:
         _ = model("What is the capital of France?")
     exception = exception.value
@@ -136,14 +136,14 @@ def test_HuggingFaceEndpoint__with_parameters(hugging_face_endpoint):  # noqa
     assert 'temperature' in exception.error_message
 
     # test invalid parameters for streaming
-    model_parameters = {'temperature': -10}
+    parameters = {'temperature': -10}
     model = HuggingFaceEndpointChat(
         endpoint_url=hugging_face_endpoint,
         message_formatter=LlamaMessageFormatter(),
         streaming_callback=streaming_callback,
-        **model_parameters,
+        **parameters,
     )
-    assert model.model_parameters == model_parameters
+    assert model.parameters == parameters
     with pytest.raises(HuggingFaceRequestError) as exception:
         _ = model("What is the capital of France?")
     exception = exception.value
