@@ -61,6 +61,8 @@ class PromptTest(DictionaryEqualsMixin):
         self.prompt = dedent(prompt)
         self.ideal_response = dedent(ideal_response) if ideal_response else None
         checks = checks or []
+        if not isinstance(checks, list):
+            checks = [checks]
         checks_created = []
         for check in checks:
             if isinstance(check, dict):

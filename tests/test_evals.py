@@ -75,6 +75,32 @@ def test__PromptTest():  # noqa
         ],
     }
 
+def test__PromptTest__none_list_check():  # noqa
+    test = PromptTest(
+        prompt='test',
+        ideal_response = None,
+        checks = None,
+    )
+    assert test.prompt == 'test'
+    assert test.ideal_response is None
+    assert test.checks == []
+    test = PromptTest(
+        prompt='test',
+        ideal_response = None,
+        checks = {'value': 'a', 'check_type': 'MATCH'},
+    )
+    assert test.prompt == 'test'
+    assert test.ideal_response is None
+    assert test.checks[0].value == 'a'
+    test = PromptTest(
+        prompt='test',
+        ideal_response = None,
+        checks = MatchCheck(value='a'),
+    )
+    assert test.prompt == 'test'
+    assert test.ideal_response is None
+    assert test.checks[0].value == 'a'
+
 def test__Eval__creation():  # noqa
     eval_obj = Eval(test_sequence=PromptTest(prompt='test'))
     eval_dict = eval_obj.to_dict()

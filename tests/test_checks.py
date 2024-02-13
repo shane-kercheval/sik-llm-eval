@@ -324,7 +324,7 @@ def test__ScoreResult__serialize():  # noqa
     assert isinstance(recreated, ScoreResult)
     assert recreated == result
 
-def test__ExactCheck__has_check_type():  # noqa
+def test__MatchCheck__has_check_type():  # noqa
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -339,7 +339,7 @@ def test__ExactCheck__has_check_type():  # noqa
     assert MatchCheck(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-def test__ExactCheck():  # noqa
+def test__MatchCheck():  # noqa
     assert CheckType.MATCH.name in Check.registry
     assert CheckType.MATCH in Check.registry
 
