@@ -545,6 +545,30 @@ class EvalHarness:
 
         The methods above can be called multiple times to add additional Eval and Candidate
         objects.
+
+        Args:
+            evals:
+                A list of Eval objects or dictionaries. Alternatively, `add_eval...` methods can
+                be called to add Eval objects.
+            candidates:
+                A list of Candidate objects or dictionaries. Alternatively, `add_candidate...`
+                methods can be called to add Candidate objects.
+            num_cpus:
+                The number of CPUs to use for parallel processing. If set to 1, the EvalHarness
+                will run each Candidate (and the corresponding Evals) sequentially. If set to
+                None or a number < 1, the EvalHarness will use all available CPUs. If set to a
+                number > 1, the EvalHarness will use the specified number of CPUs.
+            async_batch_size:
+                The number of Evals to run asynchronously for each Candidate. If set to None, the
+                EvalHarness will run each Eval sequentially. If set to a number, the EvalHarness
+                will run the Evals in batches of the specified size.
+            callback:
+                A callback function that will be called for each EvalResult after the
+                corresponding checks have been executed for that Eval. The callback function
+                should take a single parameter, which is an EvalResult object. The callback can be
+                used, for example, to save the EvalResult objects as they are generated (in case
+                the EvalHarness fails to complete due to an error or the user wants to save the
+                results as they are generated).
         """
         evals = evals or []
         eval_objects = []
