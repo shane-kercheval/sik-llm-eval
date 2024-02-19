@@ -835,7 +835,7 @@ def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
     assert result.metadata['num_code_blocks_successful'] == 2
     assert result.metadata['code_blocks'] == code_blocks
     assert result.metadata['code_block_errors'][0] is None
-    assert isinstance(result.metadata['code_block_errors'][1], AssertionError)
+    assert result.metadata['code_block_errors'][1] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][2] is None
     assert result.metadata['code_tests'] == []
     assert result.metadata['num_code_tests'] == 0
@@ -865,7 +865,7 @@ def test__PythonCodeBlocksRun__with_setup():  # noqa
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
     assert result.metadata['code_blocks'] == code_blocks
-    assert isinstance(result.metadata['code_block_errors'][0], AssertionError)
+    assert result.metadata['code_block_errors'][0] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][1] is None
     assert result.metadata['code_tests'] == []
     assert result.metadata['num_code_tests'] == 0
@@ -929,7 +929,7 @@ def test__PythonCodeBlocksRun__with_code_tests():  # noqa
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
     assert result.metadata['code_blocks'] == code_blocks
-    assert isinstance(result.metadata['code_block_errors'][0], AssertionError)
+    assert result.metadata['code_block_errors'][0] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][1] is None
     assert result.metadata['code_tests'] == code_tests
     assert result.metadata['num_code_tests'] == expected_code_tests
@@ -937,9 +937,9 @@ def test__PythonCodeBlocksRun__with_code_tests():  # noqa
     assert result.metadata['code_test_results'] == [True, True, False, False, False]
     assert result.metadata['code_test_errors'][0] is None
     assert result.metadata['code_test_errors'][1] is None
-    assert isinstance(result.metadata['code_test_errors'][2], NameError)
+    assert result.metadata['code_test_errors'][2] == {'error': 'NameError', 'message': "name 'does_not_exist' is not defined"}  # noqa
     assert result.metadata['code_test_errors'][3] is None
-    assert isinstance(result.metadata['code_test_errors'][4], ValueError)
+    assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
 
 def test__PythonCodeBlocksRun__with_code_tests__str():  # noqa
     # same test as `test__PythonCodeBlocksRun__with_code_tests` except the code_tests are strings
@@ -1007,7 +1007,7 @@ def test__PythonCodeBlocksRun__with_code_tests__str():  # noqa
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
     assert result.metadata['code_blocks'] == code_blocks
-    assert isinstance(result.metadata['code_block_errors'][0], AssertionError)
+    assert result.metadata['code_block_errors'][0] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][1] is None
     expected_code_tests = [
         dedent(test.strip()) if isinstance(test, str) else test
@@ -1019,9 +1019,9 @@ def test__PythonCodeBlocksRun__with_code_tests__str():  # noqa
     assert result.metadata['code_test_results'] == [True, True, False, False, False]
     assert result.metadata['code_test_errors'][0] is None
     assert result.metadata['code_test_errors'][1] is None
-    assert isinstance(result.metadata['code_test_errors'][2], NameError)
+    assert result.metadata['code_test_errors'][2] == {'error': 'NameError', 'message': "name 'does_not_exist' is not defined"}  # noqa
     assert result.metadata['code_test_errors'][3] is None
-    assert isinstance(result.metadata['code_test_errors'][4], ValueError)
+    assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
 
 def test__PythonCodeBlocksRun__failing_code_setup_raises_error():  # noqa
     """
@@ -1050,7 +1050,7 @@ def test__PythonCodeBlocksRun__with_code_tests__failing_function_does_not_raise_
     assert result.metadata['num_code_tests'] == 1
     assert result.metadata['num_code_tests_successful'] == 0
     assert len(result.metadata['code_test_errors']) == 1
-    assert isinstance(result.metadata['code_test_errors'][0], ValueError)
+    assert result.metadata['code_test_errors'][0] == {'error': 'ValueError', 'message': ''}
     assert result.metadata['code_test_results'] == [False]
 
     assert result.value == 0.5
@@ -1072,10 +1072,10 @@ def test__PythonCodeBlocksRun__with_code_tests__all_code_blocks_fail__test_numbe
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 0
     assert result.metadata['code_blocks'] == code_blocks
-    assert isinstance(result.metadata['code_block_errors'][0], ValueError)
-    assert isinstance(result.metadata['code_block_errors'][1], NameError)
+    assert result.metadata['code_block_errors'][0] == {'error': 'ValueError', 'message': ''}
+    assert result.metadata['code_block_errors'][1] == {'error': 'NameError', 'message': ''}
     assert result.metadata['code_tests'] == code_tests
     assert result.metadata['num_code_tests'] == 1
     assert result.metadata['num_code_tests_successful'] == 0
     assert result.metadata['code_test_results'] == [False]
-    assert isinstance(result.metadata['code_test_errors'][0], NameError)
+    assert result.metadata['code_test_errors'][0] == {'error': 'NameError', 'message': "name 'variable_does_not_exist' is not defined"}  # noqa

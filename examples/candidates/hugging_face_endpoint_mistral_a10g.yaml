@@ -1,21 +1,20 @@
 metadata:
-  name: Llama-2-7b-chat-hf - NVIDIA A10G
-  description: Llama-2-7b-chat running on HuggingFace Endpoints with 1 NVIDIA A10G GPU (24GB).
+  uuid: 0D31E72C-B3FB-4D14-ACE2-BCD1671D131C
+  name: Mistral 7B Instruct v0.2 - NVIDIA A10G
+  description: Mistral 7B Instruct v0.2 running on HuggingFace Endpoints with 1 NVIDIA A10G GPU (24GB). https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.2
   system_info:
     platform: Huggingface Endpoints
     quantization: None
     gpus: 1
-    gpu_type: A10G
+    gpu_type: Nvidia A10G
     gpu_memory: 24
     cpu: 1
     memory: 16
 candidate_type: HUGGING_FACE_ENDPOINT
 parameters:
-  endpoint_url: https://api-inference.huggingface.co/models/llama-2-7b-chat
+  endpoint_url: https://xyz.endpoints.huggingface.cloud
   system_message: You are a helpful AI assistant.
   temperature: 0.01
-  max_new_tokens: 2000
-  system_format: '[INST] <<SYS>> {system_message} <</SYS>> [/INST]\n'
-  prompt_format: '[INST] {prompt} [/INST]\n'
-  response_format: '{response}\n'
-  seed: 42  # optional
+  system_format: "{system_message}"
+  prompt_format: "[INST]{prompt}[/INST]"
+  response_format: "{response}\n"
