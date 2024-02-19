@@ -7,6 +7,7 @@ metadata:
   tags:
     - python
     - test
+    - eval_8f9
   source: Test
 test_sequence:
   - prompt: This is the prompt from the user.

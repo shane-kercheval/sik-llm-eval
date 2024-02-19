@@ -1,0 +1,106 @@
+"""Unit tests for the filtering module."""
+from llm_eval.candidates import Candidate
+from llm_eval.eval import Eval
+from llm_eval.filtering import filter_tags
+
+
+class MockLMM:
+    """Mock class representing an LLM."""
+
+    def __init__(self, **kwargs: dict):
+        self.llm_parameters = kwargs
+        self.prompts = []
+
+    def __call__(self, prompt: str) -> str:
+        """Caches prompts for unit tests."""
+        self.prompts.append(prompt)
+        return prompt
+
+
+@Candidate.register('MOCK_MODEL_FILTERING')
+class MockCandidate(Candidate):
+    """Mock class representing a Candidate."""
+
+    def __init__(self, **kwargs: dict) -> None:
+        """Initialize a MockCandidate object."""
+        metadata = kwargs.pop('metadata', None)
+        parameters = kwargs.pop('parameters', None)
+        super().__init__(parameters=parameters, metadata=metadata)
+        self.model = None
+        if parameters is not None:
+            self.model = MockLMM(**parameters)
+        else:
+            self.model = MockLMM()
+
+    def __call__(self, prompt: str) -> str:
+        """Invokes the underlying model with the prompt and returns the response."""
+        return self.model(prompt)
+
+
+def test_filtering(  # noqa: PLR0915
+        fake_eval_8f9fbf37: dict,
+        fake_eval_subtract_two_numbers: dict,
+        fake_eval_sum_two_numbers: dict,
+        fake_eval_sum_two_numbers_code_blocks_run: dict) -> None:
+    """Test the filtering function."""
+    candidate = MockCandidate()
+    results = []
+    results.append(Eval(**fake_eval_8f9fbf37)(candidate))
+    results.append(Eval(**fake_eval_subtract_two_numbers)(candidate))
+    results.append(Eval(**fake_eval_sum_two_numbers)(candidate))
+    results.append(Eval(**fake_eval_sum_two_numbers_code_blocks_run)(candidate))
+
+    assert 'eval_8f9' in results[0].eval_obj.metadata['tags']
+    assert 'subtract_two_numbers' in results[1].eval_obj.metadata['tags']
+    assert 'sum_two_numbers' in results[2].eval_obj.metadata['tags']
+    assert 'sum_two_numbers' in results[3].eval_obj.metadata['tags']
+    assert 'code_block' in results[3].eval_obj.metadata['tags']
+
+    filtered_results = filter_tags(results)
+    assert len(filtered_results) == 4
+    assert filtered_results == results
+
+    filtered_results = filter_tags(results, exclude='eval_8f9')
+    assert len(filtered_results) == 3
+    assert results[0] not in filtered_results
+    assert results[1] in filtered_results
+    assert results[2] in filtered_results
+    assert results[3] in filtered_results
+
+    filtered_results = filter_tags(results, include='eval_8f9')
+    assert len(filtered_results) == 1
+    assert results[0] in filtered_results
+    assert results[1] not in filtered_results
+    assert results[2] not in filtered_results
+    assert results[3] not in filtered_results
+
+    filtered_results = filter_tags(results, include='sum_two_numbers')
+    assert len(filtered_results) == 2
+    assert results[0] not in filtered_results
+    assert results[1] not in filtered_results
+    assert results[2] in filtered_results
+    assert results[3] in filtered_results
+
+    filtered_results = filter_tags(results, exclude='sum_two_numbers')
+    assert len(filtered_results) == 2
+    assert results[0] in filtered_results
+    assert results[1] in filtered_results
+    assert results[2] not in filtered_results
+    assert results[3] not in filtered_results
+
+    filtered_results = filter_tags(results, include='sum_two_numbers', exclude='sum_two_numbers')
+    assert len(filtered_results) == 0
+
+    filtered_results = filter_tags(results, include=['eval_8f9', 'subtract_two_numbers'])
+    assert len(filtered_results) == 2
+    assert results[0] in filtered_results
+    assert results[1] in filtered_results
+    assert results[2] not in filtered_results
+    assert results[3] not in filtered_results
+
+    filtered_results = filter_tags(results, include='sum_two_numbers', exclude='code_block')
+    assert len(filtered_results) == 1
+    assert results[0] not in filtered_results
+    assert results[1] not in filtered_results
+    assert results[2] in filtered_results
+    assert results[3] not in filtered_results

@@ -7,6 +7,7 @@ metadata:
   tags:
     - python
     - test
+    - subtract_two_numbers
   source: Test
 test_sequence:
   - prompt: Write a function that called `subtract_two_numbers` that takes two numbers and returns the second subtracted from the first.
