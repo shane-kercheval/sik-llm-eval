@@ -1,6 +1,57 @@
 """Classes and functions for filtering evaluation results (EvalResult objects)."""
-from llm_eval.eval import EvalResult
+from llm_eval.checks import PythonCodeBlocksPresent, PythonCodeBlocksRun
+from llm_eval.eval import Eval, EvalResult
 
+
+def eval_expects_code_blocks(eval_: Eval) -> bool:
+    """
+    Return True if the eval object contains a check that tests for the presence of code blocks
+    (i.e. Check objects with `PythonCodeBlocksPresent` check type).
+    """
+    return any(
+        isinstance(check, PythonCodeBlocksPresent)
+        for test in eval_.test_sequence
+        for check in test.checks
+    )
+
+def eval_contains_code_block_tests(eval_: Eval) -> bool:
+    """
+    Return True if the eval object contains a check that tests code blocks (i.e. Check objects with
+    `PythonCodeBlocksRun` check type).
+    """
+    return any(
+        isinstance(check, PythonCodeBlocksRun)
+        for test in eval_.test_sequence
+        for check in test.checks
+    )
+
+def result_expects_code_blocks(result: EvalResult) -> bool:
+    """
+    Return True if the underlying Eval object in the EvalResult contains a check that tests for the
+    presence of code blocks (i.e. Check objects with `PythonCodeBlocksPresent` check type).
+    """
+    return eval_expects_code_blocks(result.eval_obj)
+
+def result_contains_code_block_tests(result: EvalResult) -> bool:
+    """
+    Return True if the underlying Eval object in the EvalResult contains a check that tests code
+    blocks (i.e. Check objects with `PythonCodeBlocksRun` check type).
+    """
+    return eval_contains_code_block_tests(result.eval_obj)
+
+def filter_contains_expects_blocks(results: list[EvalResult]) -> list[EvalResult]:
+    """
+    Filter results to only include those that contain checks that test for the presence of code
+    blocks (i.e. Check objects within the Eval with a `PythonCodeBlocksPresent` check type).
+    """
+    return [r for r in results if result_expects_code_blocks(r)]
+
+def filter_contains_code_block_tests(results: list[EvalResult]) -> list[EvalResult]:
+    """
+    Filter results to only include those that contain checks that test code blocks (i.e. Check
+    objects within the Eval with a `PythonCodeBlocksRun` check type).
+    """
+    return [r for r in results if result_contains_code_block_tests(r)]
 
 def filter_tags(
         results: list[EvalResult],

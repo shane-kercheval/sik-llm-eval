@@ -1,0 +1,22 @@
+metadata:
+  uuid: 397A7B78-2167-43EC-96C5-214FF0AB2BAA
+  version: 1
+  name: Test Eval
+  description: This is a test eval.
+  difficulty: 1  # 1-5
+  tags:
+    - python
+    - test
+    - no_code_blocks
+  source: Test
+test_sequence:
+  - prompt: This is the prompt from the user.
+    ideal_response: This is the ideal repsonse.
+    checks:
+      - check_type: CONTAINS
+        value: response
+      - check_type: CONTAINS
+        value: another value
+  - prompt: This is a follow up prompt from the user.
+    ideal_response: This is the ideal response to the follow up prompt.
+    checks:
