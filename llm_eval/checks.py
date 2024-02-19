@@ -414,9 +414,15 @@ class PythonCodeBlocksRun(Check):
                 assert all(e is None for e in setup_errors), \
                     f"Errors executing code setup in PythonCodeBlocksRun: \n`{setup_errors}`"
 
+            def _errors_to_dict(errors: list[Exception | None]) -> list[dict[str, str] | None]:
+                return [
+                    {'error': type(e).__name__, 'message': str(e)} if e else None
+                    for e in errors
+                ]
+
             # run the primary code blocks
             code_block_errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
-
+            code_block_errors = _errors_to_dict(code_block_errors)
             # run the custom/user functions with contain additional tests (they functions should
             # return boolean success/fail)
             for func in functions:
@@ -448,7 +454,7 @@ class PythonCodeBlocksRun(Check):
                 # contain the expected function name) so we don't want to fail out of the entire
                 # check
                 func_errors = execute_code_blocks([function_call], env_namespace=env_namespace)
-                function_errors.extend(func_errors)
+                function_errors.extend(_errors_to_dict(func_errors))
                 # get the result of the function from the environment
                 func_result = env_namespace['__result__']
                 assert isinstance(func_result, bool), \

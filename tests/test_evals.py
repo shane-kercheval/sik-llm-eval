@@ -75,6 +75,32 @@ def test__PromptTest():  # noqa
         ],
     }
 
+def test__PromptTest__none_list_check():  # noqa
+    test = PromptTest(
+        prompt='test',
+        ideal_response = None,
+        checks = None,
+    )
+    assert test.prompt == 'test'
+    assert test.ideal_response is None
+    assert test.checks == []
+    test = PromptTest(
+        prompt='test',
+        ideal_response = None,
+        checks = {'value': 'a', 'check_type': 'MATCH'},
+    )
+    assert test.prompt == 'test'
+    assert test.ideal_response is None
+    assert test.checks[0].value == 'a'
+    test = PromptTest(
+        prompt='test',
+        ideal_response = None,
+        checks = MatchCheck(value='a'),
+    )
+    assert test.prompt == 'test'
+    assert test.ideal_response is None
+    assert test.checks[0].value == 'a'
+
 def test__Eval__creation():  # noqa
     eval_obj = Eval(test_sequence=PromptTest(prompt='test'))
     eval_dict = eval_obj.to_dict()
@@ -391,7 +417,7 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert eval_result.results[1][2].metadata['code_test_errors'][2] is None
     assert eval_result.results[1][2].metadata['code_test_errors'][3] is None
     assert eval_result.results[1][2].metadata['code_test_errors'][4] is None
-    assert isinstance(eval_result.results[1][2].metadata['code_test_errors'][5], NameError)
+    assert eval_result.results[1][2].metadata['code_test_errors'][5] == {'error': 'NameError', 'message': "name 'variable_does_not_exist' is not defined"}  # noqa
     assert eval_result_summarizer(eval_result)
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
