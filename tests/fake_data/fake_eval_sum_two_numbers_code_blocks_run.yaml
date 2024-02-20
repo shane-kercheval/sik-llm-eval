@@ -7,6 +7,8 @@ metadata:
   tags:
     - python
     - test
+    - sum_two_numbers
+    - code_block
   source: Test
 test_sequence:
   - prompt: Write a function that called `sum_two_numbers` that takes two numbers and returns their sum.

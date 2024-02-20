@@ -500,6 +500,8 @@ def eval_result_summarizer(result: EvalResult) -> dict:
             sum(c.metadata['num_code_tests'] for c in code_run_checks)
         summary['num_code_tests_successful'] = \
             sum(c.metadata['num_code_tests_successful'] for c in code_run_checks)
+    else:
+        summary['num_code_tests'] = 0
     return summary
 
 

@@ -1,5 +1,5 @@
 metadata:
-  uuid: 8F9FBF37-C18D-46AD-8C34-A0196739643D
+  uuid: 397A7B78-2167-43EC-96C5-214FF0AB2BAA
   version: 1
   name: Test Eval
   description: This is a test eval.
@@ -7,7 +7,7 @@ metadata:
   tags:
     - python
     - test
-    - eval_8f9
+    - no_code_blocks
   source: Test
 test_sequence:
   - prompt: This is the prompt from the user.
@@ -17,8 +17,6 @@ test_sequence:
         value: response
       - check_type: CONTAINS
         value: another value
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
   - prompt: This is a follow up prompt from the user.
     ideal_response: This is the ideal response to the follow up prompt.
     checks:
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
