@@ -225,6 +225,8 @@ def test__Eval__from_objects__minimal():  # noqa
     assert result.cost is None
     assert result.num_code_blocks == 0
     assert result.all_checks_results == []
+    assert not result.expects_code_blocks
+    assert result.code_blocks_run_check_result is None
     assert result.total_time_seconds > 0
 
 def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  # noqa
@@ -267,6 +269,8 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     # check that the check result dicts match
     flatted_check_results = [r for tests in eval_result_dict['results'] for r in tests]
     assert flatted_check_results == [r.to_dict() for r in eval_result.all_checks_results]
+    assert eval_result.expects_code_blocks
+    assert eval_result.code_blocks_run_check_result is None
     assert eval_result.total_time_seconds > 0
     # check that the eval_result_dict will recreate the exact eval_result object
     recreated_eval = EvalResult(**eval_result_dict)
@@ -278,7 +282,8 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     flatted_checks = [r for test in eval_obj.test_sequence for r in test.checks]
     for c, r in zip(flatted_checks, eval_result.all_checks_results, strict=True):
         assert c.check_type == r.metadata['check_type']
-
+    assert eval_result.expects_code_blocks
+    assert eval_result.code_blocks_run_check_result is None
     assert eval_result_summarizer(eval_result)
 
 def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run):  # noqa
@@ -370,6 +375,8 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert isinstance(eval_result.results[1][1], PassFailResult)
     assert isinstance(eval_result.results[1][2], ScoreResult)
     assert len(eval_result.all_checks_results) == 7
+    assert eval_result.expects_code_blocks
+    assert eval_result.code_blocks_run_check_result is not None
 
     # Check 0.0
     assert eval_result.results[0][0].success
@@ -437,6 +444,8 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert 'cost' in result.to_dict()
     assert result.cost == result.to_dict()['cost']
     assert len(result.all_checks_results) == 2
+    assert result.expects_code_blocks
+    assert result.code_blocks_run_check_result is None
     assert result.all_checks_results[0].success
     assert result.all_checks_results[0].metadata['check_type'] == CheckType.CONTAINS.name
     assert result.all_checks_results[1].success
@@ -847,3 +856,54 @@ def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_crea
     finally:
         os.remove('__temp__.yaml')
     assert eval_harness_from_yaml.candidates == eval_harness.candidates
+
+def test__cannot_add_more_than_one_code_blocks_run_check():  # noqa
+    eval_config = {
+        'metadata': {'uuid': 'eval_1'},
+        'test_sequence': [
+            {
+                'prompt': 'This is a prompt',
+                'ideal_response': 'This is the ideal response',
+                'checks': [
+                    {
+                        'check_type': CheckType.PYTHON_CODE_BLOCKS_PRESENT.name,
+                    },
+                ],
+            },
+            {
+                'prompt': 'This is a prompt',
+                'ideal_response': 'This is the ideal response',
+                'checks': [
+                    {
+                        'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+                        'code_tests': ['print("hello world")'],
+                    },
+                ],
+            },
+        ],
+    }
+    # this should work
+    _ = Eval(**eval_config)
+    # this should raise a ValueError because we are adding more than one code_blocks_run check
+    # to a single test
+    new_config = deepcopy(eval_config)
+    new_config['test_sequence'][1]['checks'].append(
+        {
+            'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+            'code_tests': ['print("hello world")'],
+        },
+    )
+    with pytest.raises(ValueError):  # noqa: PT011
+        Eval(**new_config)
+
+    # this should raise a ValueError because we are adding more than one code_blocks_run check
+    # across multiple tests
+    new_config = deepcopy(eval_config)
+    new_config['test_sequence'][0]['checks'].append(
+        {
+            'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+            'code_tests': ['print("hello world")'],
+        },
+    )
+    with pytest.raises(ValueError):  # noqa: PT011
+        Eval(**new_config)
