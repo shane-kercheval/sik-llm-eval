@@ -13,6 +13,7 @@ from llm_eval.checks import (
     Check,
     CheckResult,
     CheckType,
+    PythonCodeBlocksRun,
 )
 from llm_eval.utilities.internal_utilities import (
     DictionaryEqualsMixin,
@@ -48,6 +49,10 @@ class PromptTest(DictionaryEqualsMixin):
         """
         Initializes the PromptTest.
 
+        Note: More than one PythonCodeBlocksRun check is not allowed. This is
+        because the PythonCodeBlocksRun check runs all code blocks across all responses and
+        therefore should only be added once so the code blocks are not re-executed multiple times.
+
         Args:
             prompt:
                 The prompt to send to the LLM.
@@ -72,6 +77,10 @@ class PromptTest(DictionaryEqualsMixin):
                 checks_created.append(check)
             else:
                 raise TypeError("Checks must be either a Check instance or a dictionary")
+        # Cannot add more than one PythonCodeBlocksRun check
+        if len([c for c in checks_created if isinstance(c, PythonCodeBlocksRun)]) > 1:
+            raise ValueError("Cannot add more than one PythonCodeBlocksRun check")
+
         self.checks = checks_created
 
     def __str__(self) -> str:
@@ -128,6 +137,11 @@ class Eval(DictionaryEqualsMixin):
         """
         Initializes the Eval.
 
+        Note: More than one PythonCodeBlocksRun check cannot be added across all tests. This is
+        because the PythonCodeBlocksRun check runs all code blocks across all responses and
+        therefore should only be added once so the code blocks are not re-executed multiple times.
+        The PythonCodeBlocksRun check should be added to the last PromptTest in the sequence.
+
         Args:
             test_sequence:
                 A list of PromptTest objects (prompt/check pairs) to run against the LLM.
@@ -152,6 +166,15 @@ class Eval(DictionaryEqualsMixin):
                 raise TypeError(
                     "test_sequence must be either a PromptTest instance or a dictionary",
                 )
+
+        # cannot add more than one PythonCodeBlocksRun check across all tests
+        run_checks = [
+            # flatten all checks
+            c for t in tests_created for c in t.checks
+            if isinstance(c, PythonCodeBlocksRun)
+        ]
+        if len(run_checks) > 1:
+            raise ValueError("Cannot add more than one PythonCodeBlocksRun check")
         self.test_sequence = tests_created
 
     def to_dict(self) -> dict:
@@ -419,6 +442,26 @@ class EvalResult(DictionaryEqualsMixin):
     def all_checks_results(self) -> list[CheckResult]:
         """Returns a (flattened) list of all CheckResults."""
         return [r for result in self.results for r in result]
+
+    @property
+    def expects_code_blocks(self) -> list[CheckResult]:
+        """Returns a list of CheckResults for code block present checks."""
+        return any(
+            r for r in self.all_checks_results
+            if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+        )
+
+    @property
+    def code_blocks_run_check_result(self) -> CheckResult:
+        """There should only be one PythonCodeBlocksRun added."""
+        results = [
+            r for r in self.all_checks_results
+            if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+        ]
+        if results:
+            assert len(results) == 1
+            return results[0]
+        return None
 
     def __str__(self) -> str:
         cost_str = f'\n{" " * 12}Cost:{" " * 22} ${self.cost:.4f}' if self.cost else ''

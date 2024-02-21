@@ -30,14 +30,14 @@ def result_expects_code_blocks(result: EvalResult) -> bool:
     Return True if the underlying Eval object in the EvalResult contains a check that tests for the
     presence of code blocks (i.e. Check objects with `PythonCodeBlocksPresent` check type).
     """
-    return eval_expects_code_blocks(result.eval_obj)
+    return result.expects_code_blocks
 
 def result_contains_code_block_tests(result: EvalResult) -> bool:
     """
     Return True if the underlying Eval object in the EvalResult contains a check that tests code
     blocks (i.e. Check objects with `PythonCodeBlocksRun` check type).
     """
-    return eval_contains_code_block_tests(result.eval_obj)
+    return result.code_blocks_run_check_result is not None
 
 def filter_contains_expects_blocks(results: list[EvalResult]) -> list[EvalResult]:
     """
