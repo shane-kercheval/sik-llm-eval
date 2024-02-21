@@ -581,6 +581,18 @@ def test__extract_code_blocks__conversation_mask_emails(conversation_mask_email)
         assert mask_email("test@test.com") == "t****t@test.com"
         """).strip()
 
+def test__extract_code_blocks__llama_response():  # noqa
+    # output from llama response that doesn't contain `python` or multiple new lines between code
+    with open('tests/fake_data/fake_llama_response_with_code_block.txt') as f:
+        response = f.read()
+    extracted_code_blocks = extract_code_blocks(response)
+    assert len(extracted_code_blocks) == 3
+    assert extracted_code_blocks[0].startswith('from typing import Generator')
+    assert extracted_code_blocks[0].endswith('yield (x, y)')
+    assert extracted_code_blocks[1] == 'random_walk(10)'
+    assert extracted_code_blocks[2].startswith('(0, 0)')
+    assert extracted_code_blocks[2].endswith('(5, -4)')
+
 def test__execute_code_blocks__without_env_namespace(conversation_sum):  # noqa
     code_blocks = extract_code_blocks(conversation_sum['model_1']['responses'][0])
     code_blocks.append('assert sum_numbers(5, 3) == 8')
