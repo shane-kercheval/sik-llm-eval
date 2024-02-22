@@ -14,7 +14,7 @@ from llm_eval.checks import (
     Check,
     CheckResult,
     CheckType,
-    PythonCodeBlocksRun,
+    PythonCodeBlockTests,
 )
 from llm_eval.utilities.internal_utilities import (
     DictionaryEqualsMixin,
@@ -50,8 +50,8 @@ class PromptTest(DictionaryEqualsMixin):
         """
         Initializes the PromptTest.
 
-        Note: More than one PythonCodeBlocksRun check is not allowed. This is
-        because the PythonCodeBlocksRun check runs all code blocks across all responses and
+        Note: More than one PythonCodeBlockTests check is not allowed. This is
+        because the PythonCodeBlockTests check runs all code blocks across all responses and
         therefore should only be added once so the code blocks are not re-executed multiple times.
 
         Args:
@@ -78,9 +78,9 @@ class PromptTest(DictionaryEqualsMixin):
                 checks_created.append(check)
             else:
                 raise TypeError("Checks must be either a Check instance or a dictionary")
-        # Cannot add more than one PythonCodeBlocksRun check
-        if len([c for c in checks_created if isinstance(c, PythonCodeBlocksRun)]) > 1:
-            raise ValueError("Cannot add more than one PythonCodeBlocksRun check")
+        # Cannot add more than one PythonCodeBlockTests check
+        if len([c for c in checks_created if isinstance(c, PythonCodeBlockTests)]) > 1:
+            raise ValueError("Cannot add more than one PythonCodeBlockTests check")
 
         self.checks = checks_created
 
@@ -138,10 +138,10 @@ class Eval(DictionaryEqualsMixin):
         """
         Initializes the Eval.
 
-        Note: More than one PythonCodeBlocksRun check cannot be added across all tests. This is
-        because the PythonCodeBlocksRun check runs all code blocks across all responses and
+        Note: More than one PythonCodeBlockTests check cannot be added across all tests. This is
+        because the PythonCodeBlockTests check runs all code blocks across all responses and
         therefore should only be added once so the code blocks are not re-executed multiple times.
-        The PythonCodeBlocksRun check should be added to the last PromptTest in the sequence.
+        The PythonCodeBlockTests check should be added to the last PromptTest in the sequence.
 
         Args:
             test_sequence:
@@ -168,14 +168,14 @@ class Eval(DictionaryEqualsMixin):
                     "test_sequence must be either a PromptTest instance or a dictionary",
                 )
 
-        # cannot add more than one PythonCodeBlocksRun check across all tests
+        # cannot add more than one PythonCodeBlockTests check across all tests
         run_checks = [
             # flatten all checks
             c for t in tests_created for c in t.checks
-            if isinstance(c, PythonCodeBlocksRun)
+            if isinstance(c, PythonCodeBlockTests)
         ]
         if len(run_checks) > 1:
-            raise ValueError("Cannot add more than one PythonCodeBlocksRun check")
+            raise ValueError("Cannot add more than one PythonCodeBlockTests check")
         self.test_sequence = tests_created
 
     def to_dict(self) -> dict:
@@ -437,7 +437,7 @@ class EvalResult(DictionaryEqualsMixin):
     @property
     def num_successful_checks(self) -> int:
         """Returns the number of successful checks."""
-        return sum(r.success for r in self.all_checks_results if r.success)
+        return sum(r.success for r in self.all_check_results if r.success)
 
     @property
     def perc_successful_checks(self) -> float | None:
@@ -445,24 +445,27 @@ class EvalResult(DictionaryEqualsMixin):
         return self.num_successful_checks / self.num_checks if self.num_checks else None
 
     @property
-    def all_checks_results(self) -> list[CheckResult]:
+    def all_check_results(self) -> list[CheckResult]:
         """Returns a (flattened) list of all CheckResults."""
         return [r for result in self.results for r in result]
 
     @property
-    def expects_code_blocks(self) -> list[CheckResult]:
+    def expects_code_blocks(self) -> bool:
         """Returns a list of CheckResults for code block present checks."""
         return any(
-            r for r in self.all_checks_results
+            r for r in self.all_check_results
             if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
         )
 
     @property
-    def code_blocks_run_check_result(self) -> CheckResult:
-        """There should only be one PythonCodeBlocksRun added."""
+    def code_block_tests_result(self) -> CheckResult | None:
+        """
+        Returns the CheckResult object for code block tests (PYTHON_CODE_BLOCK_TESTS) if it
+        exists, otherwise None.
+        """
         results = [
-            r for r in self.all_checks_results
-            if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+            r for r in self.all_check_results
+            if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCK_TESTS.name
         ]
         if results:
             assert len(results) == 1
@@ -513,46 +516,6 @@ class EvalResult(DictionaryEqualsMixin):
         with open(path) as f:
             config = yaml.safe_load(f)
         return EvalResult(**config)
-
-
-def eval_result_summarizer(result: EvalResult) -> dict:
-    """Simple summarizer that returns a dictionary of summary statistics."""
-    summary = {}
-    if 'uuid' in result.eval_obj.metadata:
-        summary['eval_uuid'] = result.eval_obj.metadata['uuid']
-    if 'name' in result.eval_obj.metadata:
-        summary['eval_name'] = result.eval_obj.metadata['name']
-    if 'uuid' in result.candidate_obj.metadata:
-        summary['candidate_uuid'] = result.candidate_obj.metadata['uuid']
-    if 'name' in result.candidate_obj.metadata:
-        summary['candidate_name'] = result.candidate_obj.metadata['name']
-    summary['num_prompts'] = len(result.responses)
-    if result.cost:
-        summary['cost'] = result.cost
-    summary['total_time_seconds'] = result.total_time_seconds
-    summary['response_characters'] = result.response_characters
-    summary['characters_per_second'] = result.characters_per_second
-    summary['num_checks'] = result.num_checks
-    summary['num_successful_checks'] = result.num_successful_checks
-    summary['perc_successful_checks'] = result.perc_successful_checks
-    summary['num_code_blocks'] = result.num_code_blocks
-    code_run_checks = [
-        r for r in result.all_checks_results
-        if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_RUN.name
-    ]
-    if code_run_checks:
-        summary['num_code_blocks_successful'] = sum(
-            r.metadata['num_code_blocks_successful'] for r in code_run_checks
-        )
-        summary['perc_code_blocks_successful'] = \
-            summary['num_code_blocks_successful'] / summary['num_code_blocks']
-        summary['num_code_tests'] = \
-            sum(c.metadata['num_code_tests'] for c in code_run_checks)
-        summary['num_code_tests_successful'] = \
-            sum(c.metadata['num_code_tests_successful'] for c in code_run_checks)
-    else:
-        summary['num_code_tests'] = 0
-    return summary
 
 
 class EvalHarness:

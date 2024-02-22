@@ -11,7 +11,7 @@ from llm_eval.checks import (
     MatchCheck,
     PassFailResult,
     PythonCodeBlocksPresent,
-    PythonCodeBlocksRun,
+    PythonCodeBlockTests,
     RegexCheck,
     ScoreResult,
 )
@@ -764,20 +764,20 @@ def test__test__PythonCodeBlocksPresent():  # noqa
     assert result.metadata['min_code_blocks'] == 2
     assert result.metadata['code_blocks'] == code_blocks
 
-def test__PythonCodeBlocksRun__has_check_type():  # noqa
+def test__PythonCodeBlockTests__has_check_type():  # noqa
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
     """
-    check = PythonCodeBlocksRun()
-    assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    check = PythonCodeBlockTests()
+    assert check.check_type == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     check_dict = check.to_dict()
-    assert check_dict == {'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name}
-    assert PythonCodeBlocksRun(**check_dict) == check
+    assert check_dict == {'check_type': CheckType.PYTHON_CODE_BLOCK_TESTS.name}
+    assert PythonCodeBlockTests(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
-    check = PythonCodeBlocksRun()
+def test__PythonCodeBlockTests__no_code_blocks():  # noqa
+    check = PythonCodeBlockTests()
     assert check.success_threshold == 1
     assert check.code_setup is None
     assert check.code_tests is None
@@ -788,7 +788,7 @@ def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 0
     assert result.metadata['num_code_blocks_successful'] == 0
     assert result.metadata['code_blocks'] == []
@@ -803,7 +803,7 @@ def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 0
     assert result.metadata['num_code_blocks_successful'] == 0
     assert result.metadata['code_blocks'] == []
@@ -814,8 +814,8 @@ def test__PythonCodeBlocksRun__no_code_blocks():  # noqa
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
-    check = PythonCodeBlocksRun()
+def test__PythonCodeBlockTests__no_setup__no_functions():  # noqa
+    check = PythonCodeBlockTests()
     assert check.success_threshold == 1
     assert check.code_setup is None
     assert check.code_tests is None
@@ -830,7 +830,7 @@ def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
     assert result.value == 2/3
     assert not result.success
     assert result.success_threshold == 1
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 3
     assert result.metadata['num_code_blocks_successful'] == 2
     assert result.metadata['code_blocks'] == code_blocks
@@ -843,8 +843,8 @@ def test__PythonCodeBlocksRun__no_setup__no_functions():  # noqa
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-def test__PythonCodeBlocksRun__with_setup():  # noqa
-    check = PythonCodeBlocksRun(
+def test__PythonCodeBlockTests__with_setup():  # noqa
+    check = PythonCodeBlockTests(
         success_threshold=0.5,
         code_setup='my_value = 1',  # my_value is depended on the code_blocks
     )
@@ -861,7 +861,7 @@ def test__PythonCodeBlocksRun__with_setup():  # noqa
     assert result.value == 0.5
     assert result.success
     assert result.success_threshold == 0.5
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
     assert result.metadata['code_blocks'] == code_blocks
@@ -875,7 +875,7 @@ def test__PythonCodeBlocksRun__with_setup():  # noqa
     assert Check.from_dict(check.to_dict()) == check
     assert CheckResult.from_dict(result.to_dict()) == result
 
-def test__PythonCodeBlocksRun__with_code_tests():  # noqa
+def test__PythonCodeBlockTests__with_code_tests():  # noqa
     def check_code_blocks(code_blocks):  # noqa
         return code_blocks == ['assert my_value != 1', 'assert my_value == 1']
     def my_value_equals_1(code_blocks):  # noqa
@@ -907,7 +907,7 @@ def test__PythonCodeBlocksRun__with_code_tests():  # noqa
     expected_successful_checks = expected_successful_code_blocks + \
         expected_successful_code_tests
     threshold = (expected_successful_checks/expected_total_checks) + 0.001
-    check = PythonCodeBlocksRun(
+    check = PythonCodeBlockTests(
         success_threshold=threshold,
         code_setup='my_value = 1',  # my_value is depended on the code_blocks
         code_tests=code_tests,
@@ -925,7 +925,7 @@ def test__PythonCodeBlocksRun__with_code_tests():  # noqa
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
     assert result.metadata['code_blocks'] == code_blocks
@@ -941,8 +941,8 @@ def test__PythonCodeBlocksRun__with_code_tests():  # noqa
     assert result.metadata['code_test_errors'][3] is None
     assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
 
-def test__PythonCodeBlocksRun__with_code_tests__str():  # noqa
-    # same test as `test__PythonCodeBlocksRun__with_code_tests` except the code_tests are strings
+def test__PythonCodeBlockTests__with_code_tests__str():  # noqa
+    # same test as `test__PythonCodeBlockTests__with_code_tests` except the code_tests are strings
     # rather than functions
     check_code_blocks = """
     def check_code_blocks(code_blocks):
@@ -985,7 +985,7 @@ def test__PythonCodeBlocksRun__with_code_tests__str():  # noqa
     expected_successful_checks = expected_successful_code_blocks + \
         expected_successful_code_tests
     threshold = (expected_successful_checks/expected_total_checks) + 0.001
-    check = PythonCodeBlocksRun(
+    check = PythonCodeBlockTests(
         success_threshold=threshold,
         code_setup='my_value = 1',  # my_value is depended on the code_blocks
         code_tests=code_tests,
@@ -1003,7 +1003,7 @@ def test__PythonCodeBlocksRun__with_code_tests__str():  # noqa
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
     assert result.metadata['code_blocks'] == code_blocks
@@ -1023,25 +1023,25 @@ def test__PythonCodeBlocksRun__with_code_tests__str():  # noqa
     assert result.metadata['code_test_errors'][3] is None
     assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
 
-def test__PythonCodeBlocksRun__failing_code_setup_raises_error():  # noqa
+def test__PythonCodeBlockTests__failing_code_setup_raises_error():  # noqa
     """
     If one of the code_tests (that is checking the results) raises an error, the entire check
     should fail.
     """
-    check = PythonCodeBlocksRun(
+    check = PythonCodeBlockTests(
         code_setup='raise ValueError()',
     )
     with pytest.raises(AssertionError):
         check(code_blocks=['1 == 1'])
 
-def test__PythonCodeBlocksRun__with_code_tests__failing_function_does_not_raise_error():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__failing_function_does_not_raise_error():  # noqa
     """
     If one of the code_tests (that is checking the results) raises an error, the entire check
     should fail.
     """
     def failing_function(code_blocks):  # noqa
         raise ValueError()
-    check = PythonCodeBlocksRun(
+    check = PythonCodeBlockTests(
         code_tests=[
             failing_function,
         ],
@@ -1056,19 +1056,19 @@ def test__PythonCodeBlocksRun__with_code_tests__failing_function_does_not_raise_
     assert result.value == 0.5
     assert not result.success
     assert result.success_threshold == 1
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 1
     assert result.metadata['num_code_blocks_successful'] == 1
     assert result.metadata['code_blocks'] == ['1 == 1']
     assert result.metadata['code_block_errors'][0] is None
 
-def test__PythonCodeBlocksRun__with_code_tests__all_code_blocks_fail__test_numbers_are_correct():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__all_code_blocks_fail__test_numbers_are_correct():  # noqa
     """Make sure the number of code tests is still accurate if all code blocks fail to run."""
     code_tests = ["def failing_function(code_blocks):\n    return variable_does_not_exist == 1"]
-    check = PythonCodeBlocksRun(code_tests=code_tests)
+    check = PythonCodeBlockTests(code_tests=code_tests)
     code_blocks = ['raise ValueError()', 'raise NameError()']
     result = check(code_blocks=code_blocks)
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 0
     assert result.metadata['code_blocks'] == code_blocks

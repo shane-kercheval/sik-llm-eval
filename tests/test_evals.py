@@ -7,7 +7,7 @@ import pytest
 import yaml
 from llm_eval.candidates import CallableCandidate, Candidate, CandidateType
 from llm_eval.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
-from llm_eval.eval import Eval, EvalHarness, EvalResult, PromptTest, eval_result_summarizer
+from llm_eval.eval import Eval, EvalHarness, EvalResult, PromptTest
 from llm_eval.utilities.internal_utilities import extract_code_blocks
 
 
@@ -225,9 +225,9 @@ def test__Eval__from_objects__minimal():  # noqa
     assert result.cost is None
     assert result.timestamp
     assert result.num_code_blocks == 0
-    assert result.all_checks_results == []
+    assert result.all_check_results == []
     assert not result.expects_code_blocks
-    assert result.code_blocks_run_check_result is None
+    assert result.code_block_tests_result is None
     assert result.total_time_seconds > 0
 
 def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  # noqa
@@ -269,9 +269,9 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     }
     # check that the check result dicts match
     flatted_check_results = [r for tests in eval_result_dict['results'] for r in tests]
-    assert flatted_check_results == [r.to_dict() for r in eval_result.all_checks_results]
+    assert flatted_check_results == [r.to_dict() for r in eval_result.all_check_results]
     assert eval_result.expects_code_blocks
-    assert eval_result.code_blocks_run_check_result is None
+    assert eval_result.code_block_tests_result is None
     assert eval_result.total_time_seconds > 0
     # check that the eval_result_dict will recreate the exact eval_result object
     recreated_eval = EvalResult(**eval_result_dict)
@@ -281,11 +281,10 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     assert recreated_eval.candidate_obj == eval_result.candidate_obj
     assert recreated_eval.results == eval_result.results
     flatted_checks = [r for test in eval_obj.test_sequence for r in test.checks]
-    for c, r in zip(flatted_checks, eval_result.all_checks_results, strict=True):
+    for c, r in zip(flatted_checks, eval_result.all_check_results, strict=True):
         assert c.check_type == r.metadata['check_type']
     assert eval_result.expects_code_blocks
-    assert eval_result.code_blocks_run_check_result is None
-    assert eval_result_summarizer(eval_result)
+    assert eval_result.code_block_tests_result is None
 
 def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run):  # noqa
     """
@@ -375,9 +374,9 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert isinstance(eval_result.results[1][0], PassFailResult)
     assert isinstance(eval_result.results[1][1], PassFailResult)
     assert isinstance(eval_result.results[1][2], ScoreResult)
-    assert len(eval_result.all_checks_results) == 7
+    assert len(eval_result.all_check_results) == 7
     assert eval_result.expects_code_blocks
-    assert eval_result.code_blocks_run_check_result is not None
+    assert eval_result.code_block_tests_result is not None
 
     # Check 0.0
     assert eval_result.results[0][0].success
@@ -399,7 +398,7 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert eval_result.results[1][1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa
     # Check 1.2
     assert not eval_result.results[1][2].success
-    assert eval_result.results[1][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name  # noqa
+    assert eval_result.results[1][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name  # noqa
 
     # function checks
     expected_code_tests = 6
@@ -411,7 +410,7 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert eval_result.results[1][2].value == expected_successful_checks / expected_total_checks
     assert eval_result.results[1][2].success_threshold == 1
     assert not eval_result.results[1][2].success
-    assert eval_result.results[1][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_RUN.name  # noqa
+    assert eval_result.results[1][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name  # noqa
     assert eval_result.results[1][2].metadata['num_code_blocks'] == expected_num_code_blocks
     assert eval_result.results[1][2].metadata['num_code_blocks_successful'] == expected_successful_code_blocks  # noqa
     assert eval_result.results[1][2].metadata['code_blocks'] == expected_code_blocks
@@ -426,7 +425,6 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert eval_result.results[1][2].metadata['code_test_errors'][3] is None
     assert eval_result.results[1][2].metadata['code_test_errors'][4] is None
     assert eval_result.results[1][2].metadata['code_test_errors'][5] == {'error': 'NameError', 'message': "name 'variable_does_not_exist' is not defined"}  # noqa
-    assert eval_result_summarizer(eval_result)
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_template):  # noqa
@@ -444,16 +442,16 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert result.cost == result.candidate_obj.cost
     assert 'cost' in result.to_dict()
     assert result.cost == result.to_dict()['cost']
-    assert len(result.all_checks_results) == 2
+    assert len(result.all_check_results) == 2
     assert result.expects_code_blocks
-    assert result.code_blocks_run_check_result is None
-    assert result.all_checks_results[0].success
-    assert result.all_checks_results[0].metadata['check_type'] == CheckType.CONTAINS.name
-    assert result.all_checks_results[1].success
-    assert result.all_checks_results[1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
-    assert result.all_checks_results[1].metadata['num_code_blocks'] >= 1
-    expected_num_code_blocks = len(result.all_checks_results[1].metadata['code_blocks'])
-    assert result.all_checks_results[1].metadata['num_code_blocks'] == expected_num_code_blocks
+    assert result.code_block_tests_result is None
+    assert result.all_check_results[0].success
+    assert result.all_check_results[0].metadata['check_type'] == CheckType.CONTAINS.name
+    assert result.all_check_results[1].success
+    assert result.all_check_results[1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
+    assert result.all_check_results[1].metadata['num_code_blocks'] >= 1
+    expected_num_code_blocks = len(result.all_check_results[1].metadata['code_blocks'])
+    assert result.all_check_results[1].metadata['num_code_blocks'] == expected_num_code_blocks
     assert result.num_checks == 2
     assert result.num_successful_checks == 2
     assert result.perc_successful_checks == 1
@@ -892,7 +890,7 @@ def test__cannot_add_more_than_one_code_blocks_run_check():  # noqa
                 'ideal_response': 'This is the ideal response',
                 'checks': [
                     {
-                        'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+                        'check_type': CheckType.PYTHON_CODE_BLOCK_TESTS.name,
                         'code_tests': ['print("hello world")'],
                     },
                 ],
@@ -906,7 +904,7 @@ def test__cannot_add_more_than_one_code_blocks_run_check():  # noqa
     new_config = deepcopy(eval_config)
     new_config['test_sequence'][1]['checks'].append(
         {
-            'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+            'check_type': CheckType.PYTHON_CODE_BLOCK_TESTS.name,
             'code_tests': ['print("hello world")'],
         },
     )
@@ -918,7 +916,7 @@ def test__cannot_add_more_than_one_code_blocks_run_check():  # noqa
     new_config = deepcopy(eval_config)
     new_config['test_sequence'][0]['checks'].append(
         {
-            'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+            'check_type': CheckType.PYTHON_CODE_BLOCK_TESTS.name,
             'code_tests': ['print("hello world")'],
         },
     )

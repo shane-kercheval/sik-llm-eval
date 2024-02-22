@@ -5,7 +5,7 @@ from llm_eval.filtering import (
     eval_contains_code_block_tests,
     eval_expects_code_blocks,
     filter_contains_code_block_tests,
-    filter_contains_expects_blocks,
+    filter_expects_code_blocks,
     filter_tags,
     result_contains_code_block_tests,
     result_expects_code_blocks,
@@ -144,7 +144,7 @@ def test__expects_code_blocks(
     assert result_expects_code_blocks(results[3])
     assert not result_expects_code_blocks(results[4])
 
-    filtered_results = filter_contains_expects_blocks(results)
+    filtered_results = filter_expects_code_blocks(results)
     assert len(filtered_results) == 4
     assert results[0] in filtered_results
     assert results[1] in filtered_results
