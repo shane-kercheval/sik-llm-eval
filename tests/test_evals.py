@@ -751,7 +751,7 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     del am_dict['timestamp']
     c_dict = deepcopy(results_multi_with_callback[0][1].to_dict())
     del c_dict['total_time_seconds']
-    del c_dict['timestamp'] 
+    del c_dict['timestamp']
     assert s_dict == am_dict
     assert s_dict == c_dict
 

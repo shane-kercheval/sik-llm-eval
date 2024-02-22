@@ -367,6 +367,8 @@ class EvalResult(DictionaryEqualsMixin):
             cost:
                 The cost associated with the candidate. This is optional and only applicable to
                 candidates that have a `cost` property.
+            timestamp:
+                The timestamp when the Eval was completed.
             results:
                 A list of lists of CheckResult objects.
         """
