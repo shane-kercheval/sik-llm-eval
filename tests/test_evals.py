@@ -223,6 +223,7 @@ def test__Eval__from_objects__minimal():  # noqa
     assert result.perc_successful_checks is None
     assert result.results == [[]]
     assert result.cost is None
+    assert result.timestamp
     assert result.num_code_blocks == 0
     assert result.all_checks_results == []
     assert not result.expects_code_blocks
@@ -724,43 +725,57 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
             expected_dict = deepcopy(results_sequential[candidate_index][eval_index].to_dict())
             del expected_dict['total_time_seconds']
             del result['total_time_seconds']
+            del expected_dict['timestamp']
+            del result['timestamp']
             assert result == expected_dict
 
     # for each result, the dictionary (which contains eval, candidate, and results/checks) should
     # be the same (except for the total_time_seconds)
     s_dict = deepcopy(results_sequential[0][0].to_dict())
     del s_dict['total_time_seconds']
+    del s_dict['timestamp']
     am_dict = deepcopy(results_async_multiprocessing[0][0].to_dict())
     del am_dict['total_time_seconds']
+    del am_dict['timestamp']
     c_dict = deepcopy(results_multi_with_callback[0][0].to_dict())
     del c_dict['total_time_seconds']
+    del c_dict['timestamp']
     assert s_dict == am_dict
     assert s_dict == c_dict
 
     s_dict = deepcopy(results_sequential[0][1].to_dict())
     del s_dict['total_time_seconds']
+    del s_dict['timestamp']
     am_dict = deepcopy(results_async_multiprocessing[0][1].to_dict())
     del am_dict['total_time_seconds']
+    del am_dict['timestamp']
     c_dict = deepcopy(results_multi_with_callback[0][1].to_dict())
     del c_dict['total_time_seconds']
+    del c_dict['timestamp'] 
     assert s_dict == am_dict
     assert s_dict == c_dict
 
     s_dict = deepcopy(results_sequential[1][0].to_dict())
     del s_dict['total_time_seconds']
+    del s_dict['timestamp']
     am_dict = deepcopy(results_async_multiprocessing[1][0].to_dict())
     del am_dict['total_time_seconds']
+    del am_dict['timestamp']
     c_dict = deepcopy(results_multi_with_callback[1][0].to_dict())
     del c_dict['total_time_seconds']
+    del c_dict['timestamp']
     assert s_dict == am_dict
     assert s_dict == c_dict
 
     s_dict = deepcopy(results_sequential[1][1].to_dict())
     del s_dict['total_time_seconds']
+    del s_dict['timestamp']
     am_dict = deepcopy(results_async_multiprocessing[1][1].to_dict())
     del am_dict['total_time_seconds']
+    del am_dict['timestamp']
     c_dict = deepcopy(results_multi_with_callback[1][1].to_dict())
     del c_dict['total_time_seconds']
+    del c_dict['timestamp']
     assert s_dict == am_dict
     assert s_dict == c_dict
 
@@ -813,6 +828,8 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
             expected_dict = deepcopy(results_sequential[candidate_index][eval_index].to_dict())
             del expected_dict['total_time_seconds']
             del result['total_time_seconds']
+            del expected_dict['timestamp']
+            del result['timestamp']
             assert result == expected_dict
 
     shutil.rmtree(dir_path)
