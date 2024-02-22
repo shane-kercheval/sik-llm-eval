@@ -148,7 +148,7 @@ The easiest way to install the llm-eval package is by cloning the repo and insta
 cd <to the directory you want to clone the repo>
 git clone https://github.com/anaconda/llm-eval.git
 <activate conda or virtual environment if necessary>
-pip install .
+pip install -e .
 ```
 
 ### Environment Variables
