@@ -25,7 +25,7 @@ class CheckType(EnumMixin, Enum):
     REGEX = auto()
     PYTHON_FUNCTION = auto()
     PYTHON_CODE_BLOCKS_PRESENT = auto()
-    PYTHON_CODE_BLOCKS_RUN = auto()
+    PYTHON_CODE_BLOCK_TESTS = auto()
 
 
 class CheckResultsType(EnumMixin, Enum):
@@ -294,7 +294,7 @@ class PythonCodeBlocksPresent(Check):
         NOTE: We are currently assuming any code blocks are Python code blocks.
         We could either check for "```python" or we could check for "```" and then check if the
         code blocks run, but a) we'd be running the code blocks twice if there is a
-        PythonCodeBlocksRun check and b) just because the code blocks fail doesn't mean they
+        PythonCodeBlockTests check and b) just because the code blocks fail doesn't mean they
         aren't Python code blocks.
         """
         code_blocks = code_blocks or []
@@ -313,13 +313,15 @@ class PythonCodeBlocksPresent(Check):
         return f"{self.__class__.__name__}(min_code_blocks={self.min_code_blocks}, metadata={self.metadata})"  # noqa
 
 
-@Check.register(CheckType.PYTHON_CODE_BLOCKS_RUN)
-class PythonCodeBlocksRun(Check):
+@Check.register(CheckType.PYTHON_CODE_BLOCK_TESTS)
+class PythonCodeBlockTests(Check):
     """
-    Checks that the code blocks contained within the response run successfully. This check will
-    execute the code blocks and then run the (optional) custom functions defined in `code_tests` in
-    the same environment as the code blocks. These functions are passed the code blocks as a
-    parameter, so the functions can either test the environment and/or the code blocks directly.
+    Tests that the code blocks contained within the response run successfully, and allows users to
+    define custom tests that can be used to test the code blocks and the environment that the code
+    blocks are executed in. These custom tests are functions that are executed in the same
+    environment as the code blocks. They return a boolean value indicating whether or not the test/
+    function had a successful result. The functions are also passed the code blocks as a parameter,
+    so the functions can either test the environment and/or the code blocks directly.
 
     The user can define the `code_setup` which is a string containing a block of python code that
     will be executed before the code blocks are executed. Both the setup code and the code blocks
@@ -343,10 +345,13 @@ class PythonCodeBlocksRun(Check):
     The `success_threshold` is the minimum **percent** of successfully executed code blocks *and*
     custom tests (if `code_tests` is used) required for the check to be considered successful.
     
-    NOTE: this check will run all code blocks. If you have multiple PythonCodeBlocksRun (e.g. one
-    for each PromptTest), then the code blocks from previous responses will be ran multiple times.
-    Therefore, it's **recommended to only have one PythonCodeBlocksRun which is ran on the last
-    PromptTest.
+    NOTE: this check will run all code blocks generated across all responses for a given Eval.
+    Therefore, you cannot define multiple PythonCodeBlockTests checks within a single Eval (in
+    order to avoid running the same code blocks multiple times). It is recommended to define the
+    PythonCodeBlockTests check at the end of the test sequence for a given Eval. If a
+    PythonCodeBlockTests check is defined in the middle of the test sequence, the code blocks
+    generated from subsequent responses will not have executed yet (and corresponding values, 
+    functions, etc., defined in those code blocks will not be available to the functions/tests).
     """  # noqa
 
     success_threshold: float = Field(
@@ -412,7 +417,7 @@ class PythonCodeBlocksRun(Check):
                     env_namespace=env_namespace,
                 )
                 assert all(e is None for e in setup_errors), \
-                    f"Errors executing code setup in PythonCodeBlocksRun: \n`{setup_errors}`"
+                    f"Errors executing code setup in PythonCodeBlockTests: \n`{setup_errors}`"
 
             def _errors_to_dict(errors: list[Exception | None]) -> list[dict[str, str] | None]:
                 return [
@@ -474,7 +479,7 @@ class PythonCodeBlocksRun(Check):
             value=score,
             success_threshold=self.success_threshold,
             metadata={
-                'check_type': CheckType.PYTHON_CODE_BLOCKS_RUN.name,
+                'check_type': CheckType.PYTHON_CODE_BLOCK_TESTS.name,
                 'num_code_blocks': num_code_blocks,
                 'num_code_blocks_successful': num_code_blocks_successful,
                 'code_blocks': code_blocks,

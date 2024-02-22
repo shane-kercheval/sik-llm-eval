@@ -96,7 +96,7 @@ test_sequence:
       - check_type: CONTAINS
         value: assert mask_emails(
       - check_type: PYTHON_CODE_BLOCKS_PRESENT
-      - check_type: PYTHON_CODE_BLOCKS_RUN
+      - check_type: PYTHON_CODE_BLOCK_TESTS
         code_setup: |
           import re
         code_tests:
