@@ -2,6 +2,7 @@
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
+from datetime import datetime, timezone
 import glob
 import os
 from textwrap import dedent, indent
@@ -271,6 +272,7 @@ class Eval(DictionaryEqualsMixin):
             total_time_seconds=self._duration,
             num_code_blocks=len(code_blocks),
             cost = self._candidate.cost if has_property(self._candidate, 'cost') else None,
+            timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             results=results,
         )
 
@@ -344,6 +346,7 @@ class EvalResult(DictionaryEqualsMixin):
         total_time_seconds: float,
         num_code_blocks: int,
         cost : float | None,
+        timestamp: str,
         results: list[list[CheckResult | dict]]) -> None:
         """
         Initializes the EvalResult.
@@ -364,6 +367,8 @@ class EvalResult(DictionaryEqualsMixin):
             cost:
                 The cost associated with the candidate. This is optional and only applicable to
                 candidates that have a `cost` property.
+            timestamp:
+                The timestamp when the Eval was completed.
             results:
                 A list of lists of CheckResult objects.
         """
@@ -384,6 +389,7 @@ class EvalResult(DictionaryEqualsMixin):
         self.total_time_seconds = total_time_seconds
         self.num_code_blocks = num_code_blocks
         self.cost = cost
+        self.timestamp = timestamp
         results = results or []
         results_created = []
         # results is a list of lists of CheckResults (each list corresponds to a prompt/test)
@@ -492,6 +498,7 @@ class EvalResult(DictionaryEqualsMixin):
             'total_time_seconds': self.total_time_seconds,
             'num_code_blocks': self.num_code_blocks,
             'cost': self.cost,
+            'timestamp': self.timestamp,
             'results': [[r.to_dict() for r in result] for result in self.results],
         }
 
