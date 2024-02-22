@@ -142,7 +142,7 @@ This minimal example does not give much insight into the quality of the response
 
 ## Installing
 
-The easiest way to install the llm-eval package is by cloning the repo and installing locally.
+The easiest way to install the llm-eval package during this beta period is by cloning the repo and installing locally.
 
 ```
 cd <to the directory you want to clone the repo>
