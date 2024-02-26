@@ -6,7 +6,7 @@ In this framework, there are two fundamental concepts:
 
 - **Eval**: An Eval represents a single evaluation scenario, which can consist of one or more prompts. Multiple prompts can be used to evaluate conversations where the LLM (i.e. the underlying client) maintains a conversational history. Each Eval is associated with custom "checks" to assess different criteria. Examples of checks include verifying if the response matches an exact value, contains specific content, includes code blocks, executes those code blocks successfully, and validating the variables/functions created by those code blocks. Users can also create custom checks.
 
-- **Candidate**: A Candidate encapsulates an underlying LLM and its corresponding client that you want to evaluate. Candidates can be identical LLM models running on different hardware, potentially resulting in similar response quality but differing in performance, like characters per second. For instance, a Candidate can represent:
+- **Candidate**: A Candidate encapsulates an underlying LLM, model parameters, and its corresponding client. Candidates can be identical LLM models running on different hardware (or using different model parameters such as temperature), potentially differing in either response quality or performance. For instance, a Candidate can represent:
     - ChatGPT 4.0 (the LLM & client/API are synonymous)
     - Llama-2-7b-Chat (LLM) running on Hugging Face Endpoints with Nvidia 10G (client)
     - Llama-2-7b-Chat Q6_K.gguf (LLM) running locally on LM Studio (client).
