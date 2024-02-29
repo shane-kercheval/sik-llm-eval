@@ -428,6 +428,9 @@ class PythonCodeBlockTests(Check):
             # run the primary code blocks
             code_block_errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
             code_block_errors = _errors_to_dict(code_block_errors)
+            # add code blocks to the environment; the functions will take the code blocks
+            # as input
+            env_namespace['__code_blocks__'] = code_blocks
             # run the custom/user functions with contain additional tests (they functions should
             # return boolean success/fail)
             for func in functions:
@@ -445,9 +448,6 @@ class PythonCodeBlockTests(Check):
                     match = re.search(r'def (\w+)\(', func)
                     assert match, f"Could not find function name in {func}"
                     func_name = match.group(1)
-                # add code blocks to the environment; the functions will take the code blocks
-                # as input
-                env_namespace['__code_blocks__'] = code_blocks
                 # add function to environment; ignore errors, we will capture and return the errors
                 # associated when we execute the function, which will fail if added the function
                 # to the environment fails
