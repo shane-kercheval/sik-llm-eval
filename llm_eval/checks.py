@@ -369,12 +369,24 @@ class PythonCodeBlockTests(Check):
     code_tests: list[str | Callable[[list[str]], bool]] | None = Field(
         default=None,
         description="""
-        A list of callables (or strings representing callables) that can test the code blocks and
-        return a boolean indicating if the test was successful. Each callable is passed the list
-        of code blocks that were extracted from the response. The callables are executed in the
-        same environment that the code blocks were executed in. The code blocks may or may not have
-        executed successfully. The callables can test the enviroment or the code blocks. The
-        callables should return a boolean indicating whether or not the test was successful.
+        code_tests can either be a list of functions (or strings representing functions), or string
+        values containing single assertion statement, or string values containing a single
+        statement that results in a boolean value, or some combination of the three.
+
+        All statements (i.e. functions, assertions, or boolean statements) are executed in the same
+        environment that the code blocks were executed in. Therefore, if the code blocks were
+        executed successfully, the functions will have access to the environment (e.g. function
+        definitions, variables, etc.) that was created by the code blocks.
+
+        If `code_tests` is a list of functions (or strings representing functions), the functions
+        will take the code blocks (generated/extracted from the response) as input and return a
+        boolean indicating if the test was successful. The functions are executed in the same
+        environment that the code blocks were executed in. The code blocks may or may not have
+        executed successfully. The functions can test the enviroment or the code blocks (that we
+        passed into the function).
+
+        If an item in `code_tests` is a string value and that value doesn't contain a function or
+        assertion statement, then it is assumed to be a boolean statement.
         """,
     )
 
@@ -398,9 +410,9 @@ class PythonCodeBlockTests(Check):
         """
         code_blocks = code_blocks or []
         code_block_errors = []
-        function_results = []
-        function_errors = []
-        functions = self.code_tests or []
+        test_results = []
+        test_errors = []
+        code_tests = self.code_tests or []
 
         num_code_blocks = len(code_blocks)
         num_code_tests = 0
@@ -428,30 +440,55 @@ class PythonCodeBlockTests(Check):
             # run the primary code blocks
             code_block_errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
             code_block_errors = _errors_to_dict(code_block_errors)
+            # add code blocks to the environment; the functions will take the code blocks
+            # as input
+            env_namespace['__code_blocks__'] = code_blocks
             # run the custom/user functions with contain additional tests (they functions should
             # return boolean success/fail)
-            for func in functions:
+            for test in code_tests:
                 num_code_tests += 1
                 # we need to reset `__result__` to False in case one of the functions fails to
                 # execute (which means `__result__` will not be set) in order to avoid grabbing
                 # the result from the previous function check
                 env_namespace['__result__'] = False
-                if isinstance(func, Callable):
-                    func_name = func.__name__
-                    func = dedent(getsource(func))  # noqa: PLW2901
+                if isinstance(test, Callable):
+                    func_name = test.__name__
+                    test = dedent(getsource(test))  # noqa: PLW2901
                 else:
-                    assert isinstance(func, str), \
-                        f"Function must be callable or string, got {type(func)}"
-                    match = re.search(r'def (\w+)\(', func)
-                    assert match, f"Could not find function name in {func}"
-                    func_name = match.group(1)
-                # add code blocks to the environment; the functions will take the code blocks
-                # as input
-                env_namespace['__code_blocks__'] = code_blocks
+                    assert isinstance(test, str), \
+                        f"Function must be callable or string, got {type(test)}"
+                    match = re.search(r'def (\w+)\(', test)
+                    if match:
+                        # if the test is a string and contains a function definition, then
+                        # extract the function name, but we don't need to set test because
+                        # the function is already defined in test
+                        func_name = match.group(1)
+                    else:
+                        # we are only expecting a single statement
+                        test = test.strip()  # noqa: PLW2901
+                        assert '\n' not in test, \
+                            "Only a single statement is allowed if the value is a string."
+                        # if the string value in `test` is not a function; we need to wrap it in
+                        # function
+                        # We will assume it is either an assertion statement or a statement that
+                        # resolves to a boolean
+                        # if it is an assertion statement, then we don't actually need the assert
+                        # we can just remove it and return a boolean value
+                        # this has the added benefit of not adding AssertionError to the list
+                        # of errors returned (we will only return add the Error if the statement
+                        # errors for some other reason which will reduce the noise; we already
+                        # return False for unsuccessful tests)
+                        if test.startswith('assert '):
+                            test = test[7:]  # noqa: PLW2901
+                        func_name = '__code_test__'
+                        test = dedent(f"""
+                        def {func_name}(code_blocks: list[str]) -> bool:
+                            return {test}
+                        """).strip()  # noqa: PLW2901
                 # add function to environment; ignore errors, we will capture and return the errors
                 # associated when we execute the function, which will fail if added the function
                 # to the environment fails
-                _ = execute_code_blocks([func], env_namespace=env_namespace)
+                _ = execute_code_blocks([test], env_namespace=env_namespace)
                 function_call = f"__result__ = {func_name}(__code_blocks__)"
                 # execute the function
                 # if there are errors, we will capture and return the errors
@@ -459,14 +496,13 @@ class PythonCodeBlockTests(Check):
                 # contain the expected function name) so we don't want to fail out of the entire
                 # check
                 func_errors = execute_code_blocks([function_call], env_namespace=env_namespace)
-                function_errors.extend(_errors_to_dict(func_errors))
+                test_errors.extend(_errors_to_dict(func_errors))
                 # get the result of the function from the environment
                 func_result = env_namespace['__result__']
-                assert isinstance(func_result, bool), \
-                    f"Function {func_name} must return a boolean value"
+                assert isinstance(func_result, bool), f"Test must return a boolean value:\n{test}"
                 if func_result:
                     num_code_tests_successful += 1
-                function_results.append(func_result)
+                test_results.append(func_result)
 
         num_code_blocks_successful = len([e for e in code_block_errors if e is None])
 
@@ -484,11 +520,11 @@ class PythonCodeBlockTests(Check):
                 'num_code_blocks_successful': num_code_blocks_successful,
                 'code_blocks': code_blocks,
                 'code_block_errors': code_block_errors,
-                'code_tests': functions,
+                'code_tests': code_tests,
                 'num_code_tests': num_code_tests,
                 'num_code_tests_successful': num_code_tests_successful,
-                'code_test_results': function_results,
-                'code_test_errors': function_errors,
+                'code_test_results': test_results,
+                'code_test_errors': test_errors,
             },
         )
 
