@@ -1,4 +1,5 @@
 """TODO: document."""
+import re
 from textwrap import dedent
 from pydantic import ValidationError
 import pytest
@@ -1161,3 +1162,222 @@ def test__PythonCodeBlockTests__with_code_tests__all_tests_with_same_name():  # 
     assert result.metadata['code_test_errors'][2] == {'error': 'NameError', 'message': "name 'does_not_exist' is not defined"}  # noqa
     assert result.metadata['code_test_errors'][3] is None
     assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
+
+def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():  # noqa
+    # code blocks depend on this setup code
+    code_setup = dedent("""
+        required_variable = 2
+        def raises(expected_exception, code):
+            try:
+                code()
+            except expected_exception:
+                return True
+            except:
+                return False
+            return False
+    """).strip()
+    code_blocks = [
+        dedent("""
+        def my_function(my_value):
+            if my_value <= 0:
+               raise ValueError('my_value must be greater than 0')
+            return required_variable / my_value == 1
+        """).strip(),
+        'assert required_variable == 2',
+        'assert variable_doesnt_exist == 1',
+    ]
+    # 1st item is the expected result (pass/fail), 2nd item is expected error, 3rd is the code
+    code_tests = [
+        (
+            True,  # pass/fail
+            None,  # error
+            'def test(code_blocks: list[str]) -> bool:\n    return required_variable == 2',
+        ),
+        (
+            False,
+            None,
+            'def test(code_blocks: list[str]) -> bool:\n    return required_variable == 1',
+        ),
+        (
+            False,
+            {'error': 'AssertionError', 'message': ''},
+            'def test(code_blocks: list[str]) -> bool:\n    assert 1 == 2',
+        ),
+        (
+            False,
+            {'error': 'ValueError', 'message': 'test'},
+            'def test(code_blocks: list[str]) -> bool:\n    raise ValueError("test")',
+        ),
+        (
+            True,
+            None,
+            'def test(code_blocks: list[str]) -> bool:\n    return my_function(2)',
+        ),
+        (
+            False,
+            None,
+            'def test(code_blocks: list[str]) -> bool:\n    return my_function(1)',
+        ),
+        (
+            False,
+            {'error': 'ValueError', 'message': 'my_value must be greater than 0'},
+            'def test(code_blocks: list[str]) -> bool:\n    return my_function(0)',
+        ),
+        (
+            False,
+            None,
+            'def test(code_blocks: list[str]) -> bool:\n    return raises(AssertionError, lambda: my_function(0))',  # noqa
+        ),
+        (
+            True,
+            None,
+            'def test(code_blocks: list[str]) -> bool:\n    return raises(ValueError, lambda: my_function(0))',  # noqa
+        ),
+        (
+            True,
+            None,
+            'assert required_variable == 2',
+        ),
+        (
+            False,
+            None,
+            'assert required_variable == 1',
+        ),
+        (
+            # this will result in an error but should fail the test rather than stopping execution
+            False,
+            {'error': 'NameError', 'message': "name 'this_variable_doesnt_exist' is not defined"},
+            'assert this_variable_doesnt_exist',
+        ),
+        (
+            True,
+            None,
+            'assert my_function(2)',
+        ),
+        (
+            False,
+            None,
+            'assert my_function(1)',
+        ),
+        (
+            False,
+            {'error': 'ValueError', 'message': 'my_value must be greater than 0'},
+            'assert my_function(0)',
+        ),
+        (
+            False,
+            None,
+            'assert raises(AssertionError, lambda: my_function(0))',
+        ),
+        (
+            True,
+            None,
+            'assert raises(ValueError, lambda: my_function(0))',
+        ),
+
+        (
+            True,
+            None,
+            'required_variable == 2',
+        ),
+        (
+            False,
+            None,
+            'required_variable == 1',
+        ),
+        (
+            # this will result in an error but should fail the test rather than stopping execution
+            False,
+            {'error': 'NameError', 'message': "name 'this_variable_doesnt_exist' is not defined"},
+            'this_variable_doesnt_exist',
+        ),
+        (
+            True,
+            None,
+            'my_function(2)',
+        ),
+        (
+            False,
+            None,
+            'my_function(1)',
+        ),
+        (
+            False,
+            {'error': 'ValueError', 'message': 'my_value must be greater than 0'},
+            'my_function(0)',
+        ),
+        (
+            False,
+            None,
+            'raises(AssertionError, lambda: my_function(0))',
+        ),
+        (
+            True,
+            None,
+            'raises(ValueError, lambda: my_function(0))',
+        ),
+    ]
+    expected_test_results = [x[0] for x in code_tests]
+    expected_errors = [x[1] for x in code_tests]
+    code_tests = [x[2] for x in code_tests]
+
+    expected_num_code_blocks = len(code_blocks)
+    expected_successful_code_blocks = 2
+    expected_num_code_tests = len(code_tests)
+    expected_successful_code_tests = sum(expected_test_results)
+    expected_total_checks = expected_num_code_blocks + expected_num_code_tests
+    expected_successful_checks = expected_successful_code_blocks + \
+        expected_successful_code_tests
+    threshold = (expected_successful_checks/expected_total_checks) + 0.001
+    check = PythonCodeBlockTests(
+        success_threshold=threshold,
+        code_setup=code_setup,
+        code_tests=code_tests,
+    )
+    assert check.success_threshold == threshold
+    assert check.code_setup == code_setup
+    assert len(check.code_tests) == len(code_tests)
+    assert check.metadata == {}
+    assert str(check)
+    result = check(code_blocks=code_blocks)
+    assert result.value == expected_successful_checks / expected_total_checks
+    assert not result.success
+    assert result.success_threshold == threshold
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
+    assert result.metadata['num_code_blocks'] == len(code_blocks)
+    assert result.metadata['num_code_blocks_successful'] == 2
+    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_block_errors'][0] is None
+    assert result.metadata['code_block_errors'][1] is None
+    assert result.metadata['code_block_errors'][2] == {'error': 'NameError', 'message': "name 'variable_doesnt_exist' is not defined"}  # noqa
+    expected_code_tests = [
+        dedent(test.strip()) if isinstance(test, str) else test
+        for test in code_tests
+    ]
+    assert result.metadata['code_tests'] == expected_code_tests
+    assert result.metadata['num_code_tests'] == expected_num_code_tests
+    assert result.metadata['num_code_tests_successful'] == expected_successful_code_tests
+    assert result.metadata['code_test_results'] == expected_test_results
+    assert result.metadata['code_test_errors'] == expected_errors
+
+def test__PythonCodeBlockTests__with_code_tests__invalid_test_raises_exception():  # noqa
+    # we are only expecting a single line of code for non-functions
+    code_tests = ['assert True\nassert True']
+    check = PythonCodeBlockTests(code_tests=code_tests)
+    with pytest.raises(AssertionError, match='Only a single statement is allowed if the value is a string.'):  # noqa
+        check(code_blocks=['1 == 1'])
+
+    code_tests = ['def test(code_blocks: list[str]) -> bool:\n    return None']
+    check = PythonCodeBlockTests(code_tests=code_tests)
+    with pytest.raises(AssertionError, match=re.escape(f"Test must return a boolean value:\n{code_tests[0]}")):  # noqa
+        check(code_blocks=['1 == 1'])
+
+    code_tests = ['assert None']
+    check = PythonCodeBlockTests(code_tests=code_tests)
+    with pytest.raises(AssertionError, match=re.escape('Test must return a boolean value:\ndef __code_test__(code_blocks: list[str]) -> bool:\n    return None')):  # noqa
+        check(code_blocks=['1 == 1'])
+
+    code_tests = ['None']
+    check = PythonCodeBlockTests(code_tests=code_tests)
+    with pytest.raises(AssertionError, match=re.escape('Test must return a boolean value:\ndef __code_test__(code_blocks: list[str]) -> bool:\n    return None')):  # noqa
+        check(code_blocks=['1 == 1'])
