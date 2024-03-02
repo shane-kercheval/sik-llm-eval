@@ -530,4 +530,4 @@ class PythonCodeBlockTests(Check):
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self.__class__.__name__}(functions={self.code_tests}, metadata={self.metadata})"
+        return f"{self.__class__.__name__}(tests={self.code_tests}, metadata={self.metadata})"
