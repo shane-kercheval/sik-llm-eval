@@ -641,7 +641,7 @@ def callback(x: EvalResult) -> None:
     candidate_id = x.candidate_obj.metadata['uuid']
     eval_id = x.eval_obj.metadata['uuid']
     with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
-        yaml.dump(x.to_dict(), f, default_flow_style=False)
+        yaml.dump(x.to_dict(), f, default_flow_style=False, sort_keys=False)
 
 def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
@@ -864,7 +864,7 @@ def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_crea
     # ensure that the candidates are the same when added from yaml
     # save to yaml and load from yaml
     with open('__temp__.yaml', 'w') as f:
-        yaml.dump(candidate_dict, f, default_flow_style=False)
+        yaml.dump(candidate_dict, f, default_flow_style=False, sort_keys=False)
     eval_harness_from_yaml = EvalHarness()
     try:
         eval_harness_from_yaml.add_candidate_from_yaml('__temp__.yaml')
