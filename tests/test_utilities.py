@@ -716,6 +716,41 @@ def test__execute_code_blocks__with_env_namespace__inject_objects_into_namespace
     assert '__list_of_lists__' in env_namespace
     assert env_namespace['__list_of_lists__'] == list_to_inject
 
+def test__execute_code_blocks__timeout():  # noqa
+    code_blocks = [
+        """
+        import time
+        my_value_1 = 'test1'
+        time.sleep(1.5)
+        my_value_2 = 'test2'
+        """,
+        """
+        raise ValueError("This is a test")
+        """,
+        """
+        my_value_3 = 'test3'
+        """,
+    ]
+    code_blocks = [dedent(c).strip() for c in code_blocks]
+    # test instance where timeout is not needed
+    namespace = {}
+    errors = execute_code_blocks(code_blocks, env_namespace=namespace, timeout=2)
+    assert len(errors) == len(code_blocks)
+    assert errors[0] is None
+    assert isinstance(errors[1], ValueError)
+    assert errors[2] is None
+    assert namespace['my_value_1'] == 'test1'
+    assert namespace['my_value_2'] == 'test2'
+    assert namespace['my_value_3'] == 'test3'
+
+    # test that the timeout is enforced
+    namespace = {}
+    with pytest.raises(TimeoutError):
+        _ = execute_code_blocks(code_blocks, env_namespace=namespace, timeout=1)
+    assert namespace['my_value_1'] == 'test1'
+    assert 'my_value_2' not in namespace
+    assert 'my_value_3' not in namespace
+
 def test__generate_dict_combinations():  # noqa
     # test all single parameters; should return a list with one dict
     test_params = {

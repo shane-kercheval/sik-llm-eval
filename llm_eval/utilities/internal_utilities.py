@@ -6,6 +6,7 @@ from enum import Enum
 from inspect import isclass, ismethod, signature, isfunction
 import datetime
 from itertools import product
+import signal
 from types import FunctionType
 import hashlib
 from collections.abc import Callable
@@ -109,9 +110,14 @@ def extract_code_blocks(markdown_text: str) -> list[str]:
     return [match.strip() for match in matches]
 
 
+def __exec_timeout_handler(signum, frame):  # noqa
+            raise TimeoutError()
+
+
 def execute_code_blocks(
         code_blocks: list[str],
-        env_namespace: dict | None = None) -> list[Exception]:
+        env_namespace: dict | None = None,
+        timeout: int | None = None) -> list[Exception]:
     """
     Execute code blocks and determine if the code blocks run successfully.
 
@@ -127,17 +133,33 @@ def execute_code_blocks(
             code blocks to run. This is also useful if you need to keep track of the state of the
             global namespace after the code blocks have been executed (e.g. if you want to use
             variables or functions that were created during a previous call to this function.)
+        timeout:
+            The maximum number of seconds to wait for the code blocks to execute. If None, the
+            code blocks will not be interrupted. If running all code blocks take longer than
+            `timeout` seconds, the function will raise a TimeoutError.
     """
     block_results = []
     if env_namespace is None:
         env_namespace = {}
-    for code in code_blocks:
-        try:
-            with contextlib.redirect_stdout(io.StringIO()):
-                _ = exec(code, env_namespace)
-            block_results.append(None)
-        except Exception as e:
-            block_results.append(e)
+    if timeout:
+        signal.signal(signal.SIGALRM, __exec_timeout_handler)
+        signal.alarm(timeout)
+    try:
+        for code in code_blocks:
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    _ = exec(code, env_namespace)
+                block_results.append(None)
+            except TimeoutError:
+                raise TimeoutError(
+                    f"Code block execution timed out ({timeout} seconds):\n{code_blocks}",
+                )
+            except Exception as e:
+                block_results.append(e)
+    finally:
+        if timeout:
+            # cancel the alarm
+            signal.alarm(0)
     return block_results
 
 
