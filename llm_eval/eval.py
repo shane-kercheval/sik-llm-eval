@@ -180,10 +180,16 @@ class Eval(DictionaryEqualsMixin):
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the PromptTest."""
-        value = {'test_sequence': [t.to_dict() for t in self.test_sequence]}
+        value = {}
         if self.metadata:
             value['metadata'] = self.metadata
+        value['test_sequence'] = [t.to_dict() for t in self.test_sequence]
         return value
+
+    def to_yaml(self, file_path: str) -> None:
+        """Saves the Eval to a YAML file."""
+        with open(file_path, 'w') as f:
+            yaml.dump(self.to_dict(), f, sort_keys=False)
 
     @classmethod
     def from_yaml(cls, path: str) -> 'Eval':  # noqa: ANN102
@@ -508,7 +514,7 @@ class EvalResult(DictionaryEqualsMixin):
     def to_yaml(self, file_path: str) -> None:
         """Saves the EvalResult to a YAML file."""
         with open(file_path, 'w') as f:
-            yaml.dump(self.to_dict(), f)
+            yaml.dump(self.to_dict(), f, sort_keys=False)
 
     @classmethod
     def from_yaml(cls, path: str) -> 'EvalResult':  # noqa: ANN102

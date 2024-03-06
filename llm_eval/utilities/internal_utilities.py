@@ -6,6 +6,7 @@ from enum import Enum
 from inspect import isclass, ismethod, signature, isfunction
 import datetime
 from itertools import product
+import signal
 from types import FunctionType
 import hashlib
 from collections.abc import Callable
@@ -109,14 +110,21 @@ def extract_code_blocks(markdown_text: str) -> list[str]:
     return [match.strip() for match in matches]
 
 
+def __exec_timeout_handler(signum, frame):  # noqa
+            raise TimeoutError()
+
+
 def execute_code_blocks(
         code_blocks: list[str],
-        env_namespace: dict | None = None) -> list[Exception]:
+        env_namespace: dict | None = None,
+        timeout: int | None = None) -> list[Exception]:
     """
-    Execute code blocks and determine if the code blocks run successfully.
+    Execute code blocks and determine if the code blocks run successfully. Any values, functions,
+    classes, etc, that are created during the execution of the code blocks are stored in the
+    `env_namespace` dictionary.
 
-    For code blocks that run successfully, None is returned. For code blocks that fail, the
-    exception is returned.
+    A list is returned of length `len(code_blocks)` where the items correspond to the exceptions
+    raised for each code block (or a value of `None` for the code blocks that ran successfully).
 
     Args:
         code_blocks:
@@ -127,18 +135,31 @@ def execute_code_blocks(
             code blocks to run. This is also useful if you need to keep track of the state of the
             global namespace after the code blocks have been executed (e.g. if you want to use
             variables or functions that were created during a previous call to this function.)
+        timeout:
+            The maximum number of seconds to wait for each/individual code block to execute.
+            If None, the code blocks will not be interrupted. If the running code block take longer
+            than `timeout` seconds, a TimeoutError will be added to the list of exceptions for that
+            particular code block.
     """
-    block_results = []
+    code_errors = []
     if env_namespace is None:
         env_namespace = {}
     for code in code_blocks:
+        if timeout:
+            # start the alarm/timeout
+            signal.signal(signal.SIGALRM, __exec_timeout_handler)
+            signal.alarm(timeout)
         try:
             with contextlib.redirect_stdout(io.StringIO()):
                 _ = exec(code, env_namespace)
-            block_results.append(None)
+            code_errors.append(None)
         except Exception as e:
-            block_results.append(e)
-    return block_results
+            code_errors.append(e)
+        finally:
+            if timeout:
+                # cancel the alarm
+                signal.alarm(0)
+    return code_errors
 
 
 def generate_dict_combinations(value: dict[str, Any]) -> list[dict[str, Any]]:

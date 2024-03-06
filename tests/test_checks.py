@@ -1381,3 +1381,198 @@ def test__PythonCodeBlockTests__with_code_tests__invalid_test_raises_exception()
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match=re.escape('Test must return a boolean value:\ndef __code_test__(code_blocks: list[str]) -> bool:\n    return None')):  # noqa
         check(code_blocks=['1 == 1'])
+
+def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():  # noqa
+    code_blocks = [
+        """
+        import time
+        my_value_1 = 'test1'
+        time.sleep(0.5)
+        my_value_2 = 'test2'
+        """,
+        """
+        raise ValueError("This is a test")
+        """,
+        """
+        my_value_3 = 'test3'
+        """,
+    ]
+    code_blocks = [dedent(c).strip() for c in code_blocks]
+    code_tests = [
+        "assert my_value_1 == 'test1'",
+        "assert my_value_2 == 'test2'",
+        "def test(blocks):\n    time.sleep(1.5)\n    return True",
+        "assert my_value_3 == 'test3'",
+    ]
+    expected_num_code_blocks = len(code_blocks)
+    expected_successful_code_blocks = 2
+    expected_num_code_tests = len(code_tests)
+    expected_successful_code_tests = 4
+    expected_total_checks = expected_num_code_blocks + expected_num_code_tests
+    expected_successful_checks = expected_successful_code_blocks + \
+        expected_successful_code_tests
+    threshold = (expected_successful_checks/expected_total_checks) + 0.001
+    code_setup = 'import time'
+    check = PythonCodeBlockTests(
+        success_threshold=threshold,
+        code_setup=code_setup,
+        code_block_timeout=1,  # exceeds code block sleep
+        code_test_timeout=2,  # exceeds code test sleep
+        code_tests=code_tests,
+    )
+    assert check.success_threshold == threshold
+    assert check.code_setup == code_setup
+    assert len(check.code_tests) == len(code_tests)
+    assert check.metadata == {}
+    assert str(check)
+
+    result = check(code_blocks=code_blocks)
+    assert result.value == expected_successful_checks / expected_total_checks
+    assert not result.success  # second code block fails
+    assert result.success_threshold == threshold
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
+    assert result.metadata['num_code_blocks'] == len(code_blocks)
+    assert result.metadata['num_code_blocks_successful'] == expected_successful_code_blocks
+    assert result.metadata['code_blocks'] == code_blocks
+    assert len(result.metadata['code_block_errors']) == len(code_blocks)
+    assert result.metadata['code_block_errors'][0] is None
+    assert result.metadata['code_block_errors'][1] == {'error': 'ValueError', 'message': 'This is a test'}  # noqa
+    assert result.metadata['code_block_errors'][2] is None
+    assert result.metadata['code_tests'] == code_tests
+    assert result.metadata['num_code_tests'] == expected_num_code_tests
+    assert result.metadata['num_code_tests_successful'] == expected_successful_code_tests
+    assert result.metadata['code_test_results'] == [True, True, True, True]
+    assert result.metadata['code_test_errors'][0] is None
+    assert result.metadata['code_test_errors'][1] is None
+    assert result.metadata['code_test_errors'][2] is None
+    assert result.metadata['code_test_errors'][3] is None
+
+def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_blocks():  # noqa
+    code_blocks = [
+        """
+        import time
+        my_value_1 = 'test1'
+        time.sleep(1.5)
+        my_value_2 = 'test2'
+        """,
+        """
+        raise ValueError("This is a test")
+        """,
+        """
+        my_value_3 = 'test3'
+        """,
+    ]
+    code_blocks = [dedent(c).strip() for c in code_blocks]
+    code_tests = [
+        "assert my_value_1 == 'test1'",  # should still pass
+        "assert my_value_2 == 'test2'",  # should now fail since sleep exceeds timeout
+        "def test(blocks):\n    time.sleep(0.5)\n    return True",
+        "assert my_value_3 == 'test3'",
+    ]
+    expected_num_code_blocks = len(code_blocks)
+    expected_successful_code_blocks = 1
+    expected_num_code_tests = len(code_tests)
+    expected_successful_code_tests = 3
+    expected_total_checks = expected_num_code_blocks + expected_num_code_tests
+    expected_successful_checks = expected_successful_code_blocks + \
+        expected_successful_code_tests
+    threshold = (expected_successful_checks/expected_total_checks) + 0.001
+    code_setup = 'import time'
+    check = PythonCodeBlockTests(
+        success_threshold=threshold,
+        code_setup=code_setup,
+        code_block_timeout=1,  # exceeds code block sleep
+        code_test_timeout=1,  # exceeds code test sleep
+        code_tests=code_tests,
+    )
+    assert check.success_threshold == threshold
+    assert check.code_setup == code_setup
+    assert len(check.code_tests) == len(code_tests)
+    assert check.metadata == {}
+    assert str(check)
+
+    result = check(code_blocks=code_blocks)
+    assert result.value == expected_successful_checks / expected_total_checks
+    assert not result.success  # second code block fails
+    assert result.success_threshold == threshold
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
+    assert result.metadata['num_code_blocks'] == len(code_blocks)
+    assert result.metadata['num_code_blocks_successful'] == expected_successful_code_blocks
+    assert result.metadata['code_blocks'] == code_blocks
+    assert len(result.metadata['code_block_errors']) == len(code_blocks)
+    assert result.metadata['code_block_errors'][0] == {'error': 'TimeoutError', 'message': ''}
+    assert result.metadata['code_block_errors'][1] == {'error': 'ValueError', 'message': 'This is a test'}  # noqa
+    assert result.metadata['code_block_errors'][2] is None
+    assert result.metadata['code_tests'] == code_tests
+    assert result.metadata['num_code_tests'] == expected_num_code_tests
+    assert result.metadata['num_code_tests_successful'] == expected_successful_code_tests
+    assert result.metadata['code_test_results'] == [True, False, True, True]
+    assert result.metadata['code_test_errors'][0] is None
+    assert result.metadata['code_test_errors'][1] == {'error': 'NameError', 'message': "name 'my_value_2' is not defined"}  # noqa
+    assert result.metadata['code_test_errors'][2] is None
+    assert result.metadata['code_test_errors'][3] is None
+
+def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_tests():  # noqa
+    code_blocks = [
+        """
+        import time
+        my_value_1 = 'test1'
+        time.sleep(0.5)
+        my_value_2 = 'test2'
+        """,
+        """
+        raise ValueError("This is a test")
+        """,
+        """
+        my_value_3 = 'test3'
+        """,
+    ]
+    code_blocks = [dedent(c).strip() for c in code_blocks]
+    code_tests = [
+        "assert my_value_1 == 'test1'",  # should still pass
+        "assert my_value_2 == 'test2'",  # should now pass since sleep < timeout
+        "def test(blocks):\n    time.sleep(1.5)\n    return True",  # this should now fail
+        "assert my_value_3 == 'test3'",
+    ]
+    expected_num_code_blocks = len(code_blocks)
+    expected_successful_code_blocks = 2
+    expected_num_code_tests = len(code_tests)
+    expected_successful_code_tests = 3
+    expected_total_checks = expected_num_code_blocks + expected_num_code_tests
+    expected_successful_checks = expected_successful_code_blocks + \
+        expected_successful_code_tests
+    threshold = (expected_successful_checks/expected_total_checks) + 0.001
+    code_setup = 'import time'
+    check = PythonCodeBlockTests(
+        success_threshold=threshold,
+        code_setup=code_setup,
+        code_block_timeout=1,  # exceeds code block sleep
+        code_test_timeout=1,  # exceeds code test sleep
+        code_tests=code_tests,
+    )
+    assert check.success_threshold == threshold
+    assert check.code_setup == code_setup
+    assert len(check.code_tests) == len(code_tests)
+    assert check.metadata == {}
+    assert str(check)
+
+    result = check(code_blocks=code_blocks)
+    assert result.value == expected_successful_checks / expected_total_checks
+    assert not result.success  # second code block fails
+    assert result.success_threshold == threshold
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
+    assert result.metadata['num_code_blocks'] == len(code_blocks)
+    assert result.metadata['num_code_blocks_successful'] == expected_successful_code_blocks
+    assert result.metadata['code_blocks'] == code_blocks
+    assert len(result.metadata['code_block_errors']) == len(code_blocks)
+    assert result.metadata['code_block_errors'][0] is None
+    assert result.metadata['code_block_errors'][1] == {'error': 'ValueError', 'message': 'This is a test'}  # noqa
+    assert result.metadata['code_block_errors'][2] is None
+    assert result.metadata['code_tests'] == code_tests
+    assert result.metadata['num_code_tests'] == expected_num_code_tests
+    assert result.metadata['num_code_tests_successful'] == expected_successful_code_tests
+    assert result.metadata['code_test_results'] == [True, True, False, True]
+    assert result.metadata['code_test_errors'][0] is None
+    assert result.metadata['code_test_errors'][1] is None
+    assert result.metadata['code_test_errors'][2] == {'error': 'TimeoutError', 'message': ''}
+    assert result.metadata['code_test_errors'][3] is None

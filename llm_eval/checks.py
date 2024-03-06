@@ -366,6 +366,24 @@ class PythonCodeBlockTests(Check):
         default=None,
         description="Python code that is executed before the code blocks are executed.",
     )
+    code_block_timeout: int | None = Field(
+        default=None,
+        description="""
+        The maximum time (in seconds) to allow each/individual code block to run. If the code block
+        takes longer than the timeout, that code block will be marked as failed and a TimeoutError
+        will be included in the `code_block_errors` list in the metadata of the ScoreResult object
+        returned (in the corresponding index of the code-block).
+        """,
+    )
+    code_test_timeout: int | None = Field(
+        default=None,
+        description="""
+        The maximum time (in seconds) to allow each/individual code test (in `code_tests` list) to
+        run. If the code test takes longer than the timeout, that test will be marked as failed and
+        a TimeoutError will be included in the `code_test_errors` list in the metadata of the
+        ScoreResult object returned (in the corresponding index of the code-test).
+        """,
+    )
     code_tests: list[str | Callable[[list[str]], bool]] | None = Field(
         default=None,
         description="""
@@ -438,7 +456,11 @@ class PythonCodeBlockTests(Check):
                 ]
 
             # run the primary code blocks
-            code_block_errors = execute_code_blocks(code_blocks, env_namespace=env_namespace)
+            code_block_errors = execute_code_blocks(
+                code_blocks=code_blocks,
+                env_namespace=env_namespace,
+                timeout=self.code_block_timeout,
+            )
             code_block_errors = _errors_to_dict(code_block_errors)
             # add code blocks to the environment; the functions will take the code blocks
             # as input
@@ -447,6 +469,7 @@ class PythonCodeBlockTests(Check):
             # return boolean success/fail)
             for test in code_tests:
                 num_code_tests += 1
+                # __result__ is used to capture the result of the test
                 # we need to reset `__result__` to False in case one of the functions fails to
                 # execute (which means `__result__` will not be set) in order to avoid grabbing
                 # the result from the previous function check
@@ -495,8 +518,12 @@ class PythonCodeBlockTests(Check):
                 # Errors could be caused by the LLM response (e.g. if the LLM response doesn't
                 # contain the expected function name) so we don't want to fail out of the entire
                 # check
-                func_errors = execute_code_blocks([function_call], env_namespace=env_namespace)
-                test_errors.extend(_errors_to_dict(func_errors))
+                test_exceptions = execute_code_blocks(
+                    code_blocks=[function_call],
+                    env_namespace=env_namespace,
+                    timeout=self.code_test_timeout,
+                )
+                test_errors.extend(_errors_to_dict(test_exceptions))
                 # get the result of the function from the environment
                 func_result = env_namespace['__result__']
                 assert isinstance(func_result, bool), f"Test must return a boolean value:\n{test}"
@@ -530,4 +557,4 @@ class PythonCodeBlockTests(Check):
 
     def __str__(self) -> str:
         """String representation."""
-        return f"{self.__class__.__name__}(functions={self.code_tests}, metadata={self.metadata})"
+        return f"{self.__class__.__name__}(tests={self.code_tests}, metadata={self.metadata})"
