@@ -119,10 +119,12 @@ def execute_code_blocks(
         env_namespace: dict | None = None,
         timeout: int | None = None) -> list[Exception]:
     """
-    Execute code blocks and determine if the code blocks run successfully.
+    Execute code blocks and determine if the code blocks run successfully. Any values, functions,
+    classes, etc, that are created during the execution of the code blocks are stored in the
+    `env_namespace` dictionary.
 
-    For code blocks that run successfully, None is returned. For code blocks that fail, the
-    exception is returned.
+    A list is returned of length `len(code_blocks)` where the items correspond to the exceptions
+    raised for each code block (or a value of `None` for the code blocks that ran successfully).
 
     Args:
         code_blocks:
