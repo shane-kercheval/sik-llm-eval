@@ -26,6 +26,8 @@ test_sequence:
         value: assert sum_two_numbers
       - check_type: PYTHON_CODE_BLOCKS_PRESENT
       - check_type: PYTHON_CODE_BLOCK_TESTS
+        code_block_timeout: 5
+        code_test_timeout: 5
         code_tests:
           - |
             def verify_function_exists_and_runs_correctly(code_blocks: list[str]) -> bool:

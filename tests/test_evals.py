@@ -294,6 +294,9 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     config = fake_eval_sum_two_numbers_code_blocks_run.copy()
     eval_obj = Eval(**config)
 
+    assert eval_obj.test_sequence[1].checks[-1].code_block_timeout == 5
+    assert eval_obj.test_sequence[1].checks[-1].code_test_timeout == 5
+
     response_1 = dedent("""
     Certainly! Below is a simple Python function named `sum_two_numbers` that takes two parameters, `a` and `b`, which are intended to be numbers. The function returns the sum of these two numbers.
 
@@ -643,9 +646,9 @@ def callback(x: EvalResult) -> None:
     with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
         yaml.dump(x.to_dict(), f, default_flow_style=False, sort_keys=False)
 
-def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers_code_blocks_run):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
-    sum_config = fake_eval_sum_two_numbers.copy()
+    sum_config = fake_eval_sum_two_numbers_code_blocks_run.copy()
 
     dir_path = "tests/__temp__"
     def recreate_temp_dir() -> None:
@@ -661,7 +664,7 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     responses_lookup = {
         fake_eval_subtract_two_numbers['test_sequence'][0]['prompt']: response_subtract_0,
         fake_eval_subtract_two_numbers['test_sequence'][1]['prompt']: response_subtract_1,
-        fake_eval_sum_two_numbers['test_sequence'][0]['prompt']: response_sum_0,
+        fake_eval_sum_two_numbers_code_blocks_run['test_sequence'][0]['prompt']: response_sum_0,
     }
 
     candidate_1_dict = {
@@ -711,7 +714,7 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     # check that the results have been saved and are the same as the results from the sequential
     eval_ids = [
         fake_eval_subtract_two_numbers['metadata']['uuid'],
-        fake_eval_sum_two_numbers['metadata']['uuid'],
+        fake_eval_sum_two_numbers_code_blocks_run['metadata']['uuid'],
     ]
     candidate_ids = ['candidate_1', 'candidate_2']
     for eval_index, eval_id in enumerate(eval_ids):
@@ -814,7 +817,7 @@ def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numb
     # check that the results have been saved and are the same as the results from the sequential
     eval_ids = [
         fake_eval_subtract_two_numbers['metadata']['uuid'],
-        fake_eval_sum_two_numbers['metadata']['uuid'],
+        fake_eval_sum_two_numbers_code_blocks_run['metadata']['uuid'],
     ]
     candidate_ids = ['candidate_1', 'candidate_2']
     for eval_index, eval_id in enumerate(eval_ids):
