@@ -745,11 +745,15 @@ def test__execute_code_blocks__timeout():  # noqa
 
     # test that the timeout is enforced
     namespace = {}
-    with pytest.raises(TimeoutError):
-        _ = execute_code_blocks(code_blocks, env_namespace=namespace, timeout=1)
+    errors = execute_code_blocks(code_blocks, env_namespace=namespace, timeout=1)
+    assert len(errors) == len(code_blocks)
+    assert isinstance(errors[0], TimeoutError)
+    assert isinstance(errors[1], ValueError)
+    assert errors[2] is None
+
     assert namespace['my_value_1'] == 'test1'
     assert 'my_value_2' not in namespace
-    assert 'my_value_3' not in namespace
+    assert namespace['my_value_3'] == 'test3'
 
 def test__generate_dict_combinations():  # noqa
     # test all single parameters; should return a list with one dict

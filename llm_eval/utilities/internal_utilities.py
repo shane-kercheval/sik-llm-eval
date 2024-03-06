@@ -136,33 +136,30 @@ def execute_code_blocks(
             global namespace after the code blocks have been executed (e.g. if you want to use
             variables or functions that were created during a previous call to this function.)
         timeout:
-            The maximum number of seconds to wait for the code blocks to execute. If None, the
-            code blocks will not be interrupted. If running all code blocks take longer than
-            `timeout` seconds, the function will raise a TimeoutError.
+            The maximum number of seconds to wait for each/individual code block to execute.
+            If None, the code blocks will not be interrupted. If the running code block take longer
+            than `timeout` seconds, a TimeoutError will be added to the list of exceptions for that
+            particular code block.
     """
-    block_results = []
+    code_errors = []
     if env_namespace is None:
         env_namespace = {}
-    if timeout:
-        signal.signal(signal.SIGALRM, __exec_timeout_handler)
-        signal.alarm(timeout)
-    try:
-        for code in code_blocks:
-            try:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    _ = exec(code, env_namespace)
-                block_results.append(None)
-            except TimeoutError:
-                raise TimeoutError(
-                    f"Code block execution timed out ({timeout} seconds):\n{code_blocks}",
-                )
-            except Exception as e:
-                block_results.append(e)
-    finally:
+    for code in code_blocks:
         if timeout:
-            # cancel the alarm
-            signal.alarm(0)
-    return block_results
+            # start the alarm/timeout
+            signal.signal(signal.SIGALRM, __exec_timeout_handler)
+            signal.alarm(timeout)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                _ = exec(code, env_namespace)
+            code_errors.append(None)
+        except Exception as e:
+            code_errors.append(e)
+        finally:
+            if timeout:
+                # cancel the alarm
+                signal.alarm(0)
+    return code_errors
 
 
 def generate_dict_combinations(value: dict[str, Any]) -> list[dict[str, Any]]:
