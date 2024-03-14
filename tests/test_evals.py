@@ -618,11 +618,23 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert result_from_yaml.to_dict() == cand_1_results_subtract.to_dict()
     os.remove('__temp__.yaml')
 
+    cand_1_results_subtract.to_json('__temp__.json')
+    result_from_json = cand_1_results_subtract.from_json('__temp__.json')
+    assert result_from_json == cand_1_results_subtract
+    assert result_from_json.to_dict() == cand_1_results_subtract.to_dict()
+    os.remove('__temp__.json')
+
     cand_1_results_sum.to_yaml('__temp__.yaml')
     result_from_yaml = cand_1_results_sum.from_yaml('__temp__.yaml')
     assert result_from_yaml == cand_1_results_sum
     assert result_from_yaml.to_dict() == cand_1_results_sum.to_dict()
     os.remove('__temp__.yaml')
+
+    cand_1_results_sum.to_json('__temp__.json')
+    result_from_json = cand_1_results_sum.from_json('__temp__.json')
+    assert result_from_json == cand_1_results_sum
+    assert result_from_json.to_dict() == cand_1_results_sum.to_dict()
+    os.remove('__temp__.json')
 
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified

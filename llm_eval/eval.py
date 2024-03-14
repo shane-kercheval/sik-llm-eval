@@ -1,14 +1,15 @@
 """Classes and functions to evaluate LLMs."""
 import asyncio
+import glob
+import os
+import time
+import yaml
+import json
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
-import glob
-import os
 from textwrap import dedent, indent
-import time
 from typing import Callable
-import yaml
 from llm_eval.candidates import CallableCandidate, Candidate
 from llm_eval.checks import (
     Check,
@@ -523,6 +524,17 @@ class EvalResult(DictionaryEqualsMixin):
             config = yaml.safe_load(f)
         return EvalResult(**config)
 
+    def to_json(self, file_path: str) -> None:
+        """Saves the EvalResult to a JSON file."""
+        with open(file_path, 'w') as f:
+            json.dump(self.to_dict(), f, indent=4)
+
+    @classmethod
+    def from_json(cls, path: str) -> 'EvalResult':  # noqa: ANN102
+        """Creates an EvalResult object from a JSON file."""
+        with open(path) as f:
+            config = json.load(f)
+        return EvalResult(**config)
 
 class EvalHarness:
     """
