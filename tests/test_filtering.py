@@ -7,6 +7,7 @@ from llm_eval.filtering import (
     filter_contains_code_block_tests,
     filter_expects_code_blocks,
     filter_tags,
+    matches_tags,
     result_contains_code_block_tests,
     result_expects_code_blocks,
 )
@@ -45,7 +46,7 @@ class MockCandidate(Candidate):
         return self.model(prompt)
 
 
-def test_filtering(  # noqa: PLR0915
+def test_filter_tags(  # noqa: PLR0915
         fake_eval_8f9fbf37: dict,
         fake_eval_subtract_two_numbers: dict,
         fake_eval_sum_two_numbers: dict,
@@ -63,6 +64,19 @@ def test_filtering(  # noqa: PLR0915
     assert 'sum_two_numbers' in results[2].eval_obj.metadata['tags']
     assert 'sum_two_numbers' in results[3].eval_obj.metadata['tags']
     assert 'code_block' in results[3].eval_obj.metadata['tags']
+
+    # using `is True` and `is False` to ensure that the return value is a boolean
+    assert matches_tags(results[0]) is True
+    assert matches_tags(results[0], include='eval_8f9') is True
+    assert matches_tags(results[0], exclude='eval_8f9') is False
+    assert matches_tags(results[3]) is True
+    assert matches_tags(results[3], include='sum_two_numbers') is True
+    assert matches_tags(results[3], exclude='sum_two_numbers') is False
+    assert matches_tags(results[3], include='sum_two_numbers', exclude='sum_two_numbers') is False
+    assert matches_tags(results[3], include=['sum_two_numbers', 'code_block']) is True
+    assert matches_tags(results[3], include='sum_two_numbers', exclude='code_block') is False
+    assert matches_tags(results[3], include=['sum_two_numbers', 'code_block'], exclude='python') is False  # noqa
+    assert matches_tags(results[3], include=['sum_two_numbers', 'code_block'], exclude=['python']) is False  # noqa
 
     filtered_results = filter_tags(results)
     assert len(filtered_results) == 4
@@ -112,7 +126,6 @@ def test_filtering(  # noqa: PLR0915
     assert results[1] not in filtered_results
     assert results[2] in filtered_results
     assert results[3] not in filtered_results
-
 
 def test__expects_code_blocks(
         fake_eval_8f9fbf37: dict,

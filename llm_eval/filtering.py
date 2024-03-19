@@ -53,6 +53,36 @@ def filter_contains_code_block_tests(results: list[EvalResult]) -> list[EvalResu
     """
     return [r for r in results if result_contains_code_block_tests(r)]
 
+def matches_tags(
+        result: EvalResult,
+        include: list[str] | str | None = None,
+        exclude: list[str] | str | None = None) -> bool:
+    """
+    Returns boolean if EvalResult matches tags.
+
+    If both `include` and `exclude` are provided, the `exclude` tags take precedence.
+
+    Args:
+        result: List of EvalResult objects.
+        include: Tags to include.
+        exclude: Tags to exclude.
+    """
+    matches = True
+    if isinstance(include, str):
+        include = [include]
+    if isinstance(exclude, str):
+        exclude = [exclude]
+    include = set(include or [])
+    exclude = set(exclude or [])
+    if include:
+        # include any results that have at least one of the include tags
+        matches = bool(include & set(result.eval_obj.metadata.get('tags', [])))
+    if exclude:
+        # exclude any results that have at least one of the exclude tags
+        # not exclude & set(filtered[0].eval_obj.metadata.get('tags', []))
+        matches = matches and not exclude & set(result.eval_obj.metadata.get('tags', []))
+    return matches
+
 def filter_tags(
         results: list[EvalResult],
         include: list[str] | str | None = None,
@@ -70,24 +100,4 @@ def filter_tags(
         include: Tags to include.
         exclude: Tags to exclude.
     """
-    if isinstance(include, str):
-        include = [include]
-    if isinstance(exclude, str):
-        exclude = [exclude]
-    include = set(include or [])
-    exclude = set(exclude or [])
-    if include:
-        # include any results that have at least one of the include tags
-        filtered = []
-        filtered.extend(
-            [r for r in results if include & set(r.eval_obj.metadata.get('tags', []))],
-        )
-    else:
-        filtered = results
-    if exclude:
-        # exclude any results that have at least one of the exclude tags
-        # not exclude & set(filtered[0].eval_obj.metadata.get('tags', []))
-        filtered = [
-            r for r in filtered if not exclude & set(r.eval_obj.metadata.get('tags', []))
-        ]
-    return filtered
+    return [r for r in results if matches_tags(r, include=include, exclude=exclude)]
