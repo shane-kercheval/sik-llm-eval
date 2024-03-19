@@ -536,6 +536,7 @@ class EvalResult(DictionaryEqualsMixin):
             config = json.load(f)
         return EvalResult(**config)
 
+
 class EvalHarness:
     """
     An EvalHarness provides a interface for evaluating multiple Evals against multiple

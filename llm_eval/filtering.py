@@ -76,7 +76,7 @@ def matches_tags(
     exclude = set(exclude or [])
     if include:
         # include any results that have at least one of the include tags
-        matches = include & set(result.eval_obj.metadata.get('tags', []))
+        matches = bool(include & set(result.eval_obj.metadata.get('tags', [])))
     if exclude:
         # exclude any results that have at least one of the exclude tags
         # not exclude & set(filtered[0].eval_obj.metadata.get('tags', []))
