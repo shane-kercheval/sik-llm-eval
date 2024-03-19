@@ -45,7 +45,7 @@ class MockCandidate(Candidate):
         return self.model(prompt)
 
 
-def test_filtering(  # noqa: PLR0915
+def test_filter_tags(  # noqa: PLR0915
         fake_eval_8f9fbf37: dict,
         fake_eval_subtract_two_numbers: dict,
         fake_eval_sum_two_numbers: dict,
@@ -112,7 +112,6 @@ def test_filtering(  # noqa: PLR0915
     assert results[1] not in filtered_results
     assert results[2] in filtered_results
     assert results[3] not in filtered_results
-
 
 def test__expects_code_blocks(
         fake_eval_8f9fbf37: dict,
