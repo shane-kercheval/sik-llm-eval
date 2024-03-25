@@ -1,14 +1,18 @@
 """TODO: document."""
+from copy import deepcopy
+import os
 import re
 from textwrap import dedent
 from pydantic import ValidationError
 import pytest
+from llm_eval.candidates import Candidate
 from llm_eval.checks import (
     Check,
     CheckResult,
     CheckResultsType,
     CheckType,
     ContainsCheck,
+    LLMCheck,
     MatchCheck,
     PassFailResult,
     PythonCodeBlocksPresent,
@@ -1576,3 +1580,38 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert result.metadata['code_test_errors'][1] is None
     assert result.metadata['code_test_errors'][2] == {'error': 'TimeoutError', 'message': ''}
     assert result.metadata['code_test_errors'][3] is None
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test__LLMCheck__openai(openai_candidate_template):  # noqa
+    """Test that the template for an OpenAI candidate works."""
+    template = deepcopy(openai_candidate_template)
+    candidate = Candidate.from_dict(template)
+    check = LLMCheck(
+        eval_prompt = "What is the number returned in the question?",
+        evaluator=candidate,
+    )
+    result = check(
+        prompt="What is the secret number?",
+        response="The secret number is 42.",
+    )
+    assert isinstance(result, CheckResult)
+    assert result.success is None
+    assert '42' in result.value
+    assert result.metadata['check_type'] == CheckType.LLM_CHECK
+    assert result.metadata['check_metadata']['cost'] > 0
+
+    candidate = Candidate.from_dict(template)
+    check = LLMCheck(
+        eval_prompt = "What is the number returned in the question?",
+        evaluator=candidate,
+        success=lambda x: '42' in x,
+    )
+    result = check(
+        prompt="What is the secret number?",
+        response="The secret number is 42.",
+    )
+    assert isinstance(result, CheckResult)
+    assert result.success is True
+    assert '42' in result.value
+    assert result.metadata['check_type'] == CheckType.LLM_CHECK
+    assert result.metadata['check_metadata']['cost'] > 0

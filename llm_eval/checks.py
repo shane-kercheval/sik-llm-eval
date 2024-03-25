@@ -13,7 +13,8 @@ from inspect import getsource
 import re
 from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from llm_eval.candidates import Candidate
 from llm_eval.utilities.internal_utilities import EnumMixin, Registry, execute_code_blocks
 
 
@@ -26,6 +27,7 @@ class CheckType(EnumMixin, Enum):
     PYTHON_FUNCTION = auto()
     PYTHON_CODE_BLOCKS_PRESENT = auto()
     PYTHON_CODE_BLOCK_TESTS = auto()
+    LLM_CHECK = auto()
 
 
 class CheckResultsType(EnumMixin, Enum):
@@ -558,3 +560,45 @@ class PythonCodeBlockTests(Check):
     def __str__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}(tests={self.code_tests}, metadata={self.metadata})"
+
+
+@Check.register(CheckType.LLM_CHECK)
+class LLMCheck(Check):
+    """
+    LLMCheck is a generic check that uses an LLM to evaluate the response of a separate/candidate
+    LLM. The user can define the prompt that will be used by the evaluator to evaluate the
+    response. The evaluation prompt, the original prompt/question that was sent to the LLM being
+    evaluated, and the corresponding response is passed to the evaluator LLM. A CheckResult is
+    returned containing the response of the evaluator LLM (in the `value` field). Optionally,
+    the user can define a function that takes the response from the evaluator and returns a boolean
+    indicating if the check was successful. If the function is not defined, the `success` property
+    of the CheckResult will be None.
+    """
+
+    eval_prompt: str = Field(description="The prompt to use by the evaluator to evaluate the response.")  # noqa
+    evaluator: Candidate = Field(description="The LLM to use to evaluate the response. If a dict is assumed to a dictionary associated with a registered candidate.")  # noqa
+    success: Callable[[str], bool] | None = Field(None, description="A function that takes the response from the evaluator and returns a boolean indicating if the check was successful.")  # noqa
+
+    model_config = ConfigDict(arbitrary_types_allowed = True)
+
+    def __call__(
+        self,
+        prompt: str,
+        response: str) -> CheckResult:
+        """Executes the check on the response and returns the response of the evaluator LLM."""
+        evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
+        result = evaluator(f"{self.eval_prompt}\n\nQuestion: {prompt}\n\nAnswer: {response}")
+        if evaluator.cost:
+            self.metadata['cost'] = self.metadata.get('cost', 0) + evaluator.cost
+        return CheckResult(
+            value=result,
+            success=self.success(result) if self.success else None,
+            metadata={
+                'check_type': self.check_type,
+                'check_metadata': self.metadata,
+            },
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}()"
