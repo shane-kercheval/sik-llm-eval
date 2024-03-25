@@ -179,7 +179,6 @@ class Candidate(DictionaryEqualsMixin, ABC):
         return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
-
 @Candidate.register(CandidateType.CALLABLE_NO_SERIALIZE)
 class CallableCandidate(Candidate):
     """
