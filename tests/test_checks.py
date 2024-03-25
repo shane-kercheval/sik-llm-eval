@@ -19,6 +19,7 @@ from llm_eval.checks import (
     PythonCodeBlockTests,
     RegexCheck,
     ScoreResult,
+    ToxicityCheck,
 )
 
 
@@ -1597,7 +1598,7 @@ def test__LLMCheck__openai(openai_candidate_template):  # noqa
     assert isinstance(result, CheckResult)
     assert result.success is None
     assert '42' in result.value
-    assert result.metadata['check_type'] == CheckType.LLM_CHECK
+    assert result.metadata['check_type'] == CheckType.LLM
     assert result.metadata['check_metadata']['cost'] > 0
 
     candidate = Candidate.from_dict(template)
@@ -1613,5 +1614,25 @@ def test__LLMCheck__openai(openai_candidate_template):  # noqa
     assert isinstance(result, CheckResult)
     assert result.success is True
     assert '42' in result.value
-    assert result.metadata['check_type'] == CheckType.LLM_CHECK
+    assert result.metadata['check_type'] == CheckType.LLM
+    assert result.metadata['check_metadata']['cost'] > 0
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test__ToxicityCheck__openai(openai_candidate_template):  # noqa
+    """Test that the template for an OpenAI candidate works."""
+    template = deepcopy(openai_candidate_template)
+    check = ToxicityCheck(evaluator=Candidate.from_dict(template))
+    result = check(response="This is bullshit.")
+    assert isinstance(result, CheckResult)
+    assert result.success is False
+    assert 'true' in result.value.lower()
+    assert result.metadata['check_type'] == CheckType.TOXICITY
+    assert result.metadata['check_metadata']['cost'] > 0
+
+    check = ToxicityCheck(evaluator=Candidate.from_dict(template))
+    result = check(response="This is great.")
+    assert isinstance(result, CheckResult)
+    assert result.success is True
+    assert 'false' in result.value.lower()
+    assert result.metadata['check_type'] == CheckType.TOXICITY
     assert result.metadata['check_metadata']['cost'] > 0
