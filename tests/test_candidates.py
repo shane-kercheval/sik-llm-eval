@@ -44,6 +44,22 @@ class MockCandidate(Candidate):
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
 
+    @property
+    def total_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def input_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def response_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def cost(self) -> float:  # noqa
+        return None
+
 
 def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa
     candidate = Candidate.from_yaml('examples/candidates/openai_3.5_1106.yaml')
