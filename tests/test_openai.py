@@ -132,6 +132,8 @@ def test_OpenAIChat():  # noqa
     assert message.response == response
     assert message.metadata['model_name'] == model.model_name
     assert message.metadata['messages'] == model._previous_messages
+    assert len(message.metadata['tokens']) > 0
+    assert len(message.metadata['log_probs']) == len(message.metadata['tokens'])
     assert message.cost == (MODEL_COST_PER_TOKEN[model.model_name]['input'] * message.input_tokens) + \
         (MODEL_COST_PER_TOKEN[model.model_name]['output'] * message.response_tokens)  # noqa: E501
     assert message.input_tokens == num_tokens_from_messages(
@@ -292,6 +294,8 @@ def test_OpenAIChat_streaming():  # noqa
     assert message.response == response
     assert message.metadata['model_name'] == model.model_name
     assert message.metadata['messages'] == model._previous_messages
+    assert len(message.metadata['tokens']) > 0
+    assert len(message.metadata['log_probs']) == len(message.metadata['tokens'])
     assert message.input_tokens == num_tokens_from_messages(
         model_name=model.model_name,
         messages=model._previous_messages,
