@@ -323,7 +323,11 @@ class OpenAIChat(ChatModel):
 
 
 class OpenAIServerChat(OpenAIChat):
-    """TODO Document."""
+    """
+    Some servers (e.g. llama.cpp, hugging face endpoints) allow callers to use OpenAI's API for
+    non-OpenAI models. This wrapper allows the caller to specify the base_url of the server to
+    connect to and uses OpenAI API to interact with the LLM.
+    """
 
     def __init__(
             self,
