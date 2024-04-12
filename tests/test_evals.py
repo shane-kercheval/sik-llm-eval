@@ -953,3 +953,416 @@ def test__cannot_add_more_than_one_code_blocks_run_check():  # noqa
     )
     with pytest.raises(ValueError):  # noqa: PT011
         Eval(**new_config)
+
+def test__evals__num_samples__greater_than_one__async__via_constructor(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+    """Tests num_samples > 1 for async evals and when we pass num_samples to constructor."""
+    subtract_config = fake_eval_subtract_two_numbers.copy()
+    sum_config = fake_eval_sum_two_numbers.copy()
+
+    response_subtract_0 = 'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```'  # noqa
+    response_subtract_1 = 'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```'  # noqa
+    response_sum_0 = 'This is the response.\n\n```\ndef sum_two_numbers(a, b):\n    return a + b\n```'  # noqa
+    responses_lookup = {
+        fake_eval_subtract_two_numbers['test_sequence'][0]['prompt']: response_subtract_0,
+        fake_eval_subtract_two_numbers['test_sequence'][1]['prompt']: response_subtract_1,
+        fake_eval_sum_two_numbers['test_sequence'][0]['prompt']: response_sum_0,
+    }
+
+    candidate_1_dict = {
+        'metadata': {'uuid': 'candidate_1'},
+        'candidate_type': 'MockCandidate',
+        'responses': responses_lookup,
+    }
+    candidate_2_dict = deepcopy(candidate_1_dict)
+    candidate_2_dict['metadata']['uuid'] = 'candidate_2'
+
+    eval_harness_via_dicts = EvalHarness(
+        evals=[subtract_config, sum_config],
+        candidates=[candidate_1_dict, candidate_2_dict],
+        num_cpus=1,
+        async_batch_size=1,
+    )
+    eval_harness_via_objects = EvalHarness(
+        evals=[Eval(**subtract_config), Eval(**sum_config)],
+        candidates=[Candidate.from_dict(candidate_1_dict), Candidate.from_dict(candidate_2_dict)],
+        num_cpus=1,
+        async_batch_size=1,
+    )
+    assert eval_harness_via_dicts.evals == eval_harness_via_objects.evals
+    assert eval_harness_via_dicts.candidates == eval_harness_via_objects.candidates
+
+    num_samples = 3
+    eval_harness = EvalHarness(
+        num_cpus=2,
+        async_batch_size=2,
+        num_samples=num_samples,
+    )
+    assert eval_harness.evals != eval_harness_via_dicts.evals
+    assert eval_harness.candidates != eval_harness_via_dicts.candidates
+    eval_harness.add_eval(Eval(**subtract_config))
+    eval_harness.add_eval(Eval(**sum_config))
+    eval_harness.add_candidate(Candidate.from_dict(candidate_1_dict))
+    eval_harness.add_candidate(Candidate.from_dict(candidate_2_dict))
+    assert eval_harness.evals == eval_harness_via_dicts.evals
+    assert eval_harness.candidates == eval_harness_via_dicts.candidates
+    num_candidates = len(eval_harness.candidates)
+    num_evals = len(eval_harness.evals)
+
+    results = eval_harness()
+    assert len(results) == num_candidates
+    assert len(results[0]) == num_evals * num_samples
+    assert len(results[1]) == num_evals * num_samples
+    # The underlying candidate objects should have the same values but should be different objects
+    # because each candidate object (against a specific eval) is responsible for storing its own
+    # history/conversation and the history should be different for each eval.
+    assert results[0][0].candidate_obj == results[0][1].candidate_obj
+    assert results[0][0].candidate_obj is not results[0][1].candidate_obj
+    assert results[1][0].candidate_obj == results[1][1].candidate_obj
+    assert results[1][0].candidate_obj is not results[1][1].candidate_obj
+
+    # The first list should contain the results for candidate 1 (subtract eval * 3, sum eval * 3)
+    # 3 SAMPLES OF SUBTRACT EVAL
+    assert results[0][0].eval_obj == Eval(**subtract_config)
+    assert results[0][0].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][1].eval_obj == Eval(**subtract_config)
+    assert results[0][1].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][2].eval_obj == Eval(**subtract_config)
+    assert results[0][2].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    # 3 SAMPLES OF SUM EVAL
+    assert results[0][3].eval_obj == Eval(**sum_config)
+    assert results[0][3].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][4].eval_obj == Eval(**sum_config)
+    assert results[0][4].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][5].eval_obj == Eval(**sum_config)
+    assert results[0][5].candidate_obj == Candidate.from_dict(candidate_1_dict)
+
+    # The second list should contain the results for candidate 2 (subtract eval, sum eval)
+    # 3 SAMPLES OF SUBTRACT EVAL
+    assert results[1][0].eval_obj == Eval(**subtract_config)
+    assert results[1][0].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][1].eval_obj == Eval(**subtract_config)
+    assert results[1][1].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][2].eval_obj == Eval(**subtract_config)
+    assert results[1][2].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    # 3 SAMPLES OF SUM EVAL
+    assert results[1][3].eval_obj == Eval(**sum_config)
+    assert results[1][3].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][4].eval_obj == Eval(**sum_config)
+    assert results[1][4].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][5].eval_obj == Eval(**sum_config)
+    assert results[1][5].candidate_obj == Candidate.from_dict(candidate_2_dict)
+
+    # eval objects across candidates should have same values (same eval) but different objects
+    assert results[0][0].eval_obj == results[1][0].eval_obj
+    assert results[0][0].eval_obj is not results[1][0].eval_obj
+    assert results[0][0].eval_obj == results[0][1].eval_obj
+    assert results[0][0].eval_obj is not results[0][1].eval_obj
+    assert results[0][0].eval_obj == results[0][2].eval_obj
+    assert results[0][0].eval_obj is not results[0][2].eval_obj
+
+    assert results[0][3].eval_obj == results[1][3].eval_obj
+    assert results[0][3].eval_obj is not results[1][3].eval_obj
+    assert results[0][3].eval_obj == results[0][4].eval_obj
+    assert results[0][3].eval_obj is not results[0][4].eval_obj
+    assert results[0][3].eval_obj == results[0][5].eval_obj
+    assert results[0][3].eval_obj is not results[0][5].eval_obj
+
+    # candidate 1 - subtract eval; all 3 should have same results
+    cand_1_results_subtract = results[0][0]
+    cand_1_results_subtract.to_dict()
+    assert cand_1_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_1_results_subtract.num_code_blocks == 2
+    assert cand_1_results_subtract.num_checks == 5
+    assert cand_1_results_subtract.num_successful_checks == 4
+    assert cand_1_results_subtract.perc_successful_checks == 4 / 5
+
+    cand_1_results_subtract = results[0][1]
+    cand_1_results_subtract.to_dict()
+    assert cand_1_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_1_results_subtract.num_code_blocks == 2
+    assert cand_1_results_subtract.num_checks == 5
+    assert cand_1_results_subtract.num_successful_checks == 4
+    assert cand_1_results_subtract.perc_successful_checks == 4 / 5
+
+    cand_1_results_subtract = results[0][2]
+    cand_1_results_subtract.to_dict()
+    assert cand_1_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_1_results_subtract.num_code_blocks == 2
+    assert cand_1_results_subtract.num_checks == 5
+    assert cand_1_results_subtract.num_successful_checks == 4
+    assert cand_1_results_subtract.perc_successful_checks == 4 / 5
+
+    # candidate 1 - sum eval; all 3 should have same results
+    cand_1_results_sum = results[0][3]
+    assert cand_1_results_sum.responses == [response_sum_0]
+    assert cand_1_results_sum.num_code_blocks == 1
+    assert cand_1_results_sum.num_checks == 2
+    assert cand_1_results_sum.num_successful_checks == 2
+    assert cand_1_results_sum.perc_successful_checks == 1
+
+    cand_1_results_sum = results[0][4]
+    assert cand_1_results_sum.responses == [response_sum_0]
+    assert cand_1_results_sum.num_code_blocks == 1
+    assert cand_1_results_sum.num_checks == 2
+    assert cand_1_results_sum.num_successful_checks == 2
+    assert cand_1_results_sum.perc_successful_checks == 1
+
+    cand_1_results_sum = results[0][5]
+    assert cand_1_results_sum.responses == [response_sum_0]
+    assert cand_1_results_sum.num_code_blocks == 1
+    assert cand_1_results_sum.num_checks == 2
+    assert cand_1_results_sum.num_successful_checks == 2
+    assert cand_1_results_sum.perc_successful_checks == 1
+
+    # candidate 2 - subtract eval; all 3 should have same results
+    cand_2_results_subtract = results[1][0]
+    cand_2_results_subtract.to_dict()
+    assert cand_2_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_2_results_subtract.num_code_blocks == 2
+    assert cand_2_results_subtract.num_checks == 5
+    assert cand_2_results_subtract.num_successful_checks == 4
+    assert cand_2_results_subtract.perc_successful_checks == 4 / 5
+
+    cand_2_results_subtract = results[1][1]
+    cand_2_results_subtract.to_dict()
+    assert cand_2_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_2_results_subtract.num_code_blocks == 2
+    assert cand_2_results_subtract.num_checks == 5
+    assert cand_2_results_subtract.num_successful_checks == 4
+    assert cand_2_results_subtract.perc_successful_checks == 4 / 5
+
+    cand_2_results_subtract = results[1][2]
+    cand_2_results_subtract.to_dict()
+    assert cand_2_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_2_results_subtract.num_code_blocks == 2
+    assert cand_2_results_subtract.num_checks == 5
+    assert cand_2_results_subtract.num_successful_checks == 4
+    assert cand_2_results_subtract.perc_successful_checks == 4 / 5
+
+    # candidate 2 - sum eval; all 3 should have same results
+    cand_2_results_sum = results[1][3]
+    assert cand_2_results_sum.responses == [response_sum_0]
+    assert cand_2_results_sum.num_code_blocks == 1
+    assert cand_2_results_sum.num_checks == 2
+    assert cand_2_results_sum.num_successful_checks == 2
+    assert cand_2_results_sum.perc_successful_checks == 1
+
+    cand_2_results_sum = results[1][4]
+    assert cand_2_results_sum.responses == [response_sum_0]
+    assert cand_2_results_sum.num_code_blocks == 1
+    assert cand_2_results_sum.num_checks == 2
+    assert cand_2_results_sum.num_successful_checks == 2
+    assert cand_2_results_sum.perc_successful_checks == 1
+
+    cand_2_results_sum = results[1][5]
+    assert cand_2_results_sum.responses == [response_sum_0]
+    assert cand_2_results_sum.num_code_blocks == 1
+    assert cand_2_results_sum.num_checks == 2
+    assert cand_2_results_sum.num_successful_checks == 2
+    assert cand_2_results_sum.perc_successful_checks == 1
+
+def test__evals__num_samples__greater_than_one__non_async__via_call(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+    """Tests num_samples > 1 for non-async evals and when we pass num_samples to __call__()."""
+    subtract_config = fake_eval_subtract_two_numbers.copy()
+    sum_config = fake_eval_sum_two_numbers.copy()
+
+    response_subtract_0 = 'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```'  # noqa
+    response_subtract_1 = 'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```'  # noqa
+    response_sum_0 = 'This is the response.\n\n```\ndef sum_two_numbers(a, b):\n    return a + b\n```'  # noqa
+    responses_lookup = {
+        fake_eval_subtract_two_numbers['test_sequence'][0]['prompt']: response_subtract_0,
+        fake_eval_subtract_two_numbers['test_sequence'][1]['prompt']: response_subtract_1,
+        fake_eval_sum_two_numbers['test_sequence'][0]['prompt']: response_sum_0,
+    }
+
+    candidate_1_dict = {
+        'metadata': {'uuid': 'candidate_1'},
+        'candidate_type': 'MockCandidate',
+        'responses': responses_lookup,
+    }
+    candidate_2_dict = deepcopy(candidate_1_dict)
+    candidate_2_dict['metadata']['uuid'] = 'candidate_2'
+
+    eval_harness_via_dicts = EvalHarness(
+        evals=[subtract_config, sum_config],
+        candidates=[candidate_1_dict, candidate_2_dict],
+        num_cpus=1,
+        async_batch_size=1,
+    )
+    eval_harness_via_objects = EvalHarness(
+        evals=[Eval(**subtract_config), Eval(**sum_config)],
+        candidates=[Candidate.from_dict(candidate_1_dict), Candidate.from_dict(candidate_2_dict)],
+        num_cpus=1,
+        async_batch_size=1,
+    )
+    assert eval_harness_via_dicts.evals == eval_harness_via_objects.evals
+    assert eval_harness_via_dicts.candidates == eval_harness_via_objects.candidates
+
+    num_samples = 3
+    eval_harness = EvalHarness(
+        num_cpus=1,
+        async_batch_size=1,
+    )
+    assert eval_harness.evals != eval_harness_via_dicts.evals
+    assert eval_harness.candidates != eval_harness_via_dicts.candidates
+    eval_harness.add_eval(Eval(**subtract_config))
+    eval_harness.add_eval(Eval(**sum_config))
+    eval_harness.add_candidate(Candidate.from_dict(candidate_1_dict))
+    eval_harness.add_candidate(Candidate.from_dict(candidate_2_dict))
+    assert eval_harness.evals == eval_harness_via_dicts.evals
+    assert eval_harness.candidates == eval_harness_via_dicts.candidates
+    num_candidates = len(eval_harness.candidates)
+    num_evals = len(eval_harness.evals)
+
+    results = eval_harness(num_samples=num_samples)
+    assert len(results) == num_candidates
+    assert len(results[0]) == num_evals * num_samples
+    assert len(results[1]) == num_evals * num_samples
+    # The underlying candidate objects should have the same values but should be different objects
+    # because each candidate object (against a specific eval) is responsible for storing its own
+    # history/conversation and the history should be different for each eval.
+    assert results[0][0].candidate_obj == results[0][1].candidate_obj
+    assert results[0][0].candidate_obj is not results[0][1].candidate_obj
+    assert results[1][0].candidate_obj == results[1][1].candidate_obj
+    assert results[1][0].candidate_obj is not results[1][1].candidate_obj
+
+    # The first list should contain the results for candidate 1 (subtract eval * 3, sum eval * 3)
+    # 3 SAMPLES OF SUBTRACT EVAL
+    assert results[0][0].eval_obj == Eval(**subtract_config)
+    assert results[0][0].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][1].eval_obj == Eval(**subtract_config)
+    assert results[0][1].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][2].eval_obj == Eval(**subtract_config)
+    assert results[0][2].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    # 3 SAMPLES OF SUM EVAL
+    assert results[0][3].eval_obj == Eval(**sum_config)
+    assert results[0][3].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][4].eval_obj == Eval(**sum_config)
+    assert results[0][4].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0][5].eval_obj == Eval(**sum_config)
+    assert results[0][5].candidate_obj == Candidate.from_dict(candidate_1_dict)
+
+    # The second list should contain the results for candidate 2 (subtract eval, sum eval)
+    # 3 SAMPLES OF SUBTRACT EVAL
+    assert results[1][0].eval_obj == Eval(**subtract_config)
+    assert results[1][0].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][1].eval_obj == Eval(**subtract_config)
+    assert results[1][1].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][2].eval_obj == Eval(**subtract_config)
+    assert results[1][2].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    # 3 SAMPLES OF SUM EVAL
+    assert results[1][3].eval_obj == Eval(**sum_config)
+    assert results[1][3].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][4].eval_obj == Eval(**sum_config)
+    assert results[1][4].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1][5].eval_obj == Eval(**sum_config)
+    assert results[1][5].candidate_obj == Candidate.from_dict(candidate_2_dict)
+
+    # eval objects across candidates should have same values (same eval) but different objects
+    assert results[0][0].eval_obj == results[1][0].eval_obj
+    assert results[0][0].eval_obj is not results[1][0].eval_obj
+    assert results[0][0].eval_obj == results[0][1].eval_obj
+    assert results[0][0].eval_obj is not results[0][1].eval_obj
+    assert results[0][0].eval_obj == results[0][2].eval_obj
+    assert results[0][0].eval_obj is not results[0][2].eval_obj
+
+    assert results[0][3].eval_obj == results[1][3].eval_obj
+    assert results[0][3].eval_obj is not results[1][3].eval_obj
+    assert results[0][3].eval_obj == results[0][4].eval_obj
+    assert results[0][3].eval_obj is not results[0][4].eval_obj
+    assert results[0][3].eval_obj == results[0][5].eval_obj
+    assert results[0][3].eval_obj is not results[0][5].eval_obj
+
+    # candidate 1 - subtract eval; all 3 should have same results
+    cand_1_results_subtract = results[0][0]
+    cand_1_results_subtract.to_dict()
+    assert cand_1_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_1_results_subtract.num_code_blocks == 2
+    assert cand_1_results_subtract.num_checks == 5
+    assert cand_1_results_subtract.num_successful_checks == 4
+    assert cand_1_results_subtract.perc_successful_checks == 4 / 5
+
+    cand_1_results_subtract = results[0][1]
+    cand_1_results_subtract.to_dict()
+    assert cand_1_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_1_results_subtract.num_code_blocks == 2
+    assert cand_1_results_subtract.num_checks == 5
+    assert cand_1_results_subtract.num_successful_checks == 4
+    assert cand_1_results_subtract.perc_successful_checks == 4 / 5
+
+    cand_1_results_subtract = results[0][2]
+    cand_1_results_subtract.to_dict()
+    assert cand_1_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_1_results_subtract.num_code_blocks == 2
+    assert cand_1_results_subtract.num_checks == 5
+    assert cand_1_results_subtract.num_successful_checks == 4
+    assert cand_1_results_subtract.perc_successful_checks == 4 / 5
+
+    # candidate 1 - sum eval; all 3 should have same results
+    cand_1_results_sum = results[0][3]
+    assert cand_1_results_sum.responses == [response_sum_0]
+    assert cand_1_results_sum.num_code_blocks == 1
+    assert cand_1_results_sum.num_checks == 2
+    assert cand_1_results_sum.num_successful_checks == 2
+    assert cand_1_results_sum.perc_successful_checks == 1
+
+    cand_1_results_sum = results[0][4]
+    assert cand_1_results_sum.responses == [response_sum_0]
+    assert cand_1_results_sum.num_code_blocks == 1
+    assert cand_1_results_sum.num_checks == 2
+    assert cand_1_results_sum.num_successful_checks == 2
+    assert cand_1_results_sum.perc_successful_checks == 1
+
+    cand_1_results_sum = results[0][5]
+    assert cand_1_results_sum.responses == [response_sum_0]
+    assert cand_1_results_sum.num_code_blocks == 1
+    assert cand_1_results_sum.num_checks == 2
+    assert cand_1_results_sum.num_successful_checks == 2
+    assert cand_1_results_sum.perc_successful_checks == 1
+
+    # candidate 2 - subtract eval; all 3 should have same results
+    cand_2_results_subtract = results[1][0]
+    cand_2_results_subtract.to_dict()
+    assert cand_2_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_2_results_subtract.num_code_blocks == 2
+    assert cand_2_results_subtract.num_checks == 5
+    assert cand_2_results_subtract.num_successful_checks == 4
+    assert cand_2_results_subtract.perc_successful_checks == 4 / 5
+
+    cand_2_results_subtract = results[1][1]
+    cand_2_results_subtract.to_dict()
+    assert cand_2_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_2_results_subtract.num_code_blocks == 2
+    assert cand_2_results_subtract.num_checks == 5
+    assert cand_2_results_subtract.num_successful_checks == 4
+    assert cand_2_results_subtract.perc_successful_checks == 4 / 5
+
+    cand_2_results_subtract = results[1][2]
+    cand_2_results_subtract.to_dict()
+    assert cand_2_results_subtract.responses == [response_subtract_0, response_subtract_1]
+    assert cand_2_results_subtract.num_code_blocks == 2
+    assert cand_2_results_subtract.num_checks == 5
+    assert cand_2_results_subtract.num_successful_checks == 4
+    assert cand_2_results_subtract.perc_successful_checks == 4 / 5
+
+    # candidate 2 - sum eval; all 3 should have same results
+    cand_2_results_sum = results[1][3]
+    assert cand_2_results_sum.responses == [response_sum_0]
+    assert cand_2_results_sum.num_code_blocks == 1
+    assert cand_2_results_sum.num_checks == 2
+    assert cand_2_results_sum.num_successful_checks == 2
+    assert cand_2_results_sum.perc_successful_checks == 1
+
+    cand_2_results_sum = results[1][4]
+    assert cand_2_results_sum.responses == [response_sum_0]
+    assert cand_2_results_sum.num_code_blocks == 1
+    assert cand_2_results_sum.num_checks == 2
+    assert cand_2_results_sum.num_successful_checks == 2
+    assert cand_2_results_sum.perc_successful_checks == 1
+
+    cand_2_results_sum = results[1][5]
+    assert cand_2_results_sum.responses == [response_sum_0]
+    assert cand_2_results_sum.num_code_blocks == 1
+    assert cand_2_results_sum.num_checks == 2
+    assert cand_2_results_sum.num_successful_checks == 2
+    assert cand_2_results_sum.perc_successful_checks == 1

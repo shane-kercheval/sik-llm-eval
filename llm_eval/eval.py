@@ -560,6 +560,23 @@ class EvalHarness:
     very large number of requests such as OpenAI, the `async_batch_size` can be set to a large
     number. If the Candidate is a local model, the `async_batch_size` should be set to a small
     number to avoid performance issues (which will effect metrics such as characters per second).
+
+    Example usage:
+
+        ```python
+        from llm_eval import EvalHarness
+
+        harness = EvalHarness(
+            num_cpus=-1,
+            async_batch_size=50,
+            callback=print,  # optional
+            num_samples=5,  # optional
+        )
+        harness.add_evals_from_yamls('xxx/evals/')
+        harness.add_candidates_from_yamls('xxx/candidates/')
+        results = harness()
+    ```
+
     """
 
     def __init__(
@@ -568,7 +585,8 @@ class EvalHarness:
             candidates: list[Candidate | Callable | dict] | None = None,
             num_cpus: int | None = None,
             async_batch_size: int | None = 50,  # TODO: document None means async = # of evals
-            callback: Callable | None = None) -> None:
+            callback: Callable | None = None,
+            num_samples: int = 1) -> None:
         """
         Initializes the EvalHarness. The user can either pass in Eval and Candidate objects in the
         constructor or call
@@ -603,6 +621,12 @@ class EvalHarness:
                 used, for example, to save the EvalResult objects as they are generated (in case
                 the EvalHarness fails to complete due to an error or the user wants to save the
                 results as they are generated).
+            num_samples:
+                The number of samples to run for each Eval. This is useful for running multiple
+                samples for each Eval to get a better estimate of the performance metrics. Running
+                multiple samples only makes sense for a non-zero temperature for the LLM. A zero
+                temperature (or close) will give the same or very similar responses for each
+                sample, defeating the purpose of collecting a sample.
         """
         evals = evals or []
         eval_objects = []
@@ -612,6 +636,7 @@ class EvalHarness:
         self.num_cpus = num_cpus
         self.async_batch_size = async_batch_size
         self.callback = callback
+        self.num_samples = num_samples
 
         for eval_obj in evals:
             if isinstance(eval_obj, dict):
@@ -788,7 +813,7 @@ class EvalHarness:
                     callback(eval_result)
         return results
 
-    def __call__(self) -> list[list[EvalResult]]:
+    def __call__(self, num_samples: int | None = None) -> list[list[EvalResult]]:
         """
         Evaluates the Evals against the Candidates.
 
@@ -816,13 +841,23 @@ class EvalHarness:
 
         If a callback has been set, the callback will be called for each EvalResult after the
         corresponding checks have been executed for that Eval.
+
+        Args:
+            num_samples:
+                The number of samples to run for each Eval. num_samples can also be passed to the
+                constructor of EvalHarness. See notes in the constructor for more information. This
+                parameter will override the value passed to the constructor.
         """
         num_cpus = self.num_cpus
+        evals = self.evals
+        num_samples = num_samples or self.num_samples
+        if num_samples > 1:
+            evals = [eval_obj.clone() for eval_obj in evals for _ in range(num_samples)]
         if num_cpus == 1:
             return [
                 EvalHarness._run_evals(
                     candidate=candidate,
-                    evals=self.evals,
+                    evals=evals,
                     async_batch_size=self.async_batch_size,
                     callback=self.callback,
                 )
@@ -833,7 +868,7 @@ class EvalHarness:
         results = []
         for i in range(0, len(self.candidates), num_cpus):
             candidate_batch = self.candidates[i:i + num_cpus]
-            eval_list = [self.evals for _ in candidate_batch]
+            eval_list = [evals for _ in candidate_batch]
             batch_sizes = [self.async_batch_size for _ in candidate_batch]
             callbacks = [self.callback for _ in candidate_batch]
             with ProcessPoolExecutor(max_workers=num_cpus) as executor:
