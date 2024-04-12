@@ -12,7 +12,7 @@ performance (e.g. characters per second).
 """
 import yaml
 from copy import deepcopy
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from enum import Enum, auto
 from textwrap import dedent
 from typing import Callable, List, Type, Union
@@ -66,6 +66,22 @@ class Candidate(DictionaryEqualsMixin, ABC):
     @abstractmethod
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
+
+    @abstractproperty
+    def total_tokens(self) -> int:
+        """Returns the total number of tokens processed by the model."""
+
+    @abstractproperty
+    def input_tokens(self) -> int:
+        """Returns the total number of input tokens processed by the model."""
+
+    @abstractproperty
+    def response_tokens(self) -> int:
+        """Returns the total number of response tokens returned by the model."""
+
+    @abstractproperty
+    def cost(self) -> float:
+        """Returns the total cost of using the model."""
 
     @classmethod
     def register(cls, candidate_type: str | Enum):  # noqa: ANN102
@@ -194,6 +210,26 @@ class CallableCandidate(Candidate):
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
+
+    @property
+    def total_tokens(self) -> int:
+        """Not implemented for CallableCandidate."""
+        return None
+
+    @property
+    def input_tokens(self) -> int:
+        """Not implemented for CallableCandidate."""
+        return None
+
+    @property
+    def response_tokens(self) -> int:
+        """Not implemented for CallableCandidate."""
+        return None
+
+    @property
+    def cost(self) -> float:
+        """Not implemented for CallableCandidate."""
+        return None
 
 
 @Candidate.register(CandidateType.OPENAI)
@@ -333,3 +369,8 @@ class HuggingFaceEndpointCandidate(Candidate):
     def response_tokens(self) -> int:
         """Returns the total number of response tokens returned by the model."""
         return self.model.response_tokens
+
+    @property
+    def cost(self) -> float:
+        """Not implemented for HuggingFace."""
+        return None

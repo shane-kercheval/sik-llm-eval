@@ -1,6 +1,7 @@
 """Contains helper functions for interacting with OpenAI models."""
 from typing import Callable
 from functools import cache
+import numpy as np
 import tiktoken
 from tiktoken import Encoding
 from llm_eval.llms.message_formatters import openai_message_formatter
@@ -262,34 +263,50 @@ class OpenAIChat(ChatModel):
                 messages=messages,
                 timeout=self.timeout,
                 stream=True,
+                logprobs=True,
                 seed=self.seed,
                 **self.parameters,
             )
             # extract the content/token from the streaming response and send to the callback
             # build up the message so that we can calculate usage/costs and send back the same
             # ExchangeRecord response that we would return if we weren't streaming
-            def get_delta(chunk):  # noqa
-                return chunk.choices[0].delta.content
+            def get_delta(chunk) -> tuple[str, float]:  # noqa
+                choice = chunk.choices[0]
+                content = choice.delta.content
+                log_prob = choice.logprobs.content[0].logprob if content else np.nan
+                return content, log_prob
+
             response_message = ''
+            tokens = []
+            log_probs = []
             for chunk in response:
-                delta = get_delta(chunk)
+                delta, log_prob = get_delta(chunk)
                 if delta:
-                    self.streaming_callback(StreamingEvent(response=delta))
+                    self.streaming_callback(StreamingEvent(response=delta, logprob=log_prob))
                     response_message += delta
+                    tokens.append(delta)
+                    log_probs.append(log_prob)
         else:
             response = retry_handler()(
                 client.chat.completions.create,
                 model=self.model_name,
                 messages=messages,
                 timeout=self.timeout,
+                stream=False,
+                logprobs=True,
                 seed=self.seed,
                 **self.parameters,
             )
+            response.choices[0]
+            tokens = [x.token for x in response.choices[0].logprobs.content]
+            log_probs = [x.logprob for x in response.choices[0].logprobs.content]
             response_message = response.choices[0].message.content
 
         metadata = {
             'model_name': self.model_name,
             'parameters': self.parameters,
+            'tokens': tokens,
+            'log_probs': log_probs,
             'timeout': self.timeout,
         }
         return response_message, metadata
@@ -306,7 +323,11 @@ class OpenAIChat(ChatModel):
 
 
 class OpenAIServerChat(OpenAIChat):
-    """TODO Document."""
+    """
+    Some servers (e.g. llama.cpp, hugging face endpoints) allow callers to use OpenAI's API for
+    non-OpenAI models. This wrapper allows the caller to specify the base_url of the server to
+    connect to and uses OpenAI API to interact with the LLM.
+    """
 
     def __init__(
             self,
@@ -321,7 +342,6 @@ class OpenAIServerChat(OpenAIChat):
         """TODO document."""
         super().__init__(
             system_message=system_message,
-            message_formatter=openai_message_formatter,
             # token_calculator=len,
             # cost_calculator=None,
             memory_manager=memory_manager,
