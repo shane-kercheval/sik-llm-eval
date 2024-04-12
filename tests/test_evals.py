@@ -492,6 +492,22 @@ class MockCandidate(Candidate):
         value['responses'] = self.responses
         return value
 
+    @property
+    def total_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def input_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def response_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def cost(self) -> float:  # noqa
+        return None
+
 def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
     sum_config = fake_eval_sum_two_numbers.copy()
