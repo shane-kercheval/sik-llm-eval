@@ -167,6 +167,7 @@ class HuggingFaceEndpointChat(ChatModel):
         self.endpoint_url = endpoint_url
         self.streaming_callback = streaming_callback
         self.parameters = model_kwargs or {}
+        self.parameters['return_full_text'] = False
         self._max_streaming_tokens = max_streaming_tokens
         self._timeout = timeout
 
@@ -201,4 +202,4 @@ class HuggingFaceEndpointChat(ChatModel):
             'parameters': self.parameters,
             'timeout': self._timeout,
         }
-        return response, metadata
+        return response.strip(), metadata

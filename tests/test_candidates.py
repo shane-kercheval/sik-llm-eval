@@ -404,7 +404,9 @@ def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noq
     assert candidate.parameters == expected_candidate_parameters
 
     # check .parameters on model
-    assert candidate.model.parameters == expected_parameters
+    model_parameters = candidate.model.parameters.copy()
+    del model_parameters['return_full_text']
+    assert model_parameters == expected_parameters
 
     # ensure message is created correctly
     expected_message = template['parameters']['system_format'].format(system_message='a') \

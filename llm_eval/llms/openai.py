@@ -238,7 +238,7 @@ class OpenAIChat(ChatModel):
         """
         _create_client is used to create the OpenAI client. We cannot define this in __init__
         because it is not picklable and cannot be used with multiprocessing. Additionally, this
-        function lets OpenAIServerChat override the client creation and set the base_url to use
+        function lets OpenAIServerChat override the client creation and set the endpoint_url to use
         with a local server.
         """
         from openai import OpenAI
@@ -325,13 +325,14 @@ class OpenAIChat(ChatModel):
 class OpenAIServerChat(OpenAIChat):
     """
     Some servers (e.g. llama.cpp, hugging face endpoints) allow callers to use OpenAI's API for
-    non-OpenAI models. This wrapper allows the caller to specify the base_url of the server to
+    non-OpenAI models. This wrapper allows the caller to specify the endpoint_url of the server to
     connect to and uses OpenAI API to interact with the LLM.
     """
 
     def __init__(
             self,
-            base_url: str,
+            endpoint_url: str,
+            api_key: str | None = None,
             system_message: str = 'You are a helpful AI assistant.',
             streaming_callback: Callable[[StreamingEvent], None] | None = None,
             memory_manager: MemoryManager | None = None,
@@ -355,8 +356,9 @@ class OpenAIServerChat(OpenAIChat):
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed
-        self.base_url = base_url
+        self.endpoint_url = endpoint_url
+        self.api_key = api_key
 
     def _create_client(self) -> object:
         from openai import OpenAI
-        return OpenAI(base_url=self.base_url, api_key='none')
+        return OpenAI(base_url=self.endpoint_url, api_key=self.api_key)
