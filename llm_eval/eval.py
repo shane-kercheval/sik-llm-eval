@@ -464,10 +464,11 @@ class EvalResult(DictionaryEqualsMixin):
             if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
         )
 
-    @property
-    def code_block_tests_result(self) -> CheckResult | None:
+    def get_code_block_tests_result(self) -> CheckResult | None:
         """
-        Returns the CheckResult object for code block tests (PYTHON_CODE_BLOCK_TESTS) if it
+        Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
+
+        Returns the CheckResult object associated with the PythonCodeBlockTests check, if it
         exists, otherwise None.
         """
         results = [
@@ -479,6 +480,44 @@ class EvalResult(DictionaryEqualsMixin):
             return results[0]
         return None
 
+    def get_num_code_blocks_successful(self) -> int | None:
+        """
+        Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
+
+        Returns the number of code blocks generated that successfully execute across all responses.
+        If there are no code blocks or no PythonCodeBlockTests check, returns None.
+        """
+        result = self.get_code_block_tests_result()
+        if result:
+            return result.metadata.get('num_code_blocks_successful', None)
+        return None
+
+    def get_num_code_tests_defined(self) -> int | None:
+        """
+        Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
+
+        Returns the number of code tests defined (i.e. the number of individual tests for the
+        PythonCodeBlockTests check, if it exists). If there are no code blocks or no
+        PythonCodeBlockTests check, returns None.
+        """
+        result = self.get_code_block_tests_result()
+        if result:
+            return result.metadata.get('num_code_tests', None)
+        return None
+
+    def get_num_code_tests_successful(self) -> int | None:
+        """
+        Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
+
+        Returns the number of code tests (i.e. the number of individual tests for the
+        PythonCodeBlockTests check, if it exists) that successfully pass. If there
+        are no code blocks or no PythonCodeBlockTests check, returns None.
+        """
+        result = self.get_code_block_tests_result()
+        if result:
+            return result.metadata.get('num_code_tests_successful', None)
+        return None
+
     def __str__(self) -> str:
         cost_str = f'\n{" " * 12}Cost:{" " * 22} ${self.cost:.4f}' if self.cost else ''
         candidate_name = self.candidate_obj.metadata.get('name', '')
@@ -486,18 +525,26 @@ class EvalResult(DictionaryEqualsMixin):
             candidate_name = f"Candidate:{' ' * 18}{candidate_name}\n{' ' * 12}"
         eval_name = self.eval_obj.metadata.get('name', '')
         if eval_name:
-            eval_name = f"Eval:{' ' * 23}{eval_name}\n{' ' * 12}"
-        return dedent(f"""
+            eval_name = f"Eval:{' ' * 24}{eval_name}\n{' ' * 12}"
+        result = f"""
         EvalResult:
-            {candidate_name}{eval_name}# of Prompts Tested:        {len(self.eval_obj.test_sequence)}{cost_str}
-            Total Response Time:        {self.total_time_seconds:0.1f} seconds
-            # of Response Characters:   {self.response_characters:,}
-            Characters per Second:      {self.characters_per_second:,.1f}
-            # of Code Blocks Generated: {self.num_code_blocks}
-            # of Checks:                {self.num_checks}
-            # of Successful Checks:     {self.num_successful_checks}
-            % of Successful Checks:     {self.perc_successful_checks or 0:.1%}
-        """).strip()  # noqa: E501
+            {candidate_name}{eval_name}# of Prompts Tested:         {len(self.eval_obj.test_sequence)}{cost_str}
+            Total Response Time:         {self.total_time_seconds:0.1f} seconds
+            # of Response Characters:    {self.response_characters:,}
+            Characters per Second:       {self.characters_per_second:,.1f}
+            # of Checks:                 {self.num_checks}
+            # of Successful Checks:      {self.num_successful_checks}
+            % of Successful Checks:      {self.perc_successful_checks or 0:.1%}
+            # of Code Blocks Generated:  {self.num_code_blocks}
+        """  # noqa
+        result = result.rstrip()
+        if self.get_code_block_tests_result():
+            result += f"""
+            # of Successful Code Blocks: {self.get_num_code_blocks_successful()}
+            # of Code Tests Defined:     {self.get_num_code_tests_defined()}
+            # of Successful Code Tests:  {self.get_num_code_tests_successful()}
+            """
+        return dedent(result).strip()
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the EvalResult."""
