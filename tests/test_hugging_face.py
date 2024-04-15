@@ -240,7 +240,7 @@ def test_HuggingFaceEndpointChat(hugging_face_endpoint):  # noqa
     assert history[1].prompt == prompt
     assert history[1].response == response
     assert message.metadata['endpoint_url'] == hugging_face_endpoint
-    pattern = fr'^{model.system_message}\[INST\].*?{previous_prompt}.*?\[\/INST\].*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
+    pattern = fr'^{model.system_message}\[INST\].*?{previous_prompt}.*?\[\/INST\].*?\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
     assert pattern_found(message.metadata['messages'], pattern)
     assert message.metadata['messages'].count('[INST]') == 2
     assert message.metadata['messages'].count('[/INST]') == 2
@@ -397,7 +397,7 @@ def test_HuggingFaceEndpointChat__memory_manager__1000_tokens(hugging_face_endpo
     assert history[1].prompt == prompt
     assert history[1].response == response
     assert message.metadata['endpoint_url'] == hugging_face_endpoint
-    pattern = fr'^{model.system_message}\[INST\].*?{previous_prompt}.*?\[\/INST\].*?{re.escape(previous_response)}.*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
+    pattern = fr'^{model.system_message}\[INST\].*?{previous_prompt}.*?\[\/INST\].*?{re.escape(previous_response)}.*?\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
     assert pattern_found(message.metadata['messages'], pattern)
     assert message.metadata['messages'].count('[INST]') == 2
     assert message.metadata['messages'].count('[/INST]') == 2
@@ -636,7 +636,7 @@ def test_HuggingFaceEndpointChat__memory_manager__LastNExchangesManager_1(huggin
     assert history[1].prompt == prompt
     assert history[1].response == response
     assert message.metadata['endpoint_url'] == hugging_face_endpoint
-    pattern = fr'^{model.system_message}\[INST\].*?{previous_prompt}.*?\[\/INST\].*?{re.escape(previous_response)}.*?\n\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
+    pattern = fr'^{model.system_message}\[INST\].*?{previous_prompt}.*?\[\/INST\].*?{re.escape(previous_response)}.*?\[INST\].*?{prompt}.*?\[\/INST\]'  # noqa
     assert pattern_found(message.metadata['messages'], pattern)
     assert message.metadata['messages'].count('[INST]') == 2
     assert message.metadata['messages'].count('[/INST]') == 2

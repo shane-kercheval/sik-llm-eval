@@ -312,7 +312,7 @@ class HuggingFaceEndpointCandidate(Candidate):
                 A dictionary of metadata about the Candidate.
             parameters:
                 A dictionary of parameters passed to OpenAI. `endpoint_url`, `system_format`,
-                `prompt_format`, and `response_format` are required parameters. Other parameters
+                `prompt_format`, and `response_prefix` are required parameters. Other parameters
                 such as `system_message` and model-specific parameters (e.g. `temperature`) can be
                 passed.
 
@@ -321,18 +321,18 @@ class HuggingFaceEndpointCandidate(Candidate):
                 ```
                 system_format: '[INST] <<SYS>> {system_message} <</SYS>> [/INST]\n'
                 prompt_format: '[INST] {prompt} [/INST]\n'
-                response_format: '{response}\n'
+                response_prefix: '\n'
                 ```
         """   # noqa
         parameters = deepcopy(parameters)
         self.system_format = parameters.pop('system_format')
         self.prompt_format = parameters.pop('prompt_format')
-        self.response_format = parameters.pop('response_format')
+        self.response_prefix = parameters.pop('response_prefix')
         super().__init__(metadata=metadata, parameters=parameters)
         message_formatter = MessageFormatter(
             system_format=self.system_format,
             prompt_format=self.prompt_format,
-            response_format=self.response_format,
+            response_prefix=self.response_prefix,
         )
         self.model = HuggingFaceEndpointChat(
             message_formatter=message_formatter,
@@ -351,8 +351,8 @@ class HuggingFaceEndpointCandidate(Candidate):
             value['parameters']['system_format'] = self.system_format
         if self.prompt_format:
             value['parameters']['prompt_format'] = self.prompt_format
-        if self.response_format:
-            value['parameters']['response_format'] = self.response_format
+        if self.response_prefix:
+            value['parameters']['response_prefix'] = self.response_prefix
         return value
 
     @property
