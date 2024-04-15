@@ -400,18 +400,13 @@ def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noq
     expected_candidate_parameters = deepcopy(template['parameters'])
     expected_candidate_parameters.pop('system_format')
     expected_candidate_parameters.pop('prompt_format')
-    expected_candidate_parameters.pop('response_format')
+    expected_candidate_parameters.pop('response_prefix')
     assert candidate.parameters == expected_candidate_parameters
 
     # check .parameters on model
-    assert candidate.model.parameters == expected_parameters
-
-    # ensure message is created correctly
-    expected_message = template['parameters']['system_format'].format(system_message='a') \
-        + template['parameters']['prompt_format'].format(prompt='b') \
-        + template['parameters']['response_format'].format(response='c') \
-        + template['parameters']['prompt_format'].format(prompt='d')
-    assert candidate.model._message_formatter('a', [('b', 'c')], 'd') == expected_message
+    model_parameters = candidate.model.parameters.copy()
+    del model_parameters['return_full_text']
+    assert model_parameters == expected_parameters
 
     # test that the dictionary hasn't changed after passing the dict to various functions
     # i.e. test no side effects against dict

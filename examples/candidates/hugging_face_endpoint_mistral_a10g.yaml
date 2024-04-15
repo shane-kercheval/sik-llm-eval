@@ -17,4 +17,4 @@ parameters:
   temperature: 0.01
   system_format: "{system_message}"
   prompt_format: "[INST]{prompt}[/INST]"
-  response_format: "{response}\n"
+  response_prefix: "\n"

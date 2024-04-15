@@ -3,7 +3,7 @@ EvalResult:
     # of Prompts Tested:         2
     Total Response Time:         0.0 seconds
     # of Response Characters:    1,476
-    Characters per Second:       80,197,532.5
+    Characters per Second:       181,047,483.9
     # of Checks:                 7
     # of Successful Checks:      4
     % of Successful Checks:      57.1%
