@@ -1,0 +1,13 @@
+EvalResult:
+    Eval:                        Test Eval
+    # of Prompts Tested:         2
+    Total Response Time:         0.0 seconds
+    # of Response Characters:    1,476
+    Characters per Second:       80,197,532.5
+    # of Checks:                 7
+    # of Successful Checks:      4
+    % of Successful Checks:      57.1%
+    # of Code Blocks Generated:  3
+    # of Successful Code Blocks: 3
+    # of Code Tests Defined:     6
+    # of Successful Code Tests:  4

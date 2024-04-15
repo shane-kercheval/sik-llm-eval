@@ -227,7 +227,7 @@ def test__Eval__from_objects__minimal():  # noqa
     assert result.num_code_blocks == 0
     assert result.all_check_results == []
     assert not result.expects_code_blocks
-    assert result.code_block_tests_result is None
+    assert result.get_code_block_tests_result() is None
     assert result.total_time_seconds > 0
 
 def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  # noqa
@@ -271,7 +271,7 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     flatted_check_results = [r for tests in eval_result_dict['results'] for r in tests]
     assert flatted_check_results == [r.to_dict() for r in eval_result.all_check_results]
     assert eval_result.expects_code_blocks
-    assert eval_result.code_block_tests_result is None
+    assert eval_result.get_code_block_tests_result() is None
     assert eval_result.total_time_seconds > 0
     # check that the eval_result_dict will recreate the exact eval_result object
     recreated_eval = EvalResult(**eval_result_dict)
@@ -284,7 +284,7 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     for c, r in zip(flatted_checks, eval_result.all_check_results, strict=True):
         assert c.check_type == r.metadata['check_type']
     assert eval_result.expects_code_blocks
-    assert eval_result.code_block_tests_result is None
+    assert eval_result.get_code_block_tests_result() is None
 
 def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run):  # noqa
     """
@@ -346,6 +346,10 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
         yield from responses
     mock_llm_instance = mock_llm()
     eval_result = eval_obj(lambda _: next(mock_llm_instance))
+    # save the eval_result to a file as string str(eval_result) to check formatting
+    print(eval_result)
+    with open('tests/eval/eval_result.txt', 'w') as f:
+        f.write(str(eval_result))
 
     # we need to strip the code blocks of leading/trailing whitespace to compare them
     expected_config = deepcopy(config)
@@ -379,7 +383,7 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert isinstance(eval_result.results[1][2], ScoreResult)
     assert len(eval_result.all_check_results) == 7
     assert eval_result.expects_code_blocks
-    assert eval_result.code_block_tests_result is not None
+    assert eval_result.get_code_block_tests_result() is not None
 
     # Check 0.0
     assert eval_result.results[0][0].success
@@ -447,7 +451,7 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert result.cost == result.to_dict()['cost']
     assert len(result.all_check_results) == 2
     assert result.expects_code_blocks
-    assert result.code_block_tests_result is None
+    assert result.get_code_block_tests_result() is None
     assert result.all_check_results[0].success
     assert result.all_check_results[0].metadata['check_type'] == CheckType.CONTAINS.name
     assert result.all_check_results[1].success
