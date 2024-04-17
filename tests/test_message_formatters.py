@@ -110,6 +110,14 @@ def test__MessageFormatter():  # noqa
         None,
     )
     assert actual_value == expected_value
+    actual_value = message_formatter(
+        system,
+        [
+            {'user': message_prompt, 'assistant': message_response},
+        ],
+        None,
+    )
+    assert actual_value == expected_value
 
     expected_value = PROMPT_FORMAT_LLAMA.format(prompt=message_prompt) \
         + RESPONSE_PREFIX_LLAMA \
@@ -154,14 +162,23 @@ def test__MessageFormatter():  # noqa
         prompt,
     )
     assert actual_value == expected_value
+    actual_value = message_formatter(
+        system,
+        [
+            {'user': message_prompt, 'assistant': message_response},
+            {'user': message_prompt + '2', 'assistant': message_response + '2'},
+        ],
+        prompt,
+    )
+    assert actual_value == expected_value
 
 def test__LlamaMessageFormatter():  # noqa
-    assert LlamaMessageFormatter()(system_message=None, history=[], prompt=None) == ''
-    assert LlamaMessageFormatter()(system_message=None, history=None, prompt=None) == ''
+    assert LlamaMessageFormatter()(system_message=None, messages=[], prompt=None) == ''
+    assert LlamaMessageFormatter()(system_message=None, messages=None, prompt=None) == ''
 
     messages = LlamaMessageFormatter()(
         system_message=None,
-        history=[
+        messages=[
             ExchangeRecord(prompt='a', response='b'),
             ExchangeRecord(prompt='c', response='d'),
         ],
@@ -172,7 +189,7 @@ def test__LlamaMessageFormatter():  # noqa
 
     messages = LlamaMessageFormatter()(
         system_message='system',
-        history=[
+        messages=[
             ExchangeRecord(prompt='a', response='b'),
             ExchangeRecord(prompt='c', response='d'),
         ],
@@ -182,7 +199,7 @@ def test__LlamaMessageFormatter():  # noqa
 
     messages = LlamaMessageFormatter()(
         system_message='system',
-        history=[
+        messages=[
             ExchangeRecord(prompt='a', response='b'),
             ExchangeRecord(prompt='c', response='d'),
         ],

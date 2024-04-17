@@ -135,6 +135,8 @@ class Eval(DictionaryEqualsMixin):
     def __init__(
             self,
             test_sequence: list[PromptTest | dict] | dict | PromptTest,
+            system_message: str | None = None,
+            previous_messages: list[dict] | None = None,
             metadata: dict | None = None) -> None:
         """
         Initializes the Eval.
@@ -147,10 +149,20 @@ class Eval(DictionaryEqualsMixin):
         Args:
             test_sequence:
                 A list of PromptTest objects (prompt/check pairs) to run against the LLM.
+            system_message:
+                Sets/overrides the system message on the candidate object (and underlying LLM).
+                The eval clones the candidate object so the original candidate object is not
+                modified.
+            previous_messages:
+                Sets/overrides the previous messages on the candidate object (and underlying LLM).
+                The eval clones the candidate object so the original candidate object is not
+                modified.
             metadata:
                 Metadata associated with the Eval.
         """
         self.metadata = deepcopy(metadata) or {}
+        self.system_message = system_message
+        self.previous_messages = deepcopy(previous_messages) or []
         self._candidate = None
         self._responses = None
         self._duration = None
@@ -168,7 +180,6 @@ class Eval(DictionaryEqualsMixin):
                 raise TypeError(
                     "test_sequence must be either a PromptTest instance or a dictionary",
                 )
-
         # cannot add more than one PythonCodeBlockTests check across all tests
         run_checks = [
             # flatten all checks
@@ -214,8 +225,7 @@ class Eval(DictionaryEqualsMixin):
             config = yaml.safe_load(f)
         return cls(**config)
 
-    @staticmethod
-    def _to_candidate(candidate: Candidate | Callable | dict) -> Candidate:
+    def _to_candidate(self, candidate: Candidate | Callable | dict) -> Candidate:
         """Converts a candidate to a Candidate object."""
         if isinstance(candidate, dict):
             candidate = Candidate.from_dict(candidate)
@@ -228,6 +238,15 @@ class Eval(DictionaryEqualsMixin):
         else:
             assert isinstance(candidate, Candidate), \
                 "candidate must be either a Candidate, callable, or a dictionary"
+            # we do not want to modify the original candidate object in case it is used multiple
+            # times (i.e. for seperate Evals) e.g. if we set system_message or previous_messages
+            # on the candidate object, we only want to do it for this eval
+            candidate = candidate.clone()
+        # only override system/previous messages of the candidate if they are set on the eval
+        if self.system_message:
+            candidate.set_system_message(self.system_message)
+        if self.previous_messages:
+            candidate.set_message_history(self.previous_messages)
         return candidate
 
     def _generate_responses(self, candidate: Candidate | Callable | dict) -> None:

@@ -19,6 +19,13 @@ class MockLMM:
         self.llm_parameters = kwargs
         self.prompts = []
 
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        return
+
     def __call__(self, prompt: str) -> str:
         """Caches prompts for unit tests."""
         self.prompts.append(prompt)
@@ -43,6 +50,13 @@ class MockCandidate(Candidate):
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
+
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        return
 
     @property
     def total_tokens(self) -> int:  # noqa

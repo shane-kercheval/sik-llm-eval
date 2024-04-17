@@ -106,12 +106,14 @@ class MockCostMemoryManager(MemoryManager):
 class MockChatModel(ChatModel):
     """Used for unit tests to mock the behavior of an LLM."""
 
-    def __init__(
+    def __init__(  # noqa: D417
             self,
             token_calculator: Callable[[str | list[str] | object], int],
+            system_message: str = "This is a system message.",
             cost_calculator: Callable[[int, int], float] | None = None,
             return_prompt: str | None = None,
             message_formatter: Callable[[str, list[ExchangeRecord]], str] | None = None,
+            message_history: list[ExchangeRecord | dict | tuple] | None = None,
             memory_manager: MemoryManager | None = None) -> None:
         """
         Used to test base classes.
@@ -131,11 +133,12 @@ class MockChatModel(ChatModel):
         if message_formatter is None:
             message_formatter = LlamaMessageFormatter()
         super().__init__(
-            system_message="This is a system message.",
+            system_message=system_message,
             message_formatter=message_formatter,
             token_calculator=token_calculator,
             cost_calculator=cost_calculator,
             memory_manager=memory_manager,
+            message_history=message_history,
         )
         self.return_prompt = return_prompt
 
@@ -325,6 +328,13 @@ def fake_eval_sum_two_numbers_code_blocks_run() -> dict:
 def fake_eval_no_code_blocks() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_no_code_blocks.yaml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture()
+def fake_eval_with_previous_messages() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_eval_with_previous_messages.yaml') as f:
         return yaml.safe_load(f)
 
 

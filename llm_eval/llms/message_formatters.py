@@ -5,26 +5,56 @@ from llm_eval.llms.base import ExchangeRecord
 
 def openai_message_formatter(
         system_message: str | None,
-        history: list[ExchangeRecord] | None,
+        messages: list[ExchangeRecord | tuple | dict] | None,
         prompt: str | None) -> list[dict]:
     """
     A message formatter takes a system_message, list of messages (ExchangeRecord objects), and a
     prompt, and formats them according to the best practices for interacting with the model.
+
+    Args:
+        system_message:
+            A system message to include at the beginning of the formatted messages.
+        messages:
+            A list of ExchangeRecord objects, a list of dictionaries, or a list of tuples.
+
+            If a list of tuples, each tuple should have two elements: the prompt as the first
+            element and the response as the second element.
+
+            If a list of dictionaries is passed in, each dictionary contains a two key-value
+            pairs, where one key is 'user' and the value is the user's message, and the other
+            key is 'assistant' and the value is the assistant's response.
+        prompt:
+            A prompt to include at the end of the formatted messages.
     """
     # initial message; always keep system message regardless of memory_manager
-    messages = []
+    formatted_messages = []
     if system_message:
-        messages += [{'role': 'system', 'content': system_message}]
-    if history:
-        for message in history:
-            messages += [
-                {'role': 'user', 'content': message.prompt},
-                {'role': 'assistant', 'content': message.response},
-            ]
+        formatted_messages += [{'role': 'system', 'content': system_message}]
+    if messages:
+        for message in messages:
+            if isinstance(message, ExchangeRecord):
+                formatted_messages += [
+                    {'role': 'user', 'content': message.prompt},
+                    {'role': 'assistant', 'content': message.response},
+                ]
+            elif isinstance(message, tuple):
+                formatted_messages += [
+                    {'role': 'user', 'content': message[0]},
+                    {'role': 'assistant', 'content': message[1]},
+                ]
+            elif isinstance(message, dict):
+                formatted_messages += [
+                    {'role': 'user', 'content': message['user']},
+                    {'role': 'assistant', 'content': message['assistant']},
+                ]
+            else:
+                raise ValueError(
+                    f"Invalid message format: {message}. ",
+                    "Expected ExchangeRecord, tuple, or dict.",
+                )
     if prompt:
-        messages += [{'role': 'user', 'content': prompt}]
-    return messages
-
+        formatted_messages += [{'role': 'user', 'content': prompt}]
+    return formatted_messages
 
 # For example, for Lamma-2-7b, the messages should be formatted as follows:
 #     [INST] <<SYS>> You are a helpful assistant. <</SYS>> [/INST]
@@ -95,16 +125,44 @@ class MessageFormatter:
     def __call__(
             self,
             system_message: str | None,
-            history: list[ExchangeRecord | tuple] | None,
+            messages: list[ExchangeRecord | tuple | dict] | None,
             prompt: str | None) -> str:
-        """Formats messages for interacting with an LLM."""
+        """
+        Formats messages for interacting with an LLM.
+
+        Args:
+            system_message:
+                A system message to include at the beginning of the formatted messages.
+            messages:
+                A list of ExchangeRecord objects, a list of dictionaries, or a list of tuples.
+
+                If a list of tuples, each tuple should have two elements: the prompt as the first
+                element and the response as the second element.
+
+                If a list of dictionaries is passed in, each dictionary contains a two key-value
+                pairs, where one key is 'user' and the value is the user's message, and the other
+                key is 'assistant' and the value is the assistant's response.
+            prompt:
+                A prompt to include at the end of the formatted messages.
+        """
         formatted_messages = []
         if system_message:
             formatted_messages.append(self.system_format.format(system_message=system_message))
-        if history:
-            for message in history:
-                prompt_text = message.prompt if isinstance(message, ExchangeRecord) else message[0]
-                response_text = message.response if isinstance(message, ExchangeRecord) else message[1]  # noqa
+        if messages:
+            for message in messages:
+                if isinstance(message, ExchangeRecord):
+                    prompt_text = message.prompt
+                    response_text = message.response
+                elif isinstance(message, tuple):
+                    prompt_text, response_text = message
+                elif isinstance(message, dict):
+                    prompt_text = message['user']
+                    response_text = message['assistant']
+                else:
+                    raise ValueError(
+                        f"Invalid message format: {message}. ",
+                        "Expected ExchangeRecord, tuple, or dict.",
+                    )
                 formatted_prompt = self.prompt_format.format(prompt=prompt_text)
                 formatted_response = self.response_prefix + response_text
                 formatted_messages.append(formatted_prompt + formatted_response)

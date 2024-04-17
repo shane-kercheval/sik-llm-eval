@@ -545,9 +545,10 @@ class ChatModel(PromptModel):
 
     def __init__(
             self,
-            system_message: str,
-            message_formatter: Callable[[str | None, list[ExchangeRecord] | None, str | None], list | str],  # noqa
+            system_message: str | None,
+            message_formatter: Callable[[str | None, list[ExchangeRecord] | list[tuple] | None, str | None], list | str],  # noqa
             token_calculator: Callable[[list[str]], int] | Callable[[str], int],
+            message_history: list[ExchangeRecord | dict | tuple] | None = None,
             cost_calculator: Callable[[int, int], float] | None = None,
             memory_manager: MemoryManager | None = None,
             ):
@@ -560,6 +561,13 @@ class ChatModel(PromptModel):
                 and returns a list of messages to send to the model.
             token_calculator:
                 A callable that returns number of tokens in the message(s)
+            message_history:
+                A list of ExchangeRecord objects, a list of dictionaries, or a list of tuples.
+                If a list of tuples is passed in, each tuple should have two elements: the prompt
+                as the first element and the response as the second element.
+                If a list of dictionaries is passed in, each dictionary contains a two key-value
+                pairs, where one key is 'user' and the value is the user's message, and the other
+                key is 'assistant' and the value is the assistant's response.
             cost_calculator:
                 A callable that takes the number of tokens in the prompt and response and returns
                 the cost.
@@ -568,12 +576,57 @@ class ChatModel(PromptModel):
                 send to the model.
         """
         super().__init__(token_calculator=token_calculator, cost_calculator=cost_calculator)
-        self._chat_history: list[ExchangeRecord] = []
-        self.system_message = system_message
+        self.set_system_message(system_message)
+        self.set_message_history(messages=message_history)
         self._message_formatter = message_formatter
         self._token_calculator = token_calculator
         self._memory_manager = memory_manager
         self._previous_messages = None
+
+
+    def set_system_message(self, system_message: str | None) -> None:
+        """Sets the system message."""
+        if not system_message:
+            system_message = None
+        self.system_message = system_message
+
+    def set_message_history(
+            self,
+            messages: list[ExchangeRecord | dict | tuple] | None,
+            ) -> None:
+        """
+        Sets the messages to be used in the next chat request. For example, used for
+        few-shot learning.
+
+        Args:
+            messages: A list of ExchangeRecord objects, a list of dictionaries, or a list of
+                tuples.
+
+                If a list of tuples, each tuple should have two elements: the prompt as the first
+                element and the response as the second element.
+
+                If a list of dictionaries is passed in, each dictionary contains a two key-value
+                pairs, where one key is 'user' and the value is the user's message, and the other
+                key is 'assistant' and the value is the assistant's response.
+        """
+        if not messages:
+            messages = []
+        elif isinstance(messages[0], tuple):
+            messages = [ExchangeRecord(prompt=p, response=r) for p, r in messages]
+        elif isinstance(messages[0], dict):
+                messages = [
+                    ExchangeRecord(
+                        prompt=m['user'],
+                        response=m['assistant'],
+                    ) for m in messages
+                ]
+        else:
+            assert isinstance(messages[0], ExchangeRecord)
+            # create new exchange record that is a copy of the old one
+            # (old metadata is not relevant)
+            messages = [ExchangeRecord(prompt=m.prompt, response=m.response) for m in messages]
+        self._chat_history = messages
+
 
     def __call__(self, prompt: str) -> str:
         """
@@ -594,9 +647,14 @@ class ChatModel(PromptModel):
         else:
             messages = self._message_formatter(
                 system_message=self.system_message,
-                history=self._chat_history,
+                messages=self._chat_history,
                 prompt=prompt,
             )
+        # self._chat_history is the chat history that is stored by the class (i.e. memory) and used
+        # to generate the messages to the LLM.
+        # self._previous_messages stores the string/list of messages that was last sent to the LLM
+        # in the format that the LLM expects (i.e. based on the message formatter and the memory
+        # manager (if one was supplied)
         self._previous_messages = messages
         response = super().__call__(prompt=messages)
         self._history[-1].prompt = prompt

@@ -182,7 +182,7 @@ def test_ChatModel__no_costs():  # noqa
 
     expected_message_0 = LlamaMessageFormatter()(
         system_message=model.system_message,
-        history=None,
+        messages=None,
         prompt=prompt,
     )
     assert expected_message_0.count("<<SYS>>") == 1
@@ -225,7 +225,7 @@ def test_ChatModel__no_costs():  # noqa
 
     expected_message_1 = LlamaMessageFormatter()(
         system_message=model.system_message,
-        history=[model._history[0]],
+        messages=[model._history[0]],
         prompt=prompt,
     )
     assert expected_message_1.count("<<SYS>>") == 1
@@ -286,7 +286,7 @@ def test_ChatModel__has_token_counter_and_costs():  # noqa
 
     expected_message_0 = LlamaMessageFormatter()(
         system_message=model.system_message,
-        history=None,
+        messages=None,
         prompt=prompt,
     )
 
@@ -334,7 +334,7 @@ def test_ChatModel__has_token_counter_and_costs():  # noqa
 
     expected_message_1 = LlamaMessageFormatter()(
         system_message=model.system_message,
-        history=[model._history[0]],
+        messages=[model._history[0]],
         prompt=prompt,
     )
     expected_input_tokens = len(expected_message_1)
@@ -675,3 +675,200 @@ def test_Records_to_string():  # noqa
     assert 'response: "response' in str(ExchangeRecord(prompt='prompt', response='response', total_tokens=1000, cost=1.5))  # noqa
     assert 'cost: $1.5' in str(ExchangeRecord(prompt='prompt', response='response', total_tokens=1000, cost=1.5))  # noqa
     assert 'total_tokens: 1,000' in str(ExchangeRecord(prompt='prompt', response='response', total_tokens=1000, cost=1.5))  # noqa
+
+user_assistant_formatted_messages = [
+        {
+            'user': "|User Message 1|",
+            'assistant': "|Assistant Response 1|",
+        },
+        {
+            'user': "|User Message 2|",
+            'assistant': "|Assistant Response 2|",
+        },
+    ]
+@pytest.mark.parametrize(("message_history", "formatted_messages"), [
+    (
+        [
+            ('|User Message 1|', '|Assistant Response 1|'),
+            ('|User Message 2|', '|Assistant Response 2|'),
+        ],
+        user_assistant_formatted_messages,
+    ),
+    (
+        [
+            ExchangeRecord(prompt='|User Message 1|', response='|Assistant Response 1|'),
+            ExchangeRecord(prompt='|User Message 2|', response='|Assistant Response 2|'),
+        ],
+        user_assistant_formatted_messages,
+    ),
+    (
+        user_assistant_formatted_messages, user_assistant_formatted_messages,
+    ),
+])
+def test_ChatModel__set_system_messages_set_message_history(message_history: list, formatted_messages):  # noqa
+    original_system_message = "This is the original system message."
+    system_message = "|System message|"
+    prompt_1 = "|New Prompt 1|"
+    prompt_2 = "|New Prompt 2|"
+
+    # test setting system message and message history
+    assert len(message_history) == 2
+    formatter = LlamaMessageFormatter()
+    model = MockChatModel(
+        system_message = original_system_message,
+        token_calculator=len,
+        message_formatter=formatter,
+    )
+    assert model.system_message == original_system_message
+    model.set_system_message(None)
+    assert model.system_message is None
+    model.set_system_message('Not None')
+    assert model.system_message == 'Not None'
+    model.set_system_message('')
+    assert model.system_message is None
+    model.set_system_message(system_message)
+    assert model.system_message == system_message
+    model.set_message_history(message_history)
+    assert isinstance(model._chat_history, list)
+    assert len(model._chat_history) == 2
+    assert isinstance(model._chat_history[0], ExchangeRecord)
+    assert model._chat_history[0].prompt == formatted_messages[0]['user']
+    assert model._chat_history[0].response == formatted_messages[0]['assistant']
+    assert model._chat_history[1].prompt == formatted_messages[1]['user']
+    assert model._chat_history[1].response == formatted_messages[1]['assistant']
+
+    ####
+    # first interaction
+    ####
+    response_1 = model(prompt_1)
+    expected_message_1 = formatter(
+        system_message=system_message,
+        messages=message_history,
+        prompt=prompt_1,
+    )
+    # _previous_messages shows the last set of messages that was sent to the LLM in (the format
+    # that the LLM expects based on message formatter) i.e. it's what the model actually saw
+    assert model._previous_messages == expected_message_1
+    assert model.previous_record().metadata['messages'] == expected_message_1
+    assert isinstance(response_1, str)
+    assert len(response_1) > 1
+
+    assert model.system_message == system_message
+    assert isinstance(model._chat_history, list)
+    assert len(model._chat_history) == 3
+    assert isinstance(model._chat_history[0], ExchangeRecord)
+    assert model._chat_history[0].prompt == formatted_messages[0]['user']
+    assert model._chat_history[0].response == formatted_messages[0]['assistant']
+    assert model._chat_history[1].prompt == formatted_messages[1]['user']
+    assert model._chat_history[1].response == formatted_messages[1]['assistant']
+    assert model._chat_history[2].prompt == prompt_1
+    assert model._chat_history[2].response == response_1
+
+    response_2 = model(prompt_2)
+    assert response_2 != response_1
+    assert isinstance(response_2, str)
+    assert len(response_2) > 1
+    # now we expect the messages to be the original system message, the original messages that
+    # were manually set, and the new message (prompt_1, response_1)
+    expected_message_2 = LlamaMessageFormatter()(
+        system_message=model.system_message,
+        messages=[*message_history, (prompt_1, response_1)],
+        prompt=prompt_2,
+    )
+    assert model._previous_messages == expected_message_2
+    assert model.previous_record().metadata['messages'] == expected_message_2
+    assert model.system_message == system_message
+    assert isinstance(model._chat_history, list)
+    assert len(model._chat_history) == 4
+    assert isinstance(model._chat_history[0], ExchangeRecord)
+    assert model._chat_history[0].prompt == formatted_messages[0]['user']
+    assert model._chat_history[0].response == formatted_messages[0]['assistant']
+    assert model._chat_history[1].prompt == formatted_messages[1]['user']
+    assert model._chat_history[1].response == formatted_messages[1]['assistant']
+    assert model._chat_history[2].prompt == prompt_1
+    assert model._chat_history[2].response == response_1
+    assert model._chat_history[3].prompt == prompt_2
+    assert model._chat_history[3].response == response_2
+
+def test_ChatModel__set_system_messages_set_message_history__constructor():  # noqa
+    original_system_message = "This is the original system message."
+    system_message = "|System message|"
+    prompt_1 = "|New Prompt 1|"
+    prompt_2 = "|New Prompt 2|"
+    ####
+    # first interaction
+    ####
+    formatter = LlamaMessageFormatter()
+    model = MockChatModel(
+        system_message = original_system_message,
+        token_calculator=len,
+        message_formatter=formatter,
+        message_history=user_assistant_formatted_messages,
+    )
+    assert model.system_message == original_system_message
+    model.set_system_message(None)
+    assert model.system_message is None
+    model.set_system_message('Not None')
+    assert model.system_message == 'Not None'
+    model.set_system_message('')
+    assert model.system_message is None
+    model.set_system_message(system_message)
+    assert model.system_message == system_message
+    # model.set_message_history(message_history)
+    assert isinstance(model._chat_history, list)
+    assert len(model._chat_history) == 2
+    assert isinstance(model._chat_history[0], ExchangeRecord)
+    assert model._chat_history[0].prompt == user_assistant_formatted_messages[0]['user']
+    assert model._chat_history[0].response == user_assistant_formatted_messages[0]['assistant']
+    assert model._chat_history[1].prompt == user_assistant_formatted_messages[1]['user']
+    assert model._chat_history[1].response == user_assistant_formatted_messages[1]['assistant']
+
+    response_1 = model(prompt_1)
+    expected_message_1 = formatter(
+        system_message=system_message,
+        messages=user_assistant_formatted_messages,
+        prompt=prompt_1,
+    )
+    # _previous_messages shows the last set of messages that was sent to the LLM in (the format
+    # that the LLM expects based on message formatter) i.e. it's what the model actually saw
+    assert model._previous_messages == expected_message_1
+    assert model.previous_record().metadata['messages'] == expected_message_1
+    assert isinstance(response_1, str)
+    assert len(response_1) > 1
+
+    assert model.system_message == system_message
+    assert isinstance(model._chat_history, list)
+    assert len(model._chat_history) == 3
+    assert isinstance(model._chat_history[0], ExchangeRecord)
+    assert model._chat_history[0].prompt == user_assistant_formatted_messages[0]['user']
+    assert model._chat_history[0].response == user_assistant_formatted_messages[0]['assistant']
+    assert model._chat_history[1].prompt == user_assistant_formatted_messages[1]['user']
+    assert model._chat_history[1].response == user_assistant_formatted_messages[1]['assistant']
+    assert model._chat_history[2].prompt == prompt_1
+    assert model._chat_history[2].response == response_1
+
+    response_2 = model(prompt_2)
+    assert response_2 != response_1
+    assert isinstance(response_2, str)
+    assert len(response_2) > 1
+    # now we expect the messages to be the original system message, the original messages that
+    # were manually set, and the new message (prompt_1, response_1)
+    expected_message_2 = LlamaMessageFormatter()(
+        system_message=model.system_message,
+        messages=[*user_assistant_formatted_messages, {'user': prompt_1, 'assistant': response_1}],
+        prompt=prompt_2,
+    )
+    assert model._previous_messages == expected_message_2
+    assert model.previous_record().metadata['messages'] == expected_message_2
+    assert model.system_message == system_message
+    assert isinstance(model._chat_history, list)
+    assert len(model._chat_history) == 4
+    assert isinstance(model._chat_history[0], ExchangeRecord)
+    assert model._chat_history[0].prompt == user_assistant_formatted_messages[0]['user']
+    assert model._chat_history[0].response == user_assistant_formatted_messages[0]['assistant']
+    assert model._chat_history[1].prompt == user_assistant_formatted_messages[1]['user']
+    assert model._chat_history[1].response == user_assistant_formatted_messages[1]['assistant']
+    assert model._chat_history[2].prompt == prompt_1
+    assert model._chat_history[2].response == response_1
+    assert model._chat_history[3].prompt == prompt_2
+    assert model._chat_history[3].response == response_2

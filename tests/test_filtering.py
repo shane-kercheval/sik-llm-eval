@@ -45,6 +45,12 @@ class MockCandidate(Candidate):
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
 
+    def set_system_message(self, system_message: str) -> None:
+        """Not needed."""
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:
+        """Not needed."""
+
     @property
     def total_tokens(self) -> int:  # noqa
         return None
