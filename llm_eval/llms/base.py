@@ -612,12 +612,12 @@ class ChatModel(PromptModel):
         if not messages:
             messages = []
         elif isinstance(messages[0], tuple):
-            messages = [ExchangeRecord(prompt=p, response=r) for p, r in messages]
+            messages = [ExchangeRecord(prompt=str(p), response=str(r)) for p, r in messages]
         elif isinstance(messages[0], dict):
                 messages = [
                     ExchangeRecord(
-                        prompt=m['user'],
-                        response=m['assistant'],
+                        prompt=str(m['user']),
+                        response=str(m['assistant']),
                     ) for m in messages
                 ]
         else:

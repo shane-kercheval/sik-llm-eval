@@ -136,7 +136,7 @@ class Eval(DictionaryEqualsMixin):
             self,
             test_sequence: list[PromptTest | dict] | dict | PromptTest,
             system_message: str | None = None,
-            previous_messages: list[dict] | None = None,
+            previous_messages: list[dict | tuple] | None = None,
             metadata: dict | None = None) -> None:
         """
         Initializes the Eval.
@@ -157,15 +157,46 @@ class Eval(DictionaryEqualsMixin):
                 Sets/overrides the previous messages on the candidate object (and underlying LLM).
                 The eval clones the candidate object so the original candidate object is not
                 modified.
+
+                The previous_messages should be a list of dictionaries. Each dictionary should
+                contain a key 'user' that represents the user message and a key 'assistant' that
+                represents the assistant message/response.
+
+                For example:
+
+                ```
+                previous_messages = [
+                    {'user': 'Hello', 'assistant': 'Hi!'},
+                    {'user': 'How are you?', 'assistant': 'I am good.'},
+                ]
+                ```
             metadata:
                 Metadata associated with the Eval.
         """
-        self.metadata = deepcopy(metadata) or {}
-        self.system_message = system_message
-        self.previous_messages = deepcopy(previous_messages) or []
         self._candidate = None
         self._responses = None
         self._duration = None
+        self.metadata = deepcopy(metadata) or {}
+        self.system_message = str(system_message) if system_message else None
+        self.previous_messages = []
+        for message in previous_messages or []:
+            if isinstance(message, dict):
+                assert 'user' in message, \
+                    "Previous message dictionary must contain 'user' and 'assistant' keys"
+                assert 'assistant' in message, \
+                    "Previous message dictionary must contain 'user' and 'assistant' keys"
+                assert message['user'], "user message cannot be empty"
+                assert message['assistant'], "assistant message cannot be empty"
+                user_message = str(message['user'])
+                assistant_message = str(message['assistant'])
+            else:
+                assert isinstance(message, tuple), \
+                    "Previous message must be a tuple or a dictionary"
+                assert len(message) == 2, \
+                    "Previous message tuple must contain two items (user and assistant messages)"
+                user_message = str(message[0])
+                assistant_message = str(message[1])
+            self.previous_messages.append({'user': user_message, 'assistant': assistant_message})
 
         test_sequence = test_sequence or []
         if isinstance(test_sequence, (dict, PromptTest)):
@@ -173,7 +204,9 @@ class Eval(DictionaryEqualsMixin):
         tests_created = []
         for test in test_sequence:
             if isinstance(test, dict):
-                tests_created.append(PromptTest(**test))
+                test_copy = deepcopy(test)
+                test_copy['prompt'] = str(test_copy['prompt'])
+                tests_created.append(PromptTest(**test_copy))
             elif isinstance(test, PromptTest):
                 tests_created.append(test)
             else:
@@ -402,7 +435,7 @@ class EvalResult(DictionaryEqualsMixin):
             results:
                 A list of lists of CheckResult objects.
         """
-        self.eval_obj = eval_obj if isinstance(eval_obj, Eval) else Eval(**eval_obj)
+        self.eval_obj = eval_obj if isinstance(eval_obj, Eval) else Eval(**deepcopy(eval_obj))
         if isinstance(candidate_obj, Candidate):
             self.candidate_obj = candidate_obj
         elif isinstance(candidate_obj, dict):
@@ -410,7 +443,7 @@ class EvalResult(DictionaryEqualsMixin):
                 # loads the Candidate subclass from the registry
                 self.candidate_obj = Candidate.from_dict(deepcopy(candidate_obj))
             else:
-                self.candidate_obj = Candidate(**candidate_obj)
+                self.candidate_obj = Candidate(**deepcopy(candidate_obj))
         else:
             raise TypeError("candidate_obj must be either a Candidate or a dictionary")
         self.responses = responses
@@ -710,7 +743,7 @@ class EvalHarness:
 
         for eval_obj in evals:
             if isinstance(eval_obj, dict):
-                eval_objects.append(Eval(**eval_obj))
+                eval_objects.append(Eval(**deepcopy(eval_obj)))
             elif isinstance(eval_obj, Eval):
                 eval_objects.append(eval_obj)
             else:
@@ -739,7 +772,7 @@ class EvalHarness:
                 The checks needs a `check_type` key with the registration value.
         """
         if isinstance(eval_obj, dict):
-            eval_obj = Eval(**eval_obj)
+            eval_obj = Eval(**deepcopy(eval_obj))
         assert isinstance(eval_obj, Eval), "eval_obj must be an Eval or a dictionary"
         self.evals.append(eval_obj)
 
