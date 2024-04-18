@@ -319,25 +319,9 @@ class PythonCodeBlocksPresent(Check):
 @Check.register(CheckType.PYTHON_CODE_BLOCK_TESTS)
 class PythonCodeBlockTests(Check):
     """
-    Tests that the code blocks contained within the response run successfully, and allows users to
-    define custom tests that can be used to test the code blocks and the environment that the code
-    blocks are executed in. These custom tests are functions that are executed in the same
-    environment as the code blocks. They return a boolean value indicating whether or not the test/
-    function had a successful result. The functions are also passed the code blocks as a parameter,
-    so the functions can either test the environment and/or the code blocks directly.
-
-    The user can define the `code_setup` which is a string containing a block of python code that
-    will be executed before the code blocks are executed. Both the setup code and the code blocks
-    are ran in an isolated environment. The setup code can be used to set up the environment for
-    the code blocks (e.g. importing libraries, defining variables, etc.). The intent of the setup
-    code is to prevent the checks from failing due to errors in the code blocks that are not
-    related to the LLM response.
-
-    NOTE: If the code within the `code_setup` raises an exception, the exception will be raised to
-    the main environment and execution of the Eval will stop. This is because the setup code is
-    assumed to work and if it doesn't, the check is not valid. If the code blocks raise any errors,
-    the errors will be captured and returned as part of the check result, but the Eval will
-    continue to run.
+    This Check tests that the code blocks contained within the response run successfully, and
+    allows users to define custom tests that can be used to test the code blocks and the
+    environment that the code blocks are executed in. 
 
     Unlike other checks, this check aggregates several metrics into a single result.
 
@@ -349,7 +333,7 @@ class PythonCodeBlockTests(Check):
     custom tests (if `code_tests` is used) required for the check to be considered successful.
     
     NOTE: this check will run all code blocks generated across all responses for a given Eval.
-    Therefore, you cannot define multiple PythonCodeBlockTests checks within a single Eval (in
+    Therefore, you should not define multiple PythonCodeBlockTests checks within a single Eval (in
     order to avoid running the same code blocks multiple times). It is recommended to define the
     PythonCodeBlockTests check at the end of the test sequence for a given Eval. If a
     PythonCodeBlockTests check is defined in the middle of the test sequence, the code blocks
@@ -367,7 +351,15 @@ class PythonCodeBlockTests(Check):
     )
     code_setup: str | None = Field(
         default=None,
-        description="Python code that is executed before the code blocks are executed.",
+        description="""
+        Python code that is executed before the code blocks are executed.
+
+        NOTE: If the code within the `code_setup` raises an exception, the exception will be raised
+        to the main environment and execution of the Eval will stop. This is because the setup code
+        is assumed to work and if it doesn't, the check is not valid. If the code blocks raise any
+        errors, the errors will be captured and returned as part of the check result, but the Eval
+        will continue to run.
+        """,
     )
     code_block_timeout: int | None = Field(
         default=None,
@@ -392,7 +384,7 @@ class PythonCodeBlockTests(Check):
         description="""
         code_tests can either be a list of functions (or strings representing functions), or string
         values containing single assertion statement, or string values containing a single
-        statement that results in a boolean value, or some combination of the three.
+        statement that results in a boolean value.
 
         All statements (i.e. functions, assertions, or boolean statements) are executed in the same
         environment that the code blocks were executed in. Therefore, if the code blocks were
@@ -408,6 +400,23 @@ class PythonCodeBlockTests(Check):
 
         If an item in `code_tests` is a string value and that value doesn't contain a function or
         assertion statement, then it is assumed to be a boolean statement.
+
+        Example yaml:
+        - check_type: PYTHON_CODE_BLOCK_TESTS
+            code_block_timeout: 5
+            code_test_timeout: 5
+            code_tests:
+                - |
+                def verify_function_exists_and_runs_correctly(code_blocks: list[str]) -> bool:
+                    # should pass
+                    return sum_two_numbers(2, 3) == 5
+
+        Example yaml:
+        - check_type: PYTHON_CODE_BLOCK_TESTS
+            code_tests:
+                - assert mask_email('john.doe@example.com') == '[MASKED]@example.com'
+                - assert mask_email('jane.smith@example.com') == '[MASKED]@example.com'
+                - assert mask_email('foo@bar.com') != '[MASKED]@bar.com'
         """,
     )
 
@@ -436,7 +445,7 @@ class PythonCodeBlockTests(Check):
         code_tests = self.code_tests or []
 
         num_code_blocks = len(code_blocks)
-        num_code_tests = 0
+        num_code_tests = len(code_tests)
         num_code_tests_successful = 0
 
         if code_blocks:
@@ -471,7 +480,6 @@ class PythonCodeBlockTests(Check):
             # run the custom/user functions with contain additional tests (they functions should
             # return boolean success/fail)
             for test in code_tests:
-                num_code_tests += 1
                 # __result__ is used to capture the result of the test
                 # we need to reset `__result__` to False in case one of the functions fails to
                 # execute (which means `__result__` will not be set) in order to avoid grabbing

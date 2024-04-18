@@ -195,6 +195,10 @@ class Eval(DictionaryEqualsMixin):
         value = {}
         if self.metadata:
             value['metadata'] = self.metadata
+        if self.system_message:
+            value['system_message'] = self.system_message
+        if self.previous_messages:
+            value['previous_messages'] = deepcopy(self.previous_messages)
         value['test_sequence'] = [t.to_dict() for t in self.test_sequence]
         return value
 

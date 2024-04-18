@@ -1380,7 +1380,7 @@ def test__evals__num_samples__greater_than_one__non_async__via_call(fake_eval_su
     assert cand_2_results_sum.perc_successful_checks == 1
 
 def test__Evals__sysem_message_previous_messages__load(fake_eval_with_previous_messages):  # noqa
-    config = fake_eval_with_previous_messages.copy()
+    config = deepcopy(fake_eval_with_previous_messages)
     system_message = 'Custom System Message'
     assert config['system_message'] == system_message
     user_message_1 = 'User Message 1'
@@ -1398,6 +1398,8 @@ def test__Evals__sysem_message_previous_messages__load(fake_eval_with_previous_m
     assert eval_obj.previous_messages[0]['assistant'] == assistant_response_1
     assert eval_obj.previous_messages[1]['user'] == user_message_2
     assert eval_obj.previous_messages[1]['assistant'] == assistant_response_2
+    assert eval_obj.to_dict() == config
+    assert Eval(**eval_obj.to_dict()) == eval_obj
 
 def test__Evals__sysem_message_previous_messages__run_base_candidate(fake_eval_with_previous_messages):  # noqa
     """
@@ -1405,7 +1407,7 @@ def test__Evals__sysem_message_previous_messages__run_base_candidate(fake_eval_w
 
     These options should not effect other Evals (i.e. if the candidate is reused by other Evals).
     """
-    config = fake_eval_with_previous_messages.copy()
+    config = deepcopy(fake_eval_with_previous_messages)
     initial_system_message = "Initial System Message"
     system_message = config['system_message']
     formatter = LlamaMessageFormatter()
@@ -1524,6 +1526,129 @@ def test__Evals__sysem_message_previous_messages__run_base_candidate(fake_eval_w
     )
     assert result.candidate_obj.model._previous_messages == expected_message
     assert actual_prompts[1] == expected_message
+    # unregister the candidate class so it doesn't interfere with other tests
+    Candidate.registry._registry.pop('MOCK_CHAT_CANDIDATE')
+
+def test__Evals__sysem_message_previous_messages__run_base_candidate_with_EvalHarness(fake_eval_with_previous_messages):  # noqa
+    """
+    Tests the `system_message` and `previous_messages` options in the Eval object but uses the
+    EvalHarness to run the evals rather than calling the eval object directly.
+
+    These options should not effect other Evals (i.e. if the candidate is reused by other Evals).
+    """
+    eval_config = deepcopy(fake_eval_with_previous_messages)
+    initial_system_message = "Initial System Message"
+    system_message = eval_config['system_message']
+    formatter = LlamaMessageFormatter()
+
+    eval_response_1 = 'Eval Response 1'
+    eval_response_2 = 'Eval Response 2'
+
+    # actual formatted prompts send to the model
+    actual_prompts = []
+    class MockChatModel(ChatModel):
+        def __init__(self):
+            self.responses = [eval_response_1, eval_response_2]
+            super().__init__(
+                system_message=initial_system_message,
+                message_formatter=formatter,
+                token_calculator=len,
+            )
+
+        def _run(self, prompt: str) -> tuple[str | list[str] | object, dict]:
+            actual_prompts.append(prompt)
+            return self.responses.pop(0), {}
+
+    @Candidate.register('MOCK_CHAT_CANDIDATE')
+    class MockChatCandidate(ChatModelCandidate):
+        def __init__(self):
+            super().__init__(model=MockChatModel())
+
+    ####
+    # test that the system message and previous messages are set correctly for the candidate object
+    ####
+    candidate = MockChatCandidate()
+    assert candidate.model.system_message == initial_system_message
+    assert not candidate.model.chat_history
+    assert not candidate.model._previous_messages
+
+    no_messages_config = deepcopy(eval_config)
+    del no_messages_config['system_message']
+    del no_messages_config['previous_messages']
+    harness = EvalHarness(
+        evals=[eval_config, no_messages_config],
+        candidates=[candidate],
+        num_cpus=1,
+    )
+    results = harness()
+    result_with_messages = results[0][0]
+    result_without_messages = results[0][1]
+    assert result_with_messages.responses == [eval_response_1, eval_response_2]
+    assert result_without_messages.responses == [eval_response_1, eval_response_2]
+
+    # system message and chat_history should not have changed; Candidate should be cloned and
+    # not used directly so it can be reused for other evals without side effects from evals
+    assert candidate.model.system_message == initial_system_message
+    assert not candidate.model.chat_history
+    assert not candidate.model._previous_messages
+
+    # the cloned candidate that was used should have the system message and the expected chat
+    # history
+    assert result_with_messages.candidate_obj.model.system_message == eval_config['system_message']
+    assert result_with_messages.candidate_obj.model.chat_history[0].prompt == eval_config['previous_messages'][0]['user']  # noqa
+    assert result_with_messages.candidate_obj.model.chat_history[0].response == eval_config['previous_messages'][0]['assistant']  # noqa
+    assert result_with_messages.candidate_obj.model.chat_history[1].prompt == eval_config['previous_messages'][1]['user']  # noqa
+    assert result_with_messages.candidate_obj.model.chat_history[1].response == eval_config['previous_messages'][1]['assistant']  # noqa
+    assert result_with_messages.candidate_obj.model.chat_history[2].prompt == eval_config['test_sequence'][0]['prompt']  # noqa
+    assert result_with_messages.candidate_obj.model.chat_history[2].response == eval_response_1
+    assert result_with_messages.candidate_obj.model.chat_history[3].prompt == eval_config['test_sequence'][1]['prompt']  # noqa
+    assert result_with_messages.candidate_obj.model.chat_history[3].response == eval_response_2
+
+    expected_prompt_1 = formatter(
+        system_message=system_message,
+        messages=eval_config['previous_messages'],
+        prompt=eval_config['test_sequence'][0]['prompt'],
+    )
+    assert actual_prompts[0] == expected_prompt_1
+    # we now expected the "previous_messages" from the eval object plus the prompt on the eval
+    # and the new response from the assistant
+    expected_messages = eval_config['previous_messages'] \
+        + [{'user': eval_config['test_sequence'][0]['prompt'], 'assistant': eval_response_1}]
+    expected_prompt_2 = formatter(
+        system_message=system_message,
+        messages=expected_messages,
+        prompt=eval_config['test_sequence'][1]['prompt'],
+    )
+    assert actual_prompts[1] == expected_prompt_2
+    assert result_with_messages.candidate_obj.model._previous_messages == expected_prompt_2
+
+
+    ####
+    # Test that an eval without a system message or previous messages does not change (e.g. set to
+    # null) the candidate's system message or previous messages; and test that the candidate is
+    # cloned and unaffected by the eval and can be reused for other evals without side effects
+    ####
+    assert result_without_messages.candidate_obj.model.system_message == initial_system_message
+    assert result_without_messages.candidate_obj.model.chat_history[0].prompt == eval_config['test_sequence'][0]['prompt']  # noqa
+    assert result_without_messages.candidate_obj.model.chat_history[0].response == eval_response_1
+    assert result_without_messages.candidate_obj.model.chat_history[1].prompt == eval_config['test_sequence'][1]['prompt']  # noqa
+    assert result_without_messages.candidate_obj.model.chat_history[1].response == eval_response_2
+    expected_message = formatter(
+        system_message=initial_system_message,
+        messages=[],
+        prompt=eval_config['test_sequence'][0]['prompt'],
+    )
+    assert actual_prompts[2] == expected_message
+    expected_message = formatter(
+        system_message=initial_system_message,
+        messages=[(eval_config['test_sequence'][0]['prompt'], eval_response_1)],
+        prompt=eval_config['test_sequence'][1]['prompt'],
+    )
+    assert result_without_messages.candidate_obj.model._previous_messages == expected_message
+    assert actual_prompts[3] == expected_message
+
+    # unregister the candidate class so it doesn't interfere with other tests
+    Candidate.registry._registry.pop('MOCK_CHAT_CANDIDATE')
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__Evals__sysem_message_previous_messages__run_with_OpenAI(fake_eval_with_previous_messages, openai_candidate_template):  # noqa
