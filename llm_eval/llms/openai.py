@@ -35,22 +35,23 @@ MODEL_COST_PER_TOKEN = {
     ####
     # LATEST MODELS
     # GPT-4-Turbo 128K
+    'gpt-4-turbo-2024-04-09': {'input': 10.00 / 1_000_000, 'output': 3.00 / 1_000_000},
     'gpt-4-0125-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
     # GPT-3.5 Turbo 16K
-    'gpt-3.5-turbo-0125': {'input': 0.0005 / 1_000, 'output': 0.0015 / 1_000},
+    'gpt-3.5-turbo-0125': {'input': 0.50 / 1_000_000, 'output': 1.50 / 1_000_000},
     # LEGACY MODELS
     # GPT-4-Turbo 128K
-    'gpt-4-1106-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
+    # 'gpt-4-1106-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
     # GPT-3.5-Turbo 16K
-    'gpt-3.5-turbo-1106': {'input': 0.001 / 1_000, 'output': 0.002 / 1_000},
+    # 'gpt-3.5-turbo-1106': {'input': 0.001 / 1_000, 'output': 0.002 / 1_000},
     # GPT-4
     'gpt-4-0613': {'input': 0.03 / 1_000, 'output': 0.06 / 1_000},
     # GPT-4- 32K
     # 'gpt-4-32k-0613': {'input': 0.06 / 1_000, 'output': 0.12 / 1_000},
     # GPT-3.5-Turbo 4K
-    'gpt-3.5-turbo-0613': {'input': 0.0015 / 1_000, 'output': 0.002 / 1_000},
+    # 'gpt-3.5-turbo-0613': {'input': 0.0015 / 1_000, 'output': 0.002 / 1_000},
     # GPT-3.5-Turbo 16K
-    'gpt-3.5-turbo-16k-0613': {'input': 0.003 / 1_000, 'output': 0.004 / 1_000},
+    # 'gpt-3.5-turbo-16k-0613': {'input': 0.003 / 1_000, 'output': 0.004 / 1_000},
 }
 
 

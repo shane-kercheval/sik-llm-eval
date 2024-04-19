@@ -1,16 +1,17 @@
 """Tests for the evals module."""
 from copy import deepcopy
+import multiprocessing
 import os
-import shutil
 from textwrap import dedent
 import pytest
 import yaml
 from llm_eval.candidates import CallableCandidate, Candidate, CandidateType, ChatModelCandidate
 from llm_eval.checks import CheckType, ContainsCheck, MatchCheck, PassFailResult, ScoreResult
-from llm_eval.eval import Eval, EvalHarness, EvalResult, PromptTest
+from llm_eval.eval import Eval, EvalHarness, EvalResult, PromptTest, ResponseError
 from llm_eval.llms.base import ChatModel
 from llm_eval.llms.message_formatters import LlamaMessageFormatter, openai_message_formatter
 from llm_eval.utilities.internal_utilities import extract_code_blocks
+from tests.conftest import MockCandidate
 
 
 def test__PromptTest():  # noqa
@@ -469,57 +470,6 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert EvalResult(**result.to_dict()).to_dict() == result.to_dict()
     assert eval_config == fake_eval_sum_two_numbers  # make sure eval_config wasn't modified
 
-@Candidate.register('MockCandidate')
-class MockCandidate(Candidate):
-    """
-    This class needs to be outside of the test function so that we can test multi-processing, which
-    requires that the class be picklable, which requires that it be defined at the top level of the
-    module.
-
-    This candidate takes a dictionary of prompts (keys) and responses (values) and returns the
-    response for the given prompt.
-    """  # noqa: D404
-
-    def __init__(
-            self,
-            responses: dict,
-            metadata: dict | None = None,
-            parameters: dict | None = None):
-        super().__init__(metadata=metadata, parameters=parameters)
-        self.responses = responses.copy()
-
-    def __call__(self, prompt: str) -> str:
-        """Returns the response for the given prompt."""
-        return self.responses[prompt]
-
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
-        return
-
-    def set_system_message(self, system_message: str) -> None:  # noqa
-        return
-
-    def to_dict(self) -> dict:
-        """Need to add `responses` to enable proper to_dict values."""
-        value = super().to_dict()
-        value['responses'] = self.responses
-        return value
-
-    @property
-    def total_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def input_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def response_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def cost(self) -> float:  # noqa
-        return None
-
 def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
     sum_config = fake_eval_sum_two_numbers.copy()
@@ -685,195 +635,6 @@ def callback(x: EvalResult) -> None:
     eval_id = x.eval_obj.metadata['uuid']
     with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
         yaml.dump(x.to_dict(), f, default_flow_style=False, sort_keys=False)
-
-def test__EvalHarness__multi_prossing_async__vs__not(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers_code_blocks_run):  # noqa
-    subtract_config = fake_eval_subtract_two_numbers.copy()
-    sum_config = fake_eval_sum_two_numbers_code_blocks_run.copy()
-
-    dir_path = "tests/__temp__"
-    def recreate_temp_dir() -> None:
-        if os.path.exists(dir_path):
-            shutil.rmtree(dir_path)
-        os.makedirs(dir_path)
-        assert os.path.exists(dir_path)
-    recreate_temp_dir()
-
-    response_subtract_0 = 'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```'  # noqa
-    response_subtract_1 = 'This is the assertion statement.\n\n```\nassert subtract_two_numbers(2, 3) == -1\n```'  # noqa
-    response_sum_0 = 'This is the response.\n\n```\ndef sum_two_numbers(a, b):\n    return a + b\n```'  # noqa
-    responses_lookup = {
-        fake_eval_subtract_two_numbers['test_sequence'][0]['prompt']: response_subtract_0,
-        fake_eval_subtract_two_numbers['test_sequence'][1]['prompt']: response_subtract_1,
-        fake_eval_sum_two_numbers_code_blocks_run['test_sequence'][0]['prompt']: response_sum_0,
-    }
-
-    candidate_1_dict = {
-        'metadata': {'uuid': 'candidate_1'},
-        'candidate_type': 'MockCandidate',
-        'responses': responses_lookup,
-    }
-    candidate_2_dict = deepcopy(candidate_1_dict)
-    candidate_2_dict['metadata']['uuid'] = 'candidate_2'
-
-    eval_harness_sequential = EvalHarness(
-        evals=[subtract_config, sum_config],
-        candidates=[candidate_1_dict, candidate_2_dict],
-        num_cpus=1,
-        async_batch_size=1,
-    )
-    eval_harness_async_multiprocessing = EvalHarness(
-        evals=[subtract_config, sum_config],
-        candidates=[candidate_1_dict, candidate_2_dict],
-        num_cpus=200,
-        async_batch_size=200,
-    )
-    eval_harness_multi_with_callback = EvalHarness(
-        evals=[subtract_config, sum_config],
-        candidates=[candidate_1_dict, candidate_2_dict],
-        num_cpus=200,
-        async_batch_size=200,
-        callback=callback,
-    )
-
-    results_sequential = eval_harness_sequential()
-    results_async_multiprocessing = eval_harness_async_multiprocessing()
-    results_multi_with_callback = eval_harness_multi_with_callback()
-
-    assert len(results_sequential) == 2
-    assert len(results_sequential[0]) == 2
-    assert len(results_sequential[1]) == 2
-
-    assert len(results_async_multiprocessing) == 2
-    assert len(results_async_multiprocessing[0]) == 2
-    assert len(results_async_multiprocessing[1]) == 2
-
-    assert len(results_multi_with_callback) == 2
-    assert len(results_multi_with_callback[0]) == 2
-    assert len(results_multi_with_callback[1]) == 2
-
-    # check that the results have been saved and are the same as the results from the sequential
-    eval_ids = [
-        fake_eval_subtract_two_numbers['metadata']['uuid'],
-        fake_eval_sum_two_numbers_code_blocks_run['metadata']['uuid'],
-    ]
-    candidate_ids = ['candidate_1', 'candidate_2']
-    for eval_index, eval_id in enumerate(eval_ids):
-        for candidate_index, candidate_id in enumerate(candidate_ids):
-            path = f'{dir_path}/result-{candidate_id}-{eval_id}.yaml'
-            assert os.path.exists(path)
-            with open(path) as f:
-                result = yaml.safe_load(f)
-            expected_dict = deepcopy(results_sequential[candidate_index][eval_index].to_dict())
-            del expected_dict['total_time_seconds']
-            del result['total_time_seconds']
-            del expected_dict['timestamp']
-            del result['timestamp']
-            assert result == expected_dict
-
-    # for each result, the dictionary (which contains eval, candidate, and results/checks) should
-    # be the same (except for the total_time_seconds)
-    s_dict = deepcopy(results_sequential[0][0].to_dict())
-    del s_dict['total_time_seconds']
-    del s_dict['timestamp']
-    am_dict = deepcopy(results_async_multiprocessing[0][0].to_dict())
-    del am_dict['total_time_seconds']
-    del am_dict['timestamp']
-    c_dict = deepcopy(results_multi_with_callback[0][0].to_dict())
-    del c_dict['total_time_seconds']
-    del c_dict['timestamp']
-    assert s_dict == am_dict
-    assert s_dict == c_dict
-
-    s_dict = deepcopy(results_sequential[0][1].to_dict())
-    del s_dict['total_time_seconds']
-    del s_dict['timestamp']
-    am_dict = deepcopy(results_async_multiprocessing[0][1].to_dict())
-    del am_dict['total_time_seconds']
-    del am_dict['timestamp']
-    c_dict = deepcopy(results_multi_with_callback[0][1].to_dict())
-    del c_dict['total_time_seconds']
-    del c_dict['timestamp']
-    assert s_dict == am_dict
-    assert s_dict == c_dict
-
-    s_dict = deepcopy(results_sequential[1][0].to_dict())
-    del s_dict['total_time_seconds']
-    del s_dict['timestamp']
-    am_dict = deepcopy(results_async_multiprocessing[1][0].to_dict())
-    del am_dict['total_time_seconds']
-    del am_dict['timestamp']
-    c_dict = deepcopy(results_multi_with_callback[1][0].to_dict())
-    del c_dict['total_time_seconds']
-    del c_dict['timestamp']
-    assert s_dict == am_dict
-    assert s_dict == c_dict
-
-    s_dict = deepcopy(results_sequential[1][1].to_dict())
-    del s_dict['total_time_seconds']
-    del s_dict['timestamp']
-    am_dict = deepcopy(results_async_multiprocessing[1][1].to_dict())
-    del am_dict['total_time_seconds']
-    del am_dict['timestamp']
-    c_dict = deepcopy(results_multi_with_callback[1][1].to_dict())
-    del c_dict['total_time_seconds']
-    del c_dict['timestamp']
-    assert s_dict == am_dict
-    assert s_dict == c_dict
-
-    # The underlying candidate objects should have the same values but should be different objects
-    # because each candidate object (against a specific eval) is responsible for storing its own
-    # history/conversation and the history should be different for each eval.
-    assert results_sequential[0][0].candidate_obj == results_async_multiprocessing[0][0].candidate_obj  # noqa
-    assert results_sequential[0][0].candidate_obj is not results_async_multiprocessing[0][0].candidate_obj  # noqa
-    assert results_sequential[0][1].candidate_obj == results_async_multiprocessing[0][1].candidate_obj  # noqa
-    assert results_sequential[0][1].candidate_obj is not results_async_multiprocessing[0][1].candidate_obj  # noqa
-    assert results_sequential[1][0].candidate_obj == results_async_multiprocessing[1][0].candidate_obj  # noqa
-    assert results_sequential[1][0].candidate_obj is not results_async_multiprocessing[1][0].candidate_obj  # noqa
-    assert results_sequential[1][1].candidate_obj == results_async_multiprocessing[1][1].candidate_obj  # noqa
-    assert results_sequential[1][1].candidate_obj is not results_async_multiprocessing[1][1].candidate_obj  # noqa
-
-    # eval objects across candidates should have same values (same eval) but different objects
-    assert results_sequential[0][0].eval_obj == results_async_multiprocessing[0][0].eval_obj
-    assert results_sequential[0][0].eval_obj is not results_async_multiprocessing[0][0].eval_obj
-    assert results_sequential[0][1].eval_obj == results_async_multiprocessing[0][1].eval_obj
-    assert results_sequential[0][1].eval_obj is not results_async_multiprocessing[0][1].eval_obj
-    assert results_sequential[1][0].eval_obj == results_async_multiprocessing[1][0].eval_obj
-    assert results_sequential[1][0].eval_obj is not results_async_multiprocessing[1][0].eval_obj
-    assert results_sequential[1][1].eval_obj == results_async_multiprocessing[1][1].eval_obj
-    assert results_sequential[1][1].eval_obj is not results_async_multiprocessing[1][1].eval_obj
-
-
-    # test the callback when running sequentially since it's a different execution path
-    # there was actually a bug where we weren't passing in the callback
-    eval_harness_sequential_with_callback = EvalHarness(
-        evals=[subtract_config, sum_config],
-        candidates=[candidate_1_dict, candidate_2_dict],
-        num_cpus=1,
-        async_batch_size=1,
-        callback=callback,
-    )
-    recreate_temp_dir()
-    eval_harness_sequential_with_callback()
-    # check that the results have been saved and are the same as the results from the sequential
-    eval_ids = [
-        fake_eval_subtract_two_numbers['metadata']['uuid'],
-        fake_eval_sum_two_numbers_code_blocks_run['metadata']['uuid'],
-    ]
-    candidate_ids = ['candidate_1', 'candidate_2']
-    for eval_index, eval_id in enumerate(eval_ids):
-        for candidate_index, candidate_id in enumerate(candidate_ids):
-            path = f'{dir_path}/result-{candidate_id}-{eval_id}.yaml'
-            assert os.path.exists(path)
-            with open(path) as f:
-                result = yaml.safe_load(f)
-            expected_dict = deepcopy(results_sequential[candidate_index][eval_index].to_dict())
-            del expected_dict['total_time_seconds']
-            del result['total_time_seconds']
-            del expected_dict['timestamp']
-            del result['timestamp']
-            assert result == expected_dict
-
-    shutil.rmtree(dir_path)
 
 def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_create_multiple_candidates():  # noqa
     test_params = {
@@ -1845,3 +1606,132 @@ def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values):
     assert eval_obj.test_sequence[0].prompt == str(eval_config['test_sequence'][0]['prompt'])
     assert isinstance(eval_obj.test_sequence[1].prompt, str)
     assert eval_obj.test_sequence[1].prompt == str(eval_config['test_sequence'][1]['prompt'])
+
+def error_callback(exception: Exception, eval_obj: Eval, candidate_obj: Candidate) -> None:
+    """
+    This is a callback function that will be called when an error occurs in the EvalHarness. It
+    needs to be defined outside of the test so that it can be pickled and used in multiprocessing
+    when testing num_cpus != 1. `test_harness_callback_errors` is a global variable that is defined
+    in the test and will be used to store the errors that occur in the callback.
+    """  # noqa
+    test_harness_callback_errors.append((exception, eval_obj, candidate_obj))
+
+@pytest.mark.parametrize('num_cpus', [1, None])
+def test__EvalHarness__candidate_has_error_generating_response_multi_processing(num_cpus, fake_eval_sum_two_numbers_code_blocks_run):  # noqa
+    """
+    Tests that the EvalHarness captures errors generated by the candidate. If no error_callback
+    is set, the harness should raise the error and stop processing the evals. If an error_callback
+    is set, the harness should call the error_callback and the candidate object and continue
+    processing the remaining evals.
+    """
+    eval_config = deepcopy(fake_eval_sum_two_numbers_code_blocks_run)
+    prompt_1 = eval_config['test_sequence'][0]['prompt']
+    prompt_2 = eval_config['test_sequence'][1]['prompt']
+    response_1 = '```\ndef sum_two_numbers(a, b): return a+b\n```'
+    response_2 = '```\nCode Block 2\n```'
+    candidate_1 = MockCandidate(
+        metadata={'name': 'candidate_1'},
+        responses={
+            prompt_1: ValueError('Fake Rate Limit Error for prompt_1'),
+            prompt_2: response_2,
+        },
+    )
+    with pytest.raises(ValueError, match='Fake Rate Limit Error for prompt_1'):
+        candidate_1(prompt_1)
+    assert candidate_1(prompt_2) == response_2
+    candidate_2 = MockCandidate(
+        metadata={'name': 'candidate_2'},
+        responses={
+            prompt_1: response_1,
+            prompt_2: ValueError('Fake Rate Limit Error for prompt_2'),
+        },
+    )
+    assert candidate_2(prompt_1) == response_1
+    with pytest.raises(ValueError, match='Fake Rate Limit Error for prompt_2'):
+        candidate_2(prompt_2)
+
+    eval_1 = Eval(**eval_config)
+    eval_2 = Eval(**eval_config)
+
+    harness = EvalHarness(
+        evals=[eval_1, eval_2],
+        candidates=[candidate_1, candidate_2],
+        num_cpus=num_cpus,
+    )
+    # this should raise an error because the candidate has an error generating a response
+    # and we have not set the error_callaback to capture/ignore errors
+    with pytest.raises(ResponseError) as error:  # noqa: PT012
+        _ = harness()
+        error = error.value  # noqa
+        assert isinstance(error.exception, ValueError)
+        assert error.exception.args[0] == 'Fake Rate Limit Error'
+        assert error.eval_obj == eval_1
+        assert error.candidate_obj == candidate_1
+
+    manager = multiprocessing.Manager()
+    global test_harness_callback_errors  # noqa
+    test_harness_callback_errors = manager.list()
+    harness.error_callback = error_callback
+    results = harness()
+    assert len(results) == 2
+    errors = list(test_harness_callback_errors)
+    assert len(errors) == len(harness.evals) * len(harness.candidates)
+    if num_cpus != 1:
+        # if num_cpus is not 1, the order of the errors is not guaranteed
+        # sort errors by candidate name so we can compare them
+        errors = sorted(errors, key=lambda x: x[2].metadata['name'])
+    assert errors[0][0].args[0] == 'Fake Rate Limit Error for prompt_1'
+    assert errors[0][0].args[0] == results[0][0].harness_exception.args[0]
+    assert errors[0][1] == eval_1
+    assert errors[0][2].metadata['name'] == candidate_1.metadata['name']
+    assert errors[1][0].args[0] == 'Fake Rate Limit Error for prompt_1'
+    assert errors[1][0].args[0] == results[0][1].harness_exception.args[0]
+    assert errors[1][1] == eval_2
+    assert errors[1][2].metadata['name'] == candidate_1.metadata['name']
+    assert errors[2][0].args[0] == 'Fake Rate Limit Error for prompt_2'
+    assert errors[2][0].args[0] == results[1][0].harness_exception.args[0]
+    assert errors[2][1] == eval_1
+    assert errors[2][2].metadata['name'] == candidate_2.metadata['name']
+    assert errors[3][0].args[0] == 'Fake Rate Limit Error for prompt_2'
+    assert errors[3][0].args[0] == results[1][1].harness_exception.args[0]
+    assert errors[3][1] == eval_2
+    assert errors[3][2].metadata['name'] == candidate_2.metadata['name']
+
+    # test that the CheckResult objects have the correct values (should be failing)
+    # in the first two evals, the first prompt should fail and the second prompt should pass
+    # so no code was generated
+    expected_num_checks = len(eval_config['test_sequence'][0]['checks']) \
+        + len(eval_config['test_sequence'][1]['checks'])
+    expected_num_code_tests = len(eval_config['test_sequence'][-1]['checks'][-1]['code_tests'])
+    for i in range(2):
+        assert not any(x.success for x in results[0][i].all_check_results)
+        assert results[0][i].num_checks == expected_num_checks
+        assert results[0][i].num_successful_checks == 0
+        # no code block were generated because the first prompt failed
+        assert results[0][i].num_code_blocks == 0
+        assert results[0][i].get_num_code_blocks_successful() == 0
+        assert expected_num_code_tests > 1
+        assert results[0][i].get_num_code_tests_defined() == expected_num_code_tests
+        assert results[0][i].get_num_code_tests_successful() == 0
+
+    # in the second two evals, the first prompt should pass and the second prompt should fail
+    # so code was generated for the first prompt
+    for i in range(2):
+        assert results[1][i].all_check_results[0].success  # checks for sum_two_numbers
+        assert not results[1][i].all_check_results[1].success
+        assert not results[1][i].all_check_results[2].success
+        assert results[1][i].all_check_results[3].success  # checks for code blocks
+        assert not results[1][i].all_check_results[4].success  # checks that response contains sum_two_numbers but no response was returned  # noqa
+        assert not results[1][i].all_check_results[5].success
+        assert not results[1][i].all_check_results[6].success
+
+        assert results[1][i].num_checks == expected_num_checks
+        assert results[1][i].num_successful_checks == 2
+        # code block were generated because the first prompt passed
+        assert results[1][i].num_code_blocks == 1
+        assert results[1][i].get_num_code_blocks_successful() == 1
+        assert expected_num_code_tests > 1
+        assert results[1][i].get_num_code_tests_defined() == expected_num_code_tests
+        # There was actually code generated on the first prompt and for example,
+        # the first test is sum_two_numbers(2, 3) == 5
+        assert results[1][i].get_num_code_tests_successful() > 0

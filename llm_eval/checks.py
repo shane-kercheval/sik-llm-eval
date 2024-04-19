@@ -15,7 +15,12 @@ from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from llm_eval.candidates import Candidate
-from llm_eval.utilities.internal_utilities import EnumMixin, Registry, execute_code_blocks
+from llm_eval.utilities.internal_utilities import (
+    EnumMixin,
+    Registry,
+    execute_code_blocks,
+    extract_code_blocks,
+)
 
 
 class CheckType(EnumMixin, Enum):
@@ -290,7 +295,7 @@ class PythonCodeBlocksPresent(Check):
         description="The minimum number of code blocks that must be present in the response.",
     )
 
-    def __call__(self, code_blocks: list[str]) -> PassFailResult:
+    def __call__(self, response: str) -> PassFailResult:
         """
         Returns a PassFailResult based on the number of code blocks present.
 
@@ -300,7 +305,11 @@ class PythonCodeBlocksPresent(Check):
         PythonCodeBlockTests check and b) just because the code blocks fail doesn't mean they
         aren't Python code blocks.
         """
-        code_blocks = code_blocks or []
+        # note we are passing in the response and manually extracting the code block here instead
+        # of passing in code_blocks directly from the Eval because code_blocks is cumulative (all
+        # code blocks from previous responses are passed in) but we only want to check the code
+        # blocks from the current response
+        code_blocks = extract_code_blocks(response)
         return PassFailResult(
             value=len(code_blocks) >= self.min_code_blocks,
             metadata={

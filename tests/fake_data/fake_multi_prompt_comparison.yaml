@@ -1,5 +1,6 @@
 metadata:
   name: example
+eval_type: PROMPT_COMPARISON
 prompt_comparison:
   - shared_context: |
     def add(a, b):

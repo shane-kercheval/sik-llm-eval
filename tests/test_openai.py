@@ -70,7 +70,7 @@ def test_num_tokens_from_messages():  # noqa
     # above we checked that the numbers match exactly from what OpenAI returns;
     # here, let's just check that the other models run and return >0 to avoid API calls
     assert num_tokens_from_messages(model_name='gpt-3.5-turbo-0301', messages=example_messages) > 0
-    assert num_tokens_from_messages(model_name='gpt-4-1106-preview', messages=example_messages) > 0
+    assert num_tokens_from_messages(model_name='gpt-4-turbo-2024-04-09', messages=example_messages) > 0  # noqa
     assert num_tokens_from_messages(model_name='gpt-4-0314', messages=example_messages) > 0
     with pytest.raises(NotImplementedError):
         num_tokens_from_messages(model_name='<not implemented>', messages=example_messages)
@@ -1314,13 +1314,13 @@ def test_bug_where_costs_are_incorrect_after_changing_model_name_after_creation(
     """We can't set cost_per_token during object creation, because the model might change."""
     model = OpenAIChat()
     assert model.cost_per_token == MODEL_COST_PER_TOKEN[model.model_name]
-    model.model_name = 'gpt-4-1106-preview'
-    assert model.cost_per_token == MODEL_COST_PER_TOKEN['gpt-4-1106-preview']
+    model.model_name = 'gpt-4-turbo-2024-04-09'
+    assert model.cost_per_token == MODEL_COST_PER_TOKEN['gpt-4-turbo-2024-04-09']
 
     model = OpenAIEmbedding()
     assert model.cost_per_token == MODEL_COST_PER_TOKEN[model.model_name]
-    model.model_name = 'gpt-4-1106-preview'
-    assert model.cost_per_token == MODEL_COST_PER_TOKEN['gpt-4-1106-preview']
+    model.model_name = 'gpt-4-turbo-2024-04-09'
+    assert model.cost_per_token == MODEL_COST_PER_TOKEN['gpt-4-turbo-2024-04-09']
 
 user_assistant_formatted_messages = [
         {

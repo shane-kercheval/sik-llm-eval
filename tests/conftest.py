@@ -12,6 +12,7 @@ from faker import Faker
 import numpy as np
 from dotenv import load_dotenv
 from unittest.mock import MagicMock
+from llm_eval.candidates import Candidate
 from llm_eval.llms.message_formatters import LlamaMessageFormatter
 from llm_eval.llms.base import (
     ChatModel,
@@ -176,6 +177,60 @@ class MockRandomEmbeddings(EmbeddingModel):
             total_tokens=total_tokens,
             cost=cost,
         )
+
+@Candidate.register('MockCandidate')
+class MockCandidate(Candidate):
+    """
+    This class needs to be outside of the test function so that we can test multi-processing, which
+    requires that the class be picklable, which requires that it be defined at the top level of the
+    module.
+
+    This candidate takes a dictionary of prompts (keys) and responses (values) and returns the
+    response for the given prompt.
+    """  # noqa: D404
+
+    def __init__(
+            self,
+            responses: dict,
+            metadata: dict | None = None,
+            parameters: dict | None = None):
+        super().__init__(metadata=metadata, parameters=parameters)
+        self.responses = responses.copy()
+
+    def __call__(self, prompt: str) -> str:
+        """Returns the response for the given prompt."""
+        response = self.responses[prompt]
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        return
+
+    def to_dict(self) -> dict:
+        """Need to add `responses` to enable proper to_dict values."""
+        value = super().to_dict()
+        value['responses'] = self.responses
+        return value
+
+    @property
+    def total_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def input_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def response_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def cost(self) -> float:  # noqa
+        return None
 
 
 @pytest.fixture()
