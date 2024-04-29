@@ -35,3 +35,14 @@ doctests:
 	# python -m doctest llm_eval/evals.py
 
 tests: linting unittests doctests
+
+####
+# dev commands
+####
+# commands for development
+CONDA_ENV ?= ./env
+env := $(CONDA_ENV)
+
+setup_env:  ## Setup local environment
+	@if [ -z "$${CONDA_SHLVL:+x}" ]; then echo "Conda is not installed." && exit 1; fi
+	conda env $(shell [ -d $(env) ] && echo update || echo create) -p $(env) --file environment.yml

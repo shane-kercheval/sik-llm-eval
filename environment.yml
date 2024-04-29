@@ -1,0 +1,28 @@
+name:
+  -llm_eval
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - pip
+  - coverage
+  - faker
+  - joblib
+  - openai
+  - markdown
+  - markdownify
+  - numpy
+  - pandas
+  - pydantic
+  - pygments
+  - pytest
+  - python-dotenv
+  - PyYAML
+  - ruff
+  - tenacity
+  - tensorflow
+  - tiktoken
+  - pytorch
+  - transformers
+  - pip:
+      - duckduckgo_search
