@@ -42,7 +42,13 @@ tests: linting unittests doctests
 # commands for development
 CONDA_ENV ?= ./env
 env := $(CONDA_ENV)
-
-setup_env:  ## Setup local environment
+setup_env:
+	# Setup local environment
 	@if [ -z "$${CONDA_SHLVL:+x}" ]; then echo "Conda is not installed." && exit 1; fi
 	conda env $(shell [ -d $(env) ] && echo update || echo create) -p $(env) --file environment.yml
+
+CONDA_RECIPE_DIR := conda.recipe
+CONDA_BUILD_OUTPUT := dist/conda
+build_package:
+	# Build Conda package
+	conda build $(CONDA_RECIPE_DIR) --output-folder $(CONDA_BUILD_OUTPUT)
