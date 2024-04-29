@@ -1,4 +1,5 @@
 """Classes and functions to evaluate LLMs."""
+
 import asyncio
 import glob
 import os
@@ -65,7 +66,7 @@ class PromptTest(DictionaryEqualsMixin):
                 Check subclasses need to be registered via `Check.register(...)`.
                 The dictionary needs a `check_type` key with the registration value.
         """
-        self.prompt = dedent(prompt)
+        self.prompt = dedent(str(prompt))
         self.ideal_response = dedent(ideal_response) if ideal_response else None
         checks = checks or []
         if not isinstance(checks, list):
@@ -74,7 +75,7 @@ class PromptTest(DictionaryEqualsMixin):
         for check in checks:
             if isinstance(check, dict):
                 assert 'check_type' in check, "Check dictionary must contain a 'check_type' key"
-                checks_created.append(Check.from_dict(deepcopy(check)))
+                checks_created.append(Check.from_dict(check))
             elif isinstance(check, Check):
                 checks_created.append(check)
             else:
@@ -133,7 +134,7 @@ class Eval(DictionaryEqualsMixin):
 
     def __init__(
             self,
-            test_sequence: list[PromptTest | dict] | dict | PromptTest,
+            prompt_sequence: list[PromptTest | dict] | dict | PromptTest,
             system_message: str | None = None,
             previous_messages: list[dict | tuple] | None = None,
             metadata: dict | None = None) -> None:
@@ -146,7 +147,7 @@ class Eval(DictionaryEqualsMixin):
         The PythonCodeBlockTests check should be added to the last PromptTest in the sequence.
 
         Args:
-            test_sequence:
+            prompt_sequence:
                 A list of PromptTest objects (prompt/check pairs) to run against the LLM.
             system_message:
                 Sets/overrides the system message on the candidate object (and underlying LLM).
@@ -197,11 +198,11 @@ class Eval(DictionaryEqualsMixin):
                 assistant_message = str(message[1])
             self.previous_messages.append({'user': user_message, 'assistant': assistant_message})
 
-        test_sequence = test_sequence or []
-        if isinstance(test_sequence, (dict, PromptTest)):
-            test_sequence = [test_sequence]
+        prompt_sequence = prompt_sequence or []
+        if isinstance(prompt_sequence, (dict, PromptTest)):
+            prompt_sequence = [prompt_sequence]
         tests_created = []
-        for test in test_sequence:
+        for test in prompt_sequence:
             if isinstance(test, dict):
                 test_copy = deepcopy(test)
                 test_copy['prompt'] = str(test_copy['prompt'])
@@ -210,7 +211,7 @@ class Eval(DictionaryEqualsMixin):
                 tests_created.append(test)
             else:
                 raise TypeError(
-                    "test_sequence must be either a PromptTest instance or a dictionary",
+                    "prompt_sequence must be either a PromptTest instance or a dictionary",
                 )
         # cannot add more than one PythonCodeBlockTests check across all tests
         run_checks = [
@@ -220,7 +221,7 @@ class Eval(DictionaryEqualsMixin):
         ]
         if len(run_checks) > 1:
             raise ValueError("Cannot add more than one PythonCodeBlockTests check")
-        self.test_sequence = tests_created
+        self.prompt_sequence = tests_created
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the PromptTest."""
@@ -231,7 +232,7 @@ class Eval(DictionaryEqualsMixin):
             value['system_message'] = self.system_message
         if self.previous_messages:
             value['previous_messages'] = deepcopy(self.previous_messages)
-        value['test_sequence'] = [t.to_dict() for t in self.test_sequence]
+        value['prompt_sequence'] = [t.to_dict() for t in self.prompt_sequence]
         return value
 
     def to_yaml(self, file_path: str) -> None:
@@ -256,7 +257,6 @@ class Eval(DictionaryEqualsMixin):
         class MyCheck(EvalCheck):
             ...
         """
-        import yaml
         with open(path) as f:
             config = yaml.safe_load(f)
         return cls(**config)
@@ -302,7 +302,7 @@ class Eval(DictionaryEqualsMixin):
             # purposefully not using list comprehension so that we can add individual responses
             # as they are generated (in case of an error, we can still see the responses that were
             # generated before the error occurred)
-            for p in self.test_sequence:
+            for p in self.prompt_sequence:
                 self._responses.append(self._candidate(p.prompt))
         finally:
             end = time.time()
@@ -316,11 +316,11 @@ class Eval(DictionaryEqualsMixin):
         the checks (which are heavier on the CPU and shouldn't be async).
         """
         assert self._responses
-        assert self._duration
         assert self._candidate
+        assert self._duration is not None
         results = []
         code_blocks = []
-        for test, response in zip(self.test_sequence, self._responses):
+        for test, response in zip(self.prompt_sequence, self._responses):
             check_results = []
             code_blocks.extend(extract_code_blocks(response))
             parameters = {
@@ -377,17 +377,19 @@ class Eval(DictionaryEqualsMixin):
 
     def __str__(self) -> str:
         """Returns a string representation of the Eval."""
-        if self.test_sequence:
-            test_sequence = '[\n'
+        if self.prompt_sequence:
+            prompt_sequence = '[\n'
             indent_value = ' ' * 16
-            test_sequence += ',\n'.join([indent(str(s), indent_value) for s in self.test_sequence])
-            test_sequence += '\n            ]'
+            prompt_sequence += ',\n'.join(
+                [indent(str(s), indent_value) for s in self.prompt_sequence],
+            )
+            prompt_sequence += '\n            ]'
         else:
-            test_sequence = '[]'
+            prompt_sequence = '[]'
         metadata = '' if not self.metadata else f'            metadata={self.metadata},\n{" " * 12}'  # noqa
         return dedent(f"""
         Eval(
-            {metadata}test_sequence={test_sequence},
+            {metadata}prompt_sequence={prompt_sequence},
         )
         """).strip()
 
@@ -399,6 +401,191 @@ class Eval(DictionaryEqualsMixin):
         Reques
         """
         return Eval(**deepcopy(self.to_dict()))
+
+
+class PromptComparison:
+    """
+    The intent of this class is to form an interface for defining/creating multiple PromptTest
+    objects that access different prompts across the same set of checks, which is usedful
+    for prompt engineering.
+
+    A PromptTest object is returned for each of the prompts provided. The checks and ideal response
+    are shared across all PromptTest objects.
+
+    `prompt_parameters` can be used to share text across prompts. For example, if you are using
+    few-shot learning, you can use `prompt_parameters` to share the the same few-shot example
+    across all prompts.
+
+    This class could (should?) have been implemented as a function, but it is implemented as a
+    callable class to provide a consistent interface with the other classes in the llm_eval module
+    when defining evaluations (e.g. PromptTest, MultiEval).
+    """
+
+    def __init__(self,
+        prompts: list[str | dict],
+        prompt_parameters: dict | None = None,
+        checks: list[Check | dict] | None = None,
+        ideal_response: str | None = None) -> None:
+        """
+        Args:
+            prompts:
+                A list of prompts that can be either strings or dictionaries. If dictionaries are
+                used, the dictionary must contain a 'prompt' key. Future versions may support
+                additional keys.
+            prompt_parameters:
+                `prompt_parameters` is a dictionary where the keys correspond to placeholders in
+                the prompts (e.g. key is 'value_a' and the prompt is 'Here is my prompts with
+                {value_a}') and the values will replace the placeholders (e.g. '{value_a}') in the
+                prompts.
+            checks:
+                List of checks to run against the response. All PromptTest objects will share the
+                same checks.
+            ideal_response:
+                Optional ideal response for the prompts. Currently not used in llm_eval.
+        """
+        self.prompts = [str(p['prompt']) if isinstance(p, dict) else str(p) for p in prompts]
+        self.prompt_parameters = prompt_parameters or {}
+        self.checks = [Check.from_dict(c) if isinstance(c, dict) else c for c in checks or []]
+        self.ideal_response = str(ideal_response) if ideal_response is not None else None
+
+    def __call__(self) -> list[PromptTest]:
+        """Creates a list of PromptTest objects from the PromptComparison."""
+        tests = []
+        for prompt in self.prompts:
+            tests.append(PromptTest(
+                prompt=prompt.format(**self.prompt_parameters) if self.prompt_parameters else prompt,  # noqa
+                ideal_response=self.ideal_response,
+                checks=self.checks,
+            ))
+        return tests
+
+
+class MultiEval:
+    """
+    A MultiEval object describes and validates the structure required to create one or more evals
+    from either multiple system messages, multiple sets of previous messages, and/or multiple
+    prompts.
+
+    Unlike an Eval object, A MultiEval object does not generate LLM responses or execute checks.
+    It is simply a mechanism to create multiple Eval objects from a single dictionary. However,
+    MultiEvals can be passed to the TestHarness in the same way as Eval objects, and the
+    TestHarness will automatically create multiple Eval objects from the MultiEval object.
+
+    For example, if the `system_message` is a list of strings, the intent intent is to create two
+    Eval objects (duplicated for each system_message).
+    """
+
+    def __init__(self,
+            prompts: list[PromptTest | dict] | PromptComparison | PromptTest | dict,
+            system_message: list[str] | str | None = None,
+            previous_messages: list[dict | tuple | list] | None = None,
+            metadata: dict | None = None,
+        ) -> None:
+        """
+        Args:
+            prompts:
+                If a single dictionary is passed in, it is assumed to represent a single PromptTest
+                object (and, therefore, a single Eval object) or a single PromptComparison object
+                (and, therefore, multiple Eval objects). Please see those classes for the expected
+                fields (and corresponding dictionary structure).
+
+                If a list of PromptTest objects is passed in, it is assumed to represent a single
+                eval with one or more sequential prompts.
+
+                If a list of dictionaries is passed in, it is assumed to represent either a single
+                PromptTest object or a single PromptComparison object.
+            system_message:
+                Either a single system message or a list of system messages. If multiple system
+                messages are passed in, multiple Eval objects will be created (one for each system
+                message), which will share the same prompts and previous messages.
+            previous_messages:
+                Previous messages are user/assistant pairs to set the state of the LLM. Each pair
+                should either be a dictionary or a tuple. If a dictionary is used then it should
+                contain a 'user' key and an 'assistant' key. If a tuple is used, it should contain
+                two items: the user message in the first position and the assistant message in the
+                second position.
+
+                Either a list of previous messages or a list of lists of previous messages can be
+                passed in. If a list of lists is passed in, it is assumed that each outer list
+                represents a single Eval object and each inner list represents a list of previous
+                messages for that Eval object. Therefore a list of lists will create multiple Eval
+                objects, one for each inner list of previous messages. Each Eval object will share
+                the same prompts and system message.
+            metadata:
+                Metadata shared across all Eval objects.
+        """
+        if system_message is None or isinstance(system_message, list):
+            self.system_message = system_message
+        else:
+            self.system_message = [system_message]
+        assert previous_messages is None or isinstance(previous_messages, list), \
+            "previous_messages must be a list"
+        if previous_messages and isinstance(previous_messages[0], (dict, tuple)):
+            self.previous_messages = [previous_messages]
+        else:
+            self.previous_messages = previous_messages
+        self.metadata = metadata or {}
+
+        if isinstance(prompts, dict):
+            # A single dictionary can represent a single PromptTest or a single PromptComparison.
+            # A dictionary representing a PromptTest will contain a `prompt` key; a dictionary
+            # representing a PromptComparison will contain a `prompts` key.
+            if 'prompt' in prompts:
+                prompts = [PromptTest(**prompts)]
+            else:
+                assert 'prompts' in prompts, "Invalid dictionary; expected 'prompt' or 'prompts'"
+                # type(prompts['checks'][0])
+                # PromptComparison(prompts=prompts['prompts'], checks=prompts.get('checks'))
+                prompts = PromptComparison(**prompts)()
+        elif isinstance(prompts, PromptComparison):
+            prompts = prompts()
+        elif isinstance(prompts, PromptTest):
+            prompts = [prompts]
+        else:
+            # either a list of PromptTest objects or a list of dictionaries representing a
+            # PromptTest object; either way, there are multiple objects but only for a single eval
+            # so we need to wrap it in another list
+            assert isinstance(prompts, list)
+            assert all(isinstance(p, (PromptTest, dict)) for p in prompts)
+            prompts = [
+                PromptTest(**p) if isinstance(p, dict) else p for p in prompts
+            ]
+            prompts = [prompts]
+
+        assert isinstance(prompts, list), "prompts must be a list"
+        self.prompts = prompts
+
+    def __call__(self) -> list[Eval]:
+        """Creates a list of Eval objects from the MultiEval object."""
+        evals = []
+        for system_message in self.system_message or [None]:
+            for previous_messages in self.previous_messages or [None]:
+                for prompt_sequence in self.prompts:
+                    evals.append(Eval(
+                        prompt_sequence=prompt_sequence,
+                        system_message=system_message,
+                        previous_messages=previous_messages,
+                        metadata=self.metadata,
+                    ))
+        return evals
+
+    @classmethod
+    def from_dict(cls, config: dict) -> list[Eval]:  # noqa: ANN102
+        """
+        Parse a dictionary into a MultiEval object.
+
+        A dictionary can either have `prompt_comparison` key which represents a single
+        PromptComparison object (which in turn represents multiple PromptTest objects), or a
+        `prompt_sequence` key which represents a list of PromptTest objects.
+        """
+        config = deepcopy(config)
+        prompts = config.get('prompt_comparison') or config.get('prompt_sequence')
+        return cls(
+            prompts=prompts,
+            system_message=config.get('system_message'),
+            previous_messages=config.get('previous_messages'),
+            metadata=config.get('metadata'),
+        )
 
 
 class EvalResult(DictionaryEqualsMixin):
@@ -447,7 +634,7 @@ class EvalResult(DictionaryEqualsMixin):
         elif isinstance(candidate_obj, dict):
             if 'candidate_type' in candidate_obj:
                 # loads the Candidate subclass from the registry
-                self.candidate_obj = Candidate.from_dict(deepcopy(candidate_obj))
+                self.candidate_obj = Candidate.from_dict(candidate_obj)
             else:
                 self.candidate_obj = Candidate(**deepcopy(candidate_obj))
         else:
@@ -469,7 +656,7 @@ class EvalResult(DictionaryEqualsMixin):
                 if isinstance(r, dict):
                     assert 'result_type' in r, \
                         "CheckResult dictionary must contain a 'result_type' key"
-                    test_results_created.append(CheckResult.from_dict(deepcopy(r)))
+                    test_results_created.append(CheckResult.from_dict(r))
                 elif isinstance(r, CheckResult):
                     test_results_created.append(r)
                 else:
@@ -480,12 +667,12 @@ class EvalResult(DictionaryEqualsMixin):
     @property
     def prompts(self) -> list[str]:
         """Returns a list of prompts."""
-        return [p.prompt for p in self.eval_obj.test_sequence]
+        return [p.prompt for p in self.eval_obj.prompt_sequence]
 
     @property
     def ideal_responses(self) -> list[str | None]:
         """Returns a list of ideal responses."""
-        return [p.ideal_response for p in self.eval_obj.test_sequence]
+        return [p.ideal_response for p in self.eval_obj.prompt_sequence]
 
     @property
     def response_characters(self) -> int:
@@ -590,7 +777,7 @@ class EvalResult(DictionaryEqualsMixin):
             eval_name = f"Eval:{' ' * 24}{eval_name}\n{' ' * 12}"
         result = f"""
         EvalResult:
-            {candidate_name}{eval_name}# of Prompts Tested:         {len(self.eval_obj.test_sequence)}{cost_str}
+            {candidate_name}{eval_name}# of Prompts Tested:         {len(self.eval_obj.prompt_sequence)}{cost_str}
             Total Response Time:         {self.total_time_seconds:0.1f} seconds
             # of Response Characters:    {self.response_characters:,}
             Characters per Second:       {self.characters_per_second:,.1f}
@@ -728,10 +915,10 @@ class EvalHarness:
 
     def __init__(
             self,
-            evals: list[Eval] | list[dict] | None = None,
-            candidates: list[Candidate | Callable | dict] | None = None,
+            evals: list[Eval | dict | MultiEval] | Eval | MultiEval | dict | None = None,
+            candidates: list[Candidate | Callable | dict] | Candidate | dict | None = None,
             num_cpus: int | None = None,
-            async_batch_size: int | None = 50,  # TODO: document None means async = # of evals
+            async_batch_size: int | None = 50,
             callback: Callable | None = None,
             error_callback: Callable | None = None,
             num_samples: int = 1) -> None:
@@ -778,7 +965,7 @@ class EvalHarness:
                 number > 1, the EvalHarness will use the specified number of CPUs.
             async_batch_size:
                 The number of Evals to run asynchronously for each Candidate. If set to None, the
-                EvalHarness will run each Eval sequentially. If set to a number, the EvalHarness
+                batch size is se tot he number of evals. If set to a number, the EvalHarness
                 will run the Evals in batches of the specified size.
             callback:
                 A callback function that will be called for each EvalResult (each Eval/Candidate
@@ -806,37 +993,19 @@ class EvalHarness:
                 temperature (or close) will give the same or very similar responses for each
                 sample, defeating the purpose of collecting a sample.
         """  # noqa: D412
-        evals = evals or []
-        eval_objects = []
-        candidates = candidates or []
-        candidate_objects = []
-
         self.num_cpus = num_cpus
         self.async_batch_size = async_batch_size
         self.callback = callback
         self.error_callback = error_callback
         self.num_samples = num_samples
+        self.evals = []
+        self.candidates = []
+        if evals:
+            self.add_evals(evals)
+        if candidates:
+            self.add_candidates(candidates)
 
-        for eval_obj in evals:
-            if isinstance(eval_obj, dict):
-                eval_objects.append(Eval(**deepcopy(eval_obj)))
-            elif isinstance(eval_obj, Eval):
-                eval_objects.append(eval_obj)
-            else:
-                raise TypeError("evals must be either an Eval instance or a dictionary")
-
-        for candidate in candidates:
-            if isinstance(candidate, dict):
-                candidate_objects.append(Candidate.from_dict(deepcopy(candidate)))
-            elif isinstance(candidate, Candidate):
-                candidate_objects.append(candidate)
-            else:
-                raise TypeError("candidates must be either a Candidate instance or a dictionary")
-
-        self.evals = eval_objects
-        self.candidates = candidate_objects
-
-    def add_eval(self, eval_obj: Eval | dict) -> None:
+    def add_evals(self, eval_obj: list[Eval | dict | MultiEval] | Eval | MultiEval | dict) -> None:
         """
         Adds an Eval object. This method can be called multiple times to add additional Eval
         objects.
@@ -848,9 +1017,19 @@ class EvalHarness:
                 The checks needs a `check_type` key with the registration value.
         """
         if isinstance(eval_obj, dict):
-            eval_obj = Eval(**deepcopy(eval_obj))
-        assert isinstance(eval_obj, Eval), "eval_obj must be an Eval or a dictionary"
-        self.evals.append(eval_obj)
+            # a dict could be in the format of a single Eval or a MultiEval (prompt_sequence or
+            # prompt_comparison) with single or multiple system_messages and previous_messages
+            # MutliEval will create the necessary Eval objects
+            self.evals.extend(MultiEval.from_dict(eval_obj)())
+        elif isinstance(eval_obj, MultiEval):
+            self.evals.extend(eval_obj())
+        elif isinstance(eval_obj, Eval):
+            self.evals.append(eval_obj)
+        elif isinstance(eval_obj, list):
+            for obj in eval_obj:
+                self.add_evals(obj)
+        else:
+            raise TypeError(f"incompatible type {type(eval_obj)} for eval_obj")
 
     def add_eval_from_yaml(self, path: str) -> None:
         """
@@ -864,7 +1043,7 @@ class EvalHarness:
             path:
                 Path to the YAML file.
         """
-        self.add_eval(Eval.from_yaml(path))
+        self.add_evals(Eval.from_yaml(path))
 
     def add_evals_from_yamls(self, path: str) -> None:
         """
@@ -881,7 +1060,7 @@ class EvalHarness:
         for file_path in glob.glob(path):
             self.add_eval_from_yaml(file_path)
 
-    def add_candidate(self, candidate: Candidate | dict) -> None:
+    def add_candidates(self, candidate: list[Candidate | dict] | Candidate | dict) -> None:
         """
         Adds a Candidate object. This method can be called multiple times to add additional
         Candidate objects.
@@ -893,13 +1072,17 @@ class EvalHarness:
                 The dictionary needs a `candidate_type` key with the registration value.
         """
         if isinstance(candidate, dict):
-            # Candidate.from_dict can potentially return a list of Candidates
+            # loads the Candidate subclass from the registry
             candidate = Candidate.from_dict(candidate)
             if isinstance(candidate, list):
                 self.candidates.extend(candidate)
-                return
-        assert isinstance(candidate, Candidate), "candidate must be a Candidate or a dictionary"
-        self.candidates.append(candidate)
+            else:
+                self.candidates.append(candidate)
+        elif isinstance(candidate, Candidate):
+            self.candidates.append(candidate)
+        elif isinstance(candidate, list):
+            for obj in candidate:
+                self.add_candidates(obj)
 
     def add_candidate_from_yaml(self, path: str) -> None:
         """
@@ -916,7 +1099,7 @@ class EvalHarness:
         """
         with open(path) as f:
             config = yaml.safe_load(f)
-        self.add_candidate(config)
+        self.add_candidates(config)
 
     def add_candidates_from_yamls(self, path: str) -> None:
         """
@@ -1010,7 +1193,7 @@ class EvalHarness:
                         # that were generated before the exception was raised. We want to keep the
                         # responses that were generated before the exception was raised and add
                         # empty strings for the remaining responses.
-                        missing_responses = len(response_eval.test_sequence) \
+                        missing_responses = len(response_eval.prompt_sequence) \
                             - len(response_eval._responses)
                         response_eval._responses.extend(['' for _ in range(missing_responses)])
                         eval_result = response_eval._execute_checks()

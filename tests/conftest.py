@@ -233,6 +233,46 @@ class MockCandidate(Candidate):
         return None
 
 
+@Candidate.register('MockCandidateCannedResponse')
+class MockCandidateCannedResponse(Candidate):  # noqa
+    def __init__(
+            self,
+            metadata: dict | None = None,
+            parameters: dict | None = None):
+        super().__init__(metadata=metadata, parameters=parameters)
+
+    def __call__(self, _: str) -> str:
+        """Returns the response for the given prompt."""
+        sleep(0.01)
+        return 'Response'
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        return
+
+    def to_dict(self) -> dict:
+        """Need to add `responses` to enable proper to_dict values."""
+        return super().to_dict()
+
+    @property
+    def total_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def input_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def response_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def cost(self) -> float:  # noqa
+        return None
+
+
 @pytest.fixture()
 def fake_docs_abcd() -> list[Document]:
     """Meant to be used MockABCDEmbeddings model."""
@@ -399,6 +439,25 @@ def fake_eval_non_string_values() -> dict:
     with open('tests/fake_data/fake_eval_non_string_values.yaml') as f:
         return yaml.safe_load(f)
 
+
+@pytest.fixture()
+def fake_multi_eval() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_multi_eval.yaml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture()
+def fake_multi_eval_non_string_values() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_multi_eval_non_string_values.yaml') as f:
+        return yaml.safe_load(f)
+
+@pytest.fixture()
+def fake_multi_eval_with_prompt_sequence() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_multi_eval_with_prompt_sequence.yaml') as f:
+        return yaml.safe_load(f)
 
 @pytest.fixture()
 def openai_candidate_template() -> dict:

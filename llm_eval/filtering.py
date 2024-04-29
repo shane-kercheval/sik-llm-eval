@@ -10,7 +10,7 @@ def eval_expects_code_blocks(eval_: Eval) -> bool:
     """
     return any(
         isinstance(check, PythonCodeBlocksPresent)
-        for test in eval_.test_sequence
+        for test in eval_.prompt_sequence
         for check in test.checks
     )
 
@@ -21,7 +21,7 @@ def eval_contains_code_block_tests(eval_: Eval) -> bool:
     """
     return any(
         isinstance(check, PythonCodeBlockTests)
-        for test in eval_.test_sequence
+        for test in eval_.prompt_sequence
         for check in test.checks
     )
 

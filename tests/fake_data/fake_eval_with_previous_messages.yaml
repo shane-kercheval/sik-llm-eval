@@ -15,7 +15,7 @@ previous_messages:
     assistant: Assistant Response 1
   - user: User Message 2
     assistant: Assistant Response 2
-test_sequence:
+prompt_sequence:
   - prompt: Write a function that called `sum_two_numbers` that takes two numbers and returns their sum.
     checks:
       - check_type: CONTAINS

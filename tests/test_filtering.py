@@ -157,7 +157,7 @@ def test__expects_code_blocks(
         fake_eval_no_code_blocks: dict) -> None:
     """Test the xxx_expects_code_blocks functions."""
     temp = Eval(**fake_eval_8f9fbf37)
-    temp.test_sequence[0].checks[0]
+    temp.prompt_sequence[0].checks[0]
 
     assert eval_expects_code_blocks(Eval(**fake_eval_8f9fbf37))
     assert eval_expects_code_blocks(Eval(**fake_eval_subtract_two_numbers))

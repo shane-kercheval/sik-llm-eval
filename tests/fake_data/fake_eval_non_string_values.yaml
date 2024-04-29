@@ -15,7 +15,7 @@ previous_messages:
     assistant: 8
   - user: 9
     assistant: 10
-test_sequence:
+prompt_sequence:
   - prompt: 11
     checks:
       - check_type: CONTAINS

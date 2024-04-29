@@ -8,6 +8,7 @@ matching (i.e. does the LLM response exactly match the expected value provided) 
 LLM to evaluate the response.
 """
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from enum import Enum, auto
 from inspect import getsource
 import re
@@ -96,6 +97,7 @@ class CheckResult(BaseModel, ABC):
         Create a Checkresult object from a dictionary. This method requires that the Checkresult
         subclass has been registered with the `register` decorator.
         """
+        data = deepcopy(data)
         result_type = data.get('result_type', '')
         if result_type in cls.registry:
             return cls.registry.create_instance(type_name=result_type, **data)
