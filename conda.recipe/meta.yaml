@@ -19,26 +19,27 @@ requirements:
     - pip
     - setuptools
   run:
-  - coverage=7.2
-  - faker=18.9
-  - joblib=1.4
-  - openai=1.9
-  - markdown=3.4
-  - markdownify=0.11
-  - numpy=1.26
-  - pandas=2.2
-  - pydantic=2.5
-  - pygments=2.15
-  - pytest=7.4
-  - python-dotenv=0.21
-  - PyYAML=6.0
-  - ruff=0.3
-  - tenacity=8.2
-  - tensorflow=2.15
-  - tiktoken=0.6
-  - pytorch=2.1
-  - transformers=4.37
-  # - duckduckgo_search==5.3
+    - python
+    - coverage=7.2
+    - faker=18.9
+    - joblib=1.4
+    - openai=1.9
+    - markdown=3.4
+    - markdownify=0.11
+    - numpy=1.26
+    - pandas=2.2
+    - pydantic=2.5
+    - pygments=2.15
+    - pytest=7.4
+    - python-dotenv=0.21
+    - PyYAML=6.0
+    - ruff=0.3
+    - tenacity=8.2
+    - tensorflow=2.15
+    - tiktoken=0.6
+    - pytorch=2.1
+    - transformers=4.37
+    # - duckduckgo_search==5.3
 
 
 about:
