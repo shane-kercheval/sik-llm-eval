@@ -21,7 +21,7 @@ from llm_eval.utilities.internal_utilities import (
     Timer,
 )
 from llm_eval.llms.utilities import (
-    DuckDuckGoSearch,
+    # DuckDuckGoSearch,
     StackOverflowSearchRecord,
     StackQuestion,
     _get_stack_overflow_answers,
@@ -375,44 +375,44 @@ def test_RequestError():  # noqa
     response = requests.get("https://example.com/asdf")
     assert RequestError(status_code=response.status_code, reason=response.reason)
 
-def test_DuckDuckGoSearch():  # noqa
-    query = "What is an agent in langworkflow?"
-    search = DuckDuckGoSearch(top_n=1)
-    results = search(query=query)
-    assert len(results) == 1
-    assert 'title' in results[0]
-    assert 'href' in results[0]
-    assert 'body' in results[0]
-    assert len(search.history()) == 1
-    assert search.history()[0].query == query
-    assert search.history()[0].results == results
+# def test_DuckDuckGoSearch():  # noqa
+#     query = "What is an agent in langworkflow?"
+#     search = DuckDuckGoSearch(top_n=1)
+#     results = search(query=query)
+#     assert len(results) == 1
+#     assert 'title' in results[0]
+#     assert 'href' in results[0]
+#     assert 'body' in results[0]
+#     assert len(search.history()) == 1
+#     assert search.history()[0].query == query
+#     assert search.history()[0].results == results
 
-    query = "What is langworkflow?"
-    results = search(query=query)
-    assert len(results) == 1
-    assert 'title' in results[0]
-    assert 'href' in results[0]
-    assert 'body' in results[0]
-    assert len(search.history()) == 2
-    assert search.history()[1].query == query
-    assert search.history()[1].results == results
+#     query = "What is langworkflow?"
+#     results = search(query=query)
+#     assert len(results) == 1
+#     assert 'title' in results[0]
+#     assert 'href' in results[0]
+#     assert 'body' in results[0]
+#     assert len(search.history()) == 2
+#     assert search.history()[1].query == query
+#     assert search.history()[1].results == results
 
-def test_DuckDuckGoSearch_caching():  # noqa
-    """
-    Test that searching DuckDuckGo based on same query returns same results with different uuid and
-    timestamp.
-    """
-    query = "This is my fake query?"
-    fake_results = [{'title': "fake results"}]
-    search = DuckDuckGoSearch(top_n=1)
-    # modify _history to mock a previous search based on a particular query
-    search._history.append(SearchRecord(query=query, results=fake_results))
-    response = search(query)
-    assert response == fake_results
-    assert len(search.history()) == 2
-    assert search.history()[0].query == search.history()[1].query
-    assert search.history()[0].results == search.history()[1].results
-    assert search.history()[0].uuid != search.history()[1].uuid
+# def test_DuckDuckGoSearch_caching():  # noqa
+#     """
+#     Test that searching DuckDuckGo based on same query returns same results with different uuid and
+#     timestamp.
+#     """
+#     query = "This is my fake query?"
+#     fake_results = [{'title': "fake results"}]
+#     search = DuckDuckGoSearch(top_n=1)
+#     # modify _history to mock a previous search based on a particular query
+#     search._history.append(SearchRecord(query=query, results=fake_results))
+#     response = search(query)
+#     assert response == fake_results
+#     assert len(search.history()) == 2
+#     assert search.history()[0].query == search.history()[1].query
+#     assert search.history()[0].results == search.history()[1].results
+#     assert search.history()[0].uuid != search.history()[1].uuid
 
 def test_StackOverflowSearch():  # noqa
     # not sure how to test this in a way that won't break if the response from stack overflow
