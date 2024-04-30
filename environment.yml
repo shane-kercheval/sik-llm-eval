@@ -24,5 +24,6 @@ dependencies:
   - tiktoken=0.6
   - pytorch=2.1
   - transformers=4.37
+  - tomlkit=0.12
   # - pip:
   #     - duckduckgo_search==5.3
