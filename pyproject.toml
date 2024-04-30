@@ -18,14 +18,14 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "joblib",
-    "openai",
-    "pydantic",
-    "PyYAML",
-    "tenacity",
-    "transformers",
-    "torch",
-    "tiktoken",
+    "joblib~=1.4",
+    "openai~=1.9",
+    "pydantic~=2.5",
+    "PyYAML~=6.0",
+    "tenacity~=8.2",
+    "transformers~=4.37",
+    "torch~=2.1",
+    "tiktoken~=0.6",
 ]
 
 [project.optional-dependencies]
