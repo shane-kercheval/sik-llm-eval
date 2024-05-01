@@ -1,7 +1,7 @@
 """Misc helper functions and classes."""
 
 from datetime import datetime
-from itertools import islice
+# from itertools import islice
 import os
 import re
 import requests
@@ -78,8 +78,8 @@ def scrape_url(url: str) -> str:
 
 # class DuckDuckGoSearch(RecordKeeper):
 #     """
-#     A wrapper around DuckDuckGo web search. The object is called with a query and returns a list of
-#     SearchRecord objects associated with the top search results.
+#     A wrapper around DuckDuckGo web search. The object is called with a query
+#     and returns a list of SearchRecord objects associated with the top search results.
 #     """
 
 #     def __init__(self, top_n: int = 3):
@@ -96,8 +96,8 @@ def scrape_url(url: str) -> str:
 #         for search in self._history:
 #             # if we have previously searched based on the same query, return the results
 #             if query == search.query:
-#                 # add a new SearchRecord object to the history so that we correctly account for all
-#                 # searches; create a new object that has a different uuid and timestamp
+#                 # add a new SearchRecord object to the history so that we correctly account for
+#                 # all searches; create a new object that has a different uuid and timestamp
 #                 self._history.append(SearchRecord(
 #                     query=query,
 #                     results=search.results,

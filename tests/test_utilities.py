@@ -26,7 +26,7 @@ from llm_eval.llms.utilities import (
     StackQuestion,
     _get_stack_overflow_answers,
     scrape_url,
-    SearchRecord,
+    # SearchRecord,
     split_documents,
     StackOverflowSearch,
 )
@@ -375,7 +375,7 @@ def test_RequestError():  # noqa
     response = requests.get("https://example.com/asdf")
     assert RequestError(status_code=response.status_code, reason=response.reason)
 
-# def test_DuckDuckGoSearch():  # noqa
+# def test_DuckDuckGoSearch():  # noqa: RUF100
 #     query = "What is an agent in langworkflow?"
 #     search = DuckDuckGoSearch(top_n=1)
 #     results = search(query=query)
@@ -397,10 +397,10 @@ def test_RequestError():  # noqa
 #     assert search.history()[1].query == query
 #     assert search.history()[1].results == results
 
-# def test_DuckDuckGoSearch_caching():  # noqa
+# def test_DuckDuckGoSearch_caching():  # noqa: RUF100
 #     """
-#     Test that searching DuckDuckGo based on same query returns same results with different uuid and
-#     timestamp.
+#     Test that searching DuckDuckGo based on same query returns same results
+#     with different uuid and timestamp.
 #     """
 #     query = "This is my fake query?"
 #     fake_results = [{'title': "fake results"}]
