@@ -11,9 +11,9 @@ In this framework, there are two fundamental concepts:
 - **Eval**: An Eval represents a single evaluation scenario, which can consist of one or more prompts. Multiple (sequential) prompts can be used to evaluate conversations where the LLM (i.e. the underlying client) maintains a conversational history. Each Eval is associated with custom "checks" to assess different criteria. Examples of checks include verifying if the response matches an exact value, contains specific content, includes code blocks, determining if those code blocks successfully, and validating the variables/functions created by those code blocks. Users can also create and register custom checks.
 
 - **Candidate**: A Candidate encapsulates an underlying LLM, model parameters, and its corresponding client. Candidates can be identical LLM models running on different hardware (or using different model parameters such as temperature), potentially differing in either response quality or performance. For instance, a Candidate can represent:
-    - ChatGPT 4.0 (the LLM & client/API are synonymous)
-    - Llama-2-7b-Chat (LLM) running on Hugging Face Endpoints with Nvidia 10G (client)
-    - Llama-2-7b-Chat Q6_K.gguf (LLM) running locally on LM Studio (client).
+  - ChatGPT 4.0 (the LLM & client/API are synonymous)
+  - Llama-2-7b-Chat (LLM) running on Hugging Face Endpoints with Nvidia 10G (client)
+  - Llama-2-7b-Chat Q6_K.gguf (LLM) running locally on LM Studio (client).
 
 ## Using llm-eval
 
@@ -83,7 +83,7 @@ print(results[0][0])
 
 `print(results[0][0])` will give:
 
-```
+```text
 EvalResult:
     Candidate:                  OpenAI GPT-3.5-Turbo (1106)
     Eval:                       Fibonacci Sequence
@@ -143,12 +143,11 @@ print(result)
 
 This minimal example does not give much insight into the quality of the response, but could still be used to compare the response time and cost of, for example, ChatGPT 3.5 vs 4.0, as well as visually compare the responses.
 
-
 ## Installing
 
 The easiest way to install the llm-eval package during this beta period is by cloning the repo and installing locally.
 
-```
+```shell
 cd <to the directory you want to clone the repo>
 git clone https://github.com/anaconda/llm-eval.git
 <activate conda or virtual environment if necessary>
@@ -178,3 +177,54 @@ To set the required environment variables for corresponding services, follow the
 For testing the HuggingFaceEndpointChat in llm_eval/llms/hugging_face.py (via tests/test_hugging_face.py), you can set the `HUGGING_FACE_ENDPOINT_UNIT_TESTS` environment variable to a deployed model on Hugging Face Endpoints.
 
 With these environment variables correctly configured, you can use the corresponding services seamlessly within the llm-eval framework.
+
+### Installing Dependencies
+
+Install the project dependencies using either `pip` or `conda`. For a reproducible environment, `conda` is preferred, as it sets up a local environment using the `make` command.
+
+#### Using PIP
+
+To install dependencies with `pip`, run:
+
+```shell
+pip install -r requirements.txt
+```
+
+#### Conda
+
+To set up a local environment with conda, run:
+
+```shell
+make setup_env
+```
+
+### Managing Dependencies
+
+When adding new dependencies:
+
+- Include them in the `requirements.txt` file with versions explicitly specified to ensure stability.
+- Verify that each dependency is available in a conda channel to prevent compatibility issues.
+
+Once added, run:
+
+```shell
+make gen_build_files
+```
+
+For dependencies with different names in `pip` and `conda`:
+
+- Use the `pip` name in the `requirements.txt`.
+- Modify the `generate_build_files.py` script to replace the `pip` name with the corresponding `conda` name in necessary areas.
+
+### Packaging
+
+The project supports packaging as either a `conda` package or a Python `wheel` file. The preferred method is the `conda` package to ensure compatibility with other `conda` environments.
+
+To create a `conda` package, run:
+
+```shell
+make gen_build_files # if new dependencies have been added.
+make build_package # to create the conda package.
+```
+
+The resulting `conda` package will be located in the `dist/conda/` directory.

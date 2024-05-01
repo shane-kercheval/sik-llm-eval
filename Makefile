@@ -52,3 +52,7 @@ CONDA_BUILD_OUTPUT := dist/conda
 build_package:
 	# Build Conda package
 	conda build $(CONDA_RECIPE_DIR) --output-folder $(CONDA_BUILD_OUTPUT)
+
+gen_build_files:
+	# Generate files required for building project as a wheel file or a conda package
+	python scripts/generate_build_files.py
