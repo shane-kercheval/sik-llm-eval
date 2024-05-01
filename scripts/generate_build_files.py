@@ -118,6 +118,9 @@ class CondaMetaManager(YamlManager):
         content = self.load_template()
         content.yaml_set_start_comment(self.warning_header)
 
+        content["package"]["name"] = self.project_name
+        content["package"]["version"] = self.project_version
+
         existing_deps = set(content["requirements"]["run"])
         updated_deps = sorted(existing_deps.union(dependencies))
         content["requirements"]["run"] = list(updated_deps)
