@@ -200,9 +200,14 @@ make setup_env
 
 ### Managing Dependencies
 
+There are two source files used to automate the management of multiple build files. They are:
+
+- `dev_requirements.txt`: Dependencies required for development.
+- `run_requirements.txt`: Dependencies required for running the project.
+
 When adding new dependencies:
 
-- Include them in the `requirements.txt` file with versions explicitly specified to ensure stability.
+- Include them in either `dev_requirements.txt` or `run_requirements.txt` accordingly with versions explicitly specified to ensure stability.
 - Verify that each dependency is available in a conda channel to prevent compatibility issues.
 
 Once added, run:
@@ -213,7 +218,7 @@ make gen_build_files
 
 For dependencies with different names in `pip` and `conda`:
 
-- Use the `pip` name in the `requirements.txt`.
+- Use the `pip` name in the when adding to either the `dev_requirements.txt` or the `run_requirements.txt` files.
 - Modify the `generate_build_files.py` script to replace the `pip` name with the corresponding `conda` name in necessary areas.
 
 ### Packaging
