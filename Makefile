@@ -35,3 +35,24 @@ doctests:
 	# python -m doctest llm_eval/evals.py
 
 tests: linting unittests doctests
+
+####
+# dev commands
+####
+# commands for development
+CONDA_ENV ?= ./env
+env := $(CONDA_ENV)
+setup_env:
+	# Setup local environment
+	@if [ -z "$${CONDA_SHLVL:+x}" ]; then echo "Conda is not installed." && exit 1; fi
+	conda env $(shell [ -d $(env) ] && echo update || echo create) -p $(env) --file environment.yml
+
+CONDA_RECIPE_DIR := conda.recipe
+CONDA_BUILD_OUTPUT := dist/conda
+build_package:
+	# Build Conda package
+	conda build $(CONDA_RECIPE_DIR) --output-folder $(CONDA_BUILD_OUTPUT)
+
+gen_build_files:
+	# Generate files required for building project as a wheel file or a conda package
+	python scripts/generate_build_files.py

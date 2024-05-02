@@ -1,0 +1,27 @@
+package:
+  name: name
+  version: 0.0.0
+
+source:
+  path: ..
+
+build:
+  noarch: python
+
+requirements:
+  host:
+    - python
+    - pip
+    - setuptools
+  run:
+    - python
+    # - duckduckgo_search==5.3
+
+about:
+  home: https://github.com/anaconda/llm-eval
+  license: Anaconda license
+  license_family: PROPRIETARY
+  license_file: LICENSE
+  summary: LLM eval framework
+  description: Evaluate the performance and quality of Large Language Models (LLMs)
+  dev_url: https://github.com/anaconda/llm-eval
