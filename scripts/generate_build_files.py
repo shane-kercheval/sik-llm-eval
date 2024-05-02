@@ -128,6 +128,32 @@ class CondaMetaManager(YamlManager):
         self.save_updated_file(content)
 
 
+class RequirementsManager(TemplateManager):
+    """Manages 'requirements.txt' files for Python projects, inheriting from TemplateManager."""
+
+    def load_template(self) -> Dict[str, Any]:
+        """
+        As there's no template to load for a requirements file,
+        this method can simply return an empty dictionary.
+        """
+        return {}
+
+    def save_updated_file(self, content: Dict[str, Any]) -> None:
+        """Save the list of dependencies to the 'requirements.txt' file."""
+        requirements_path = self.output_path
+        formatted_deps = "\n".join(sorted(set(content["dependencies"])))
+        with open(requirements_path, "w") as file:
+            file.write(f"# {self.warning_header}\n")
+            file.write(f"{formatted_deps}\n")
+
+    def update_dependencies(self, dependencies: List[str]) -> None:
+        """
+        Directly save the updated dependencies into 'requirements.txt'.
+        This method uses the provided dependency list without modification.
+        """
+        self.save_updated_file({"dependencies": dependencies})
+
+
 def pip_to_conda_version(pip_version: str) -> str:
     """
     Convert a pip-style version string to a conda-compatible version string.
@@ -160,10 +186,23 @@ def main() -> None:
     """Run main function for generating build files."""
     root_dir = Path(__file__).resolve().parent.parent
     conda_recipe_dir = root_dir / "conda.recipe"
-    template_dir = root_dir / "scripts" / "templates"
+    scripts_dir = root_dir / "scripts"
+    template_dir = scripts_dir / "templates"
 
-    dependencies_path = root_dir / "requirements.txt"
-    dependencies = load_dependencies(dependencies_path)
+    dev_dependencies_path = scripts_dir / "dev_requirements.txt"
+    run_dependencies_path = scripts_dir / "run_requirements.txt"
+
+    dev_dependencies = load_dependencies(dev_dependencies_path)
+    run_dependencies = load_dependencies(run_dependencies_path)
+    all_dependencies = dev_dependencies + run_dependencies
+
+    requirements_manager = RequirementsManager(
+        _build_config(
+            template_path=root_dir,  # Not used, but required by the constructor
+            output_path=root_dir / "requirements.txt",
+        ),
+    )
+    requirements_manager.update_dependencies(all_dependencies)
 
     pyproject_manager = PyProjectManager(
         _build_config(
@@ -171,7 +210,7 @@ def main() -> None:
             output_path=root_dir / "pyproject.toml",
         ),
     )
-    pyproject_manager.update_dependencies(dependencies)
+    pyproject_manager.update_dependencies(run_dependencies)
 
     environment_manager = YamlManager(
         _build_config(
@@ -179,7 +218,9 @@ def main() -> None:
             output_path=root_dir / "environment.yml",
         ),
     )
-    environment_manager.update_dependencies([pip_to_conda_version(dep) for dep in dependencies])
+    environment_manager.update_dependencies(
+        [pip_to_conda_version(dep) for dep in all_dependencies]
+    )
 
     meta_manager = CondaMetaManager(
         _build_config(
@@ -187,7 +228,7 @@ def main() -> None:
             output_path=conda_recipe_dir / "meta.yaml",
         ),
     )
-    meta_manager.update_dependencies([pip_to_conda_version(dep) for dep in dependencies])
+    meta_manager.update_dependencies([pip_to_conda_version(dep) for dep in run_dependencies])
 
 
 if __name__ == "__main__":

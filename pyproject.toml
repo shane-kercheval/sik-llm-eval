@@ -16,7 +16,7 @@ classifiers = [
 ]
 authors = [{ name = "Anaconda", email = "skercheval@anaconda.com" }]
 requires-python = ">=3.10"
-dependencies = ["PyYAML~=6.0", "coverage~=7.2", "faker~=18.9", "joblib~=1.4", "markdownify~=0.11", "markdown~=3.4", "numpy~=1.26", "openai~=1.9", "pandas~=2.2", "pydantic~=2.5", "pygments~=2.15", "pytest~=7.4", "python-dotenv~=0.21", "ruamel.yaml~=0.18", "ruff~=0.3", "tenacity~=8.2", "tensorflow~=2.15", "tiktoken~=0.6", "tomlkit~=0.12", "torch~=2.1", "transformers~=4.37"]
+dependencies = ["PyYAML~=6.0", "joblib~=1.4", "numpy~=1.26", "openai~=1.9", "pydantic~=2.5", "python-dotenv~=0.21", "tenacity~=8.2", "tiktoken~=0.6", "torch~=2.1", "transformers~=4.37"]
 
 [project.optional-dependencies]
 # Replace the below examples with your actual optional dependencies
