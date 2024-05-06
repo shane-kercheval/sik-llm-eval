@@ -699,7 +699,7 @@ def test__multiline_eval__dedents_prompt():  # noqa
     """
     eval_obj = Eval(prompt_sequence=[PromptTest(prompt=prompt)])
     result = eval_obj(lambda x: x)
-    assert result.responses[0] == dedent(prompt)
+    assert result.responses[0] == dedent(prompt).lstrip()
 
 def callback(x: EvalResult) -> None:
     """

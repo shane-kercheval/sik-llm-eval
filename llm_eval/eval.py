@@ -66,7 +66,7 @@ class PromptTest(DictionaryEqualsMixin):
                 Check subclasses need to be registered via `Check.register(...)`.
                 The dictionary needs a `check_type` key with the registration value.
         """
-        self.prompt = dedent(str(prompt))
+        self.prompt = dedent(str(prompt)).lstrip()
         self.ideal_response = dedent(ideal_response) if ideal_response else None
         checks = checks or []
         if not isinstance(checks, list):
@@ -1055,7 +1055,9 @@ class EvalHarness:
 
         Args:
             path:
-                Path to the directory of YAML files.
+                Path to the directory of YAML files along shell-style wildcards. For example,
+                `path/to/directory/*.yaml` (passed to `glob.glob` function).
+
         """
         for file_path in glob.glob(path):
             self.add_eval_from_yaml(file_path)

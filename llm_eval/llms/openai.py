@@ -183,7 +183,7 @@ class OpenAIChat(ChatModel):
         """
         Args:
             model_name:
-                e.g. 'gpt-3.5-turbo-1106'
+                e.g. 'gpt-3.5-turbo-0125'
             system_message:
                 The content of the message associated with the "system" `role`.
             streaming_callback:

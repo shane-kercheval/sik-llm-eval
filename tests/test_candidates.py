@@ -76,7 +76,7 @@ class MockCandidate(Candidate):
 
 
 def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa
-    candidate = Candidate.from_yaml('examples/candidates/openai_3.5_1106.yaml')
+    candidate = Candidate.from_yaml('examples/candidates/openai_3.5.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.to_dict() == openai_candidate_template
 

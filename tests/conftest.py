@@ -462,7 +462,7 @@ def fake_multi_eval_with_prompt_sequence() -> dict:
 @pytest.fixture()
 def openai_candidate_template() -> dict:
     """Returns the yaml template for an OpenAI."""
-    with open('examples/candidates/openai_3.5_1106.yaml') as f:
+    with open('examples/candidates/openai_3.5.yaml') as f:
         return yaml.safe_load(f)
 
 

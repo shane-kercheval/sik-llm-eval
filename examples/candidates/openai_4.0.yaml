@@ -1,5 +1,5 @@
 metadata:
-  name: OpenAI GPT-4.0-Turbo
+  name: OpenAI GPT-4.0-Turbo (2024-04-09)
 candidate_type: OPENAI
 parameters:
   model_name: gpt-4-turbo-2024-04-09
