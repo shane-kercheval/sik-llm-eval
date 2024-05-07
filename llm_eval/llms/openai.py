@@ -298,7 +298,6 @@ class OpenAIChat(ChatModel):
                 seed=self.seed,
                 **self.parameters,
             )
-            response.choices[0]
             tokens = [x.token for x in response.choices[0].logprobs.content]
             log_probs = [x.logprob for x in response.choices[0].logprobs.content]
             response_message = response.choices[0].message.content
