@@ -10,7 +10,7 @@ def eval_expects_code_blocks(eval_: Eval) -> bool:
     """
     return any(
         isinstance(check, PythonCodeBlocksPresent)
-        for test in eval_.test_sequence
+        for test in eval_.prompt_sequence
         for check in test.checks
     )
 
@@ -21,7 +21,7 @@ def eval_contains_code_block_tests(eval_: Eval) -> bool:
     """
     return any(
         isinstance(check, PythonCodeBlockTests)
-        for test in eval_.test_sequence
+        for test in eval_.prompt_sequence
         for check in test.checks
     )
 
@@ -37,7 +37,7 @@ def result_contains_code_block_tests(result: EvalResult) -> bool:
     Return True if the underlying Eval object in the EvalResult contains a check that tests code
     blocks (i.e. Check objects with `PythonCodeBlockTests` check type).
     """
-    return result.code_block_tests_result is not None
+    return result.get_code_block_tests_result() is not None
 
 def filter_expects_code_blocks(results: list[EvalResult]) -> list[EvalResult]:
     """

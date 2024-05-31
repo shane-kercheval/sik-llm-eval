@@ -1,0 +1,52 @@
+metadata:
+  name: example
+  id: FF053B6C-80B2-41DD-8B89-52132A60B448
+system_message:
+  - System Message 1
+  - |
+    System
+    Message 2
+previous_messages:
+  - - user: User Message 1
+      assistant: Assistant Response 1
+    - user: User Message 2
+      assistant: Assistant Response 2
+  - - user: User Message 3
+      assistant: Assistant Response 3
+    - user: User Message 4
+      assistant: Assistant Response 4
+prompt_comparison:
+  prompt_parameters:
+    value_a: |
+      def add(a, b):
+        return a - b
+    value_b: Value B
+  prompts:
+    - prompt: |
+        {value_a}
+
+        {value_b}
+
+        Fix this code and add doc strings and type hints.
+    - prompt: |
+        Fix this code and add doc strings and type hints.
+
+        ```
+        {value_b}
+        ```
+    - prompt: My prompt.
+  ideal_response: |
+    def add(a: int, b: int) -> int:
+       return a + b
+  checks:
+    - check_type: CONTAINS
+      value: "def add(int a, int b) -> int:"
+    - check_type: PYTHON_CODE_BLOCKS_PRESENT
+    - check_type: PYTHON_CODE_BLOCK_TESTS
+      code_block_timeout: 5
+      code_test_timeout: 5
+      code_tests:
+        - assert add(1, 2) == 3
+        - assert add(5, 5) == 10
+        - assert add(0, -1) == -1
+        - assert add(10, 10) == 0  # fails

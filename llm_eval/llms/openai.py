@@ -35,22 +35,23 @@ MODEL_COST_PER_TOKEN = {
     ####
     # LATEST MODELS
     # GPT-4-Turbo 128K
+    'gpt-4-turbo-2024-04-09': {'input': 10.00 / 1_000_000, 'output': 3.00 / 1_000_000},
     'gpt-4-0125-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
     # GPT-3.5 Turbo 16K
-    'gpt-3.5-turbo-0125': {'input': 0.0005 / 1_000, 'output': 0.0015 / 1_000},
+    'gpt-3.5-turbo-0125': {'input': 0.50 / 1_000_000, 'output': 1.50 / 1_000_000},
     # LEGACY MODELS
     # GPT-4-Turbo 128K
-    'gpt-4-1106-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
+    # 'gpt-4-1106-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
     # GPT-3.5-Turbo 16K
-    'gpt-3.5-turbo-1106': {'input': 0.001 / 1_000, 'output': 0.002 / 1_000},
+    # 'gpt-3.5-turbo-1106': {'input': 0.001 / 1_000, 'output': 0.002 / 1_000},
     # GPT-4
     'gpt-4-0613': {'input': 0.03 / 1_000, 'output': 0.06 / 1_000},
     # GPT-4- 32K
     # 'gpt-4-32k-0613': {'input': 0.06 / 1_000, 'output': 0.12 / 1_000},
     # GPT-3.5-Turbo 4K
-    'gpt-3.5-turbo-0613': {'input': 0.0015 / 1_000, 'output': 0.002 / 1_000},
+    # 'gpt-3.5-turbo-0613': {'input': 0.0015 / 1_000, 'output': 0.002 / 1_000},
     # GPT-3.5-Turbo 16K
-    'gpt-3.5-turbo-16k-0613': {'input': 0.003 / 1_000, 'output': 0.004 / 1_000},
+    # 'gpt-3.5-turbo-16k-0613': {'input': 0.003 / 1_000, 'output': 0.004 / 1_000},
 }
 
 
@@ -182,7 +183,7 @@ class OpenAIChat(ChatModel):
         """
         Args:
             model_name:
-                e.g. 'gpt-3.5-turbo-1106'
+                e.g. 'gpt-3.5-turbo-0125'
             system_message:
                 The content of the message associated with the "system" `role`.
             streaming_callback:
@@ -238,7 +239,7 @@ class OpenAIChat(ChatModel):
         """
         _create_client is used to create the OpenAI client. We cannot define this in __init__
         because it is not picklable and cannot be used with multiprocessing. Additionally, this
-        function lets OpenAIServerChat override the client creation and set the base_url to use
+        function lets OpenAIServerChat override the client creation and set the endpoint_url to use
         with a local server.
         """
         from openai import OpenAI
@@ -297,7 +298,6 @@ class OpenAIChat(ChatModel):
                 seed=self.seed,
                 **self.parameters,
             )
-            response.choices[0]
             tokens = [x.token for x in response.choices[0].logprobs.content]
             log_probs = [x.logprob for x in response.choices[0].logprobs.content]
             response_message = response.choices[0].message.content
@@ -325,13 +325,14 @@ class OpenAIChat(ChatModel):
 class OpenAIServerChat(OpenAIChat):
     """
     Some servers (e.g. llama.cpp, hugging face endpoints) allow callers to use OpenAI's API for
-    non-OpenAI models. This wrapper allows the caller to specify the base_url of the server to
+    non-OpenAI models. This wrapper allows the caller to specify the endpoint_url of the server to
     connect to and uses OpenAI API to interact with the LLM.
     """
 
     def __init__(
             self,
-            base_url: str,
+            endpoint_url: str,
+            api_key: str | None = None,
             system_message: str = 'You are a helpful AI assistant.',
             streaming_callback: Callable[[StreamingEvent], None] | None = None,
             memory_manager: MemoryManager | None = None,
@@ -355,8 +356,9 @@ class OpenAIServerChat(OpenAIChat):
         self.streaming_callback = streaming_callback
         self.timeout = timeout
         self.seed = seed
-        self.base_url = base_url
+        self.endpoint_url = endpoint_url
+        self.api_key = api_key
 
     def _create_client(self) -> object:
         from openai import OpenAI
-        return OpenAI(base_url=self.base_url, api_key='none')
+        return OpenAI(base_url=self.endpoint_url, api_key=self.api_key)

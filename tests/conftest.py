@@ -12,6 +12,7 @@ from faker import Faker
 import numpy as np
 from dotenv import load_dotenv
 from unittest.mock import MagicMock
+from llm_eval.candidates import Candidate
 from llm_eval.llms.message_formatters import LlamaMessageFormatter
 from llm_eval.llms.base import (
     ChatModel,
@@ -106,12 +107,14 @@ class MockCostMemoryManager(MemoryManager):
 class MockChatModel(ChatModel):
     """Used for unit tests to mock the behavior of an LLM."""
 
-    def __init__(
+    def __init__(  # noqa: D417
             self,
             token_calculator: Callable[[str | list[str] | object], int],
+            system_message: str = "This is a system message.",
             cost_calculator: Callable[[int, int], float] | None = None,
             return_prompt: str | None = None,
             message_formatter: Callable[[str, list[ExchangeRecord]], str] | None = None,
+            message_history: list[ExchangeRecord | dict | tuple] | None = None,
             memory_manager: MemoryManager | None = None) -> None:
         """
         Used to test base classes.
@@ -131,11 +134,12 @@ class MockChatModel(ChatModel):
         if message_formatter is None:
             message_formatter = LlamaMessageFormatter()
         super().__init__(
-            system_message="This is a system message.",
+            system_message=system_message,
             message_formatter=message_formatter,
             token_calculator=token_calculator,
             cost_calculator=cost_calculator,
             memory_manager=memory_manager,
+            message_history=message_history,
         )
         self.return_prompt = return_prompt
 
@@ -173,6 +177,100 @@ class MockRandomEmbeddings(EmbeddingModel):
             total_tokens=total_tokens,
             cost=cost,
         )
+
+@Candidate.register('MockCandidate')
+class MockCandidate(Candidate):
+    """
+    This class needs to be outside of the test function so that we can test multi-processing, which
+    requires that the class be picklable, which requires that it be defined at the top level of the
+    module.
+
+    This candidate takes a dictionary of prompts (keys) and responses (values) and returns the
+    response for the given prompt.
+    """  # noqa: D404
+
+    def __init__(
+            self,
+            responses: dict,
+            metadata: dict | None = None,
+            parameters: dict | None = None):
+        super().__init__(metadata=metadata, parameters=parameters)
+        self.responses = responses.copy()
+
+    def __call__(self, prompt: str) -> str:
+        """Returns the response for the given prompt."""
+        response = self.responses[prompt]
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        return
+
+    def to_dict(self) -> dict:
+        """Need to add `responses` to enable proper to_dict values."""
+        value = super().to_dict()
+        value['responses'] = self.responses
+        return value
+
+    @property
+    def total_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def input_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def response_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def cost(self) -> float:  # noqa
+        return None
+
+
+@Candidate.register('MockCandidateCannedResponse')
+class MockCandidateCannedResponse(Candidate):  # noqa
+    def __init__(
+            self,
+            metadata: dict | None = None,
+            parameters: dict | None = None):
+        super().__init__(metadata=metadata, parameters=parameters)
+
+    def __call__(self, _: str) -> str:
+        """Returns the response for the given prompt."""
+        sleep(0.01)
+        return 'Response'
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        return
+
+    def to_dict(self) -> dict:
+        """Need to add `responses` to enable proper to_dict values."""
+        return super().to_dict()
+
+    @property
+    def total_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def input_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def response_tokens(self) -> int:  # noqa
+        return None
+
+    @property
+    def cost(self) -> float:  # noqa
+        return None
 
 
 @pytest.fixture()
@@ -329,9 +427,42 @@ def fake_eval_no_code_blocks() -> dict:
 
 
 @pytest.fixture()
+def fake_eval_with_previous_messages() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_eval_with_previous_messages.yaml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture()
+def fake_eval_non_string_values() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_eval_non_string_values.yaml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture()
+def fake_multi_eval() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_multi_eval.yaml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture()
+def fake_multi_eval_non_string_values() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_multi_eval_non_string_values.yaml') as f:
+        return yaml.safe_load(f)
+
+@pytest.fixture()
+def fake_multi_eval_with_prompt_sequence() -> dict:
+    """Returns a fake eval."""
+    with open('tests/fake_data/fake_multi_eval_with_prompt_sequence.yaml') as f:
+        return yaml.safe_load(f)
+
+@pytest.fixture()
 def openai_candidate_template() -> dict:
     """Returns the yaml template for an OpenAI."""
-    with open('examples/candidates/openai_3.5_1106.yaml') as f:
+    with open('examples/candidates/openai_3.5.yaml') as f:
         return yaml.safe_load(f)
 
 

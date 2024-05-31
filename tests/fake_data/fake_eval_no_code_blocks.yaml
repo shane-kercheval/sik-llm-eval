@@ -9,7 +9,7 @@ metadata:
     - test
     - no_code_blocks
   source: Test
-test_sequence:
+prompt_sequence:
   - prompt: This is the prompt from the user.
     ideal_response: This is the ideal repsonse.
     checks:

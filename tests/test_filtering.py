@@ -45,6 +45,12 @@ class MockCandidate(Candidate):
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
 
+    def set_system_message(self, system_message: str) -> None:
+        """Not needed."""
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:
+        """Not needed."""
+
     @property
     def total_tokens(self) -> int:  # noqa
         return None
@@ -151,7 +157,7 @@ def test__expects_code_blocks(
         fake_eval_no_code_blocks: dict) -> None:
     """Test the xxx_expects_code_blocks functions."""
     temp = Eval(**fake_eval_8f9fbf37)
-    temp.test_sequence[0].checks[0]
+    temp.prompt_sequence[0].checks[0]
 
     assert eval_expects_code_blocks(Eval(**fake_eval_8f9fbf37))
     assert eval_expects_code_blocks(Eval(**fake_eval_subtract_two_numbers))

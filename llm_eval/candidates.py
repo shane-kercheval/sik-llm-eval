@@ -12,10 +12,11 @@ performance (e.g. characters per second).
 """
 import yaml
 from copy import deepcopy
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
 from typing import Callable, List, Type, Union
+from llm_eval.llms.base import ChatModel
 from llm_eval.llms.hugging_face import HuggingFaceEndpointChat
 from llm_eval.llms.message_formatters import MessageFormatter
 from llm_eval.llms.openai import OpenAIChat
@@ -67,19 +68,49 @@ class Candidate(DictionaryEqualsMixin, ABC):
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
 
-    @abstractproperty
+    @abstractmethod
+    def set_system_message(self, system_message: str) -> None:
+        """
+        Sets the system message. This method allows the Eval object (via the EvalHarness) to
+        set/override the system message of the underlying model.
+        """
+
+    @abstractmethod
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:
+        """
+        Sets the messages of the model. This method allows the Eval object (via the
+        EvalHarness) to set the "previous" messages of the underlying model. This is useful for
+        few-shot learning and other stateful conversations.
+
+        Args:
+            messages: A list of ExchangeRecord objects, a list of dictionaries, or a list of
+                tuples.
+
+                If a list of tuples, each tuple should have two elements: the prompt as the first
+                element and the response as the second element.
+
+                If a list of dictionaries is passed in, each dictionary contains a two key-value
+                pairs, where one key is 'user' and the value is the user's message, and the other
+                key is 'assistant' and the value is the assistant's response.
+        """
+
+    @property
+    @abstractmethod
     def total_tokens(self) -> int:
         """Returns the total number of tokens processed by the model."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def input_tokens(self) -> int:
         """Returns the total number of input tokens processed by the model."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def response_tokens(self) -> int:
         """Returns the total number of response tokens returned by the model."""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def cost(self) -> float:
         """Returns the total cost of using the model."""
 
@@ -211,6 +242,21 @@ class CallableCandidate(Candidate):
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
 
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:   # noqa
+        return
+
+    def clone(self) -> 'Candidate':
+        """
+        Returns a copy of the Candidate with the same state but with a different instance of the
+        underlying model (e.g. same parameters but reset history/context).
+
+        Reques
+        """
+        return CallableCandidate(model=self.model, metadata=self.metadata)
+
     @property
     def total_tokens(self) -> int:
         """Not implemented for CallableCandidate."""
@@ -232,8 +278,80 @@ class CallableCandidate(Candidate):
         return None
 
 
+class ChatModelCandidate(Candidate):
+    """Abstract class for a Candidate that wraps a ChatModel."""
+
+    def __init__(
+            self,
+            model: ChatModel,
+            metadata: dict | None = None,
+            parameters: dict | None = None,
+            ) -> None:
+        """
+        Initialize a Candidate object.
+
+        Args:
+            model: The ChatModel object.
+            metadata: A dictionary of metadata about the Candidate.
+            parameters: A dictionary of parameters for the Candidate.
+        """
+        self.model = model
+        self.metadata = deepcopy(metadata) or {}
+        self.parameters = deepcopy(parameters)
+
+    def __call__(self, prompt: str) -> str:
+        """Invokes the underlying model with the prompt and returns the response."""
+        return self.model(prompt)
+
+    def set_system_message(self, system_message: str) -> None:
+        """
+        Sets the system message. This method allows the Eval object (via the EvalHarness) to set
+        the system message of the underlying model.
+        """
+        self.model.set_system_message(system_message)
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:
+        """
+        Sets the messages of the model. This method allows the Eval object (via the
+        EvalHarness) to set the "previous" messages of the underlying model. This is useful for
+        few-shot learning and other stateful conversations.
+
+        Args:
+            messages: A list of ExchangeRecord objects, a list of dictionaries, or a list of
+                tuples.
+
+                If a list of tuples, each tuple should have two elements: the prompt as the first
+                element and the response as the second element.
+
+                If a list of dictionaries is passed in, each dictionary contains a two key-value
+                pairs, where one key is 'user' and the value is the user's message, and the other
+                key is 'assistant' and the value is the assistant's response.
+        """
+        self.model.set_message_history(messages)
+
+    @property
+    def total_tokens(self) -> int:
+        """Returns the total number of tokens processed by the model."""
+        return self.model.total_tokens
+
+    @property
+    def input_tokens(self) -> int:
+        """Returns the total number of input tokens processed by the model."""
+        return self.model.input_tokens
+
+    @property
+    def response_tokens(self) -> int:
+        """Returns the total number of response tokens returned by the model."""
+        return self.model.response_tokens
+
+    @property
+    def cost(self) -> float:
+        """Returns the total cost of using the model."""
+        return self.model.cost
+
+
 @Candidate.register(CandidateType.OPENAI)
-class OpenAICandidate(Candidate):
+class OpenAICandidate(ChatModelCandidate):
     """
     Wrapper around the OpenAI API that allows the user to create an OpenAI candidate from a
     dictionary. The client is a callable object that takes a prompt and returns a response. It will
@@ -259,38 +377,17 @@ class OpenAICandidate(Candidate):
                 such as `system_message` and model-specific parameters (e.g. `temperature`) can be
                 passed.
         """  # noqa
-        super().__init__(metadata=metadata, parameters=parameters)
         if parameters is None:
             parameters = {}
-        self.model = OpenAIChat(**parameters)
-
-    def __call__(self, prompt: str) -> str:
-        """Invokes the underlying model with the prompt and returns the response."""
-        return self.model(prompt)
-
-    @property
-    def total_tokens(self) -> int:
-        """Returns the total number of tokens processed by the model."""
-        return self.model.total_tokens
-
-    @property
-    def input_tokens(self) -> int:
-        """Returns the total number of input tokens processed by the model."""
-        return self.model.input_tokens
-
-    @property
-    def response_tokens(self) -> int:
-        """Returns the total number of response tokens returned by the model."""
-        return self.model.response_tokens
-
-    @property
-    def cost(self) -> float:
-        """Returns the total cost of using the model."""
-        return self.model.cost
+        super().__init__(
+            model=OpenAIChat(**deepcopy(parameters)),
+            metadata=metadata,
+            parameters=parameters,
+        )
 
 
 @Candidate.register(CandidateType.HUGGING_FACE_ENDPOINT)
-class HuggingFaceEndpointCandidate(Candidate):
+class HuggingFaceEndpointCandidate(ChatModelCandidate):
     """
     Wrapper around the Hugging Face Endpoint API that allows the user to create the candidate from
     a dictionary. The client is a callable object that takes a prompt and returns a response. It
@@ -312,7 +409,7 @@ class HuggingFaceEndpointCandidate(Candidate):
                 A dictionary of metadata about the Candidate.
             parameters:
                 A dictionary of parameters passed to OpenAI. `endpoint_url`, `system_format`,
-                `prompt_format`, and `response_format` are required parameters. Other parameters
+                `prompt_format`, and `response_prefix` are required parameters. Other parameters
                 such as `system_message` and model-specific parameters (e.g. `temperature`) can be
                 passed.
 
@@ -321,27 +418,25 @@ class HuggingFaceEndpointCandidate(Candidate):
                 ```
                 system_format: '[INST] <<SYS>> {system_message} <</SYS>> [/INST]\n'
                 prompt_format: '[INST] {prompt} [/INST]\n'
-                response_format: '{response}\n'
+                response_prefix: '\n'
                 ```
         """   # noqa
         parameters = deepcopy(parameters)
         self.system_format = parameters.pop('system_format')
         self.prompt_format = parameters.pop('prompt_format')
-        self.response_format = parameters.pop('response_format')
-        super().__init__(metadata=metadata, parameters=parameters)
-        message_formatter = MessageFormatter(
-            system_format=self.system_format,
-            prompt_format=self.prompt_format,
-            response_format=self.response_format,
+        self.response_prefix = parameters.pop('response_prefix')
+        super().__init__(
+            model=HuggingFaceEndpointChat(
+                message_formatter=MessageFormatter(
+                    system_format=self.system_format,
+                    prompt_format=self.prompt_format,
+                    response_prefix=self.response_prefix,
+                ),
+                **parameters,
+            ),
+            metadata=metadata,
+            parameters=parameters,
         )
-        self.model = HuggingFaceEndpointChat(
-            message_formatter=message_formatter,
-            **parameters,
-        )
-
-    def __call__(self, prompt: str) -> str:
-        """Invokes the underlying model with the prompt and returns the response."""
-        return self.model(prompt)
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
@@ -351,24 +446,9 @@ class HuggingFaceEndpointCandidate(Candidate):
             value['parameters']['system_format'] = self.system_format
         if self.prompt_format:
             value['parameters']['prompt_format'] = self.prompt_format
-        if self.response_format:
-            value['parameters']['response_format'] = self.response_format
+        if self.response_prefix:
+            value['parameters']['response_prefix'] = self.response_prefix
         return value
-
-    @property
-    def total_tokens(self) -> int:
-        """Returns the total number of tokens processed by the model."""
-        return self.model.total_tokens
-
-    @property
-    def input_tokens(self) -> int:
-        """Returns the total number of input tokens processed by the model."""
-        return self.model.input_tokens
-
-    @property
-    def response_tokens(self) -> int:
-        """Returns the total number of response tokens returned by the model."""
-        return self.model.response_tokens
 
     @property
     def cost(self) -> float:

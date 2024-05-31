@@ -9,8 +9,19 @@ metadata:
     - test
     - sum_two_numbers
   source: Test
+system_message: Custom System Message
+previous_messages:
+  - user: User Message 1
+    assistant: Assistant Response 1
+  - user: User Message 2
+    assistant: Assistant Response 2
 prompt_sequence:
   - prompt: Write a function that called `sum_two_numbers` that takes two numbers and returns their sum.
+    checks:
+      - check_type: CONTAINS
+        value: sum_two_numbers
+      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+  - prompt: Write some assertions
     checks:
       - check_type: CONTAINS
         value: sum_two_numbers

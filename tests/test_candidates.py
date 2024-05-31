@@ -19,6 +19,13 @@ class MockLMM:
         self.llm_parameters = kwargs
         self.prompts = []
 
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        return
+
     def __call__(self, prompt: str) -> str:
         """Caches prompts for unit tests."""
         self.prompts.append(prompt)
@@ -44,6 +51,13 @@ class MockCandidate(Candidate):
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
 
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        return
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        return
+
     @property
     def total_tokens(self) -> int:  # noqa
         return None
@@ -62,7 +76,7 @@ class MockCandidate(Candidate):
 
 
 def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa
-    candidate = Candidate.from_yaml('examples/candidates/openai_3.5_1106.yaml')
+    candidate = Candidate.from_yaml('examples/candidates/openai_3.5.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.to_dict() == openai_candidate_template
 
@@ -400,18 +414,13 @@ def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noq
     expected_candidate_parameters = deepcopy(template['parameters'])
     expected_candidate_parameters.pop('system_format')
     expected_candidate_parameters.pop('prompt_format')
-    expected_candidate_parameters.pop('response_format')
+    expected_candidate_parameters.pop('response_prefix')
     assert candidate.parameters == expected_candidate_parameters
 
     # check .parameters on model
-    assert candidate.model.parameters == expected_parameters
-
-    # ensure message is created correctly
-    expected_message = template['parameters']['system_format'].format(system_message='a') \
-        + template['parameters']['prompt_format'].format(prompt='b') \
-        + template['parameters']['response_format'].format(response='c') \
-        + template['parameters']['prompt_format'].format(prompt='d')
-    assert candidate.model._message_formatter('a', [('b', 'c')], 'd') == expected_message
+    model_parameters = candidate.model.parameters.copy()
+    del model_parameters['return_full_text']
+    assert model_parameters == expected_parameters
 
     # test that the dictionary hasn't changed after passing the dict to various functions
     # i.e. test no side effects against dict

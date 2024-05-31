@@ -70,7 +70,7 @@ def test_num_tokens_from_messages():  # noqa
     # above we checked that the numbers match exactly from what OpenAI returns;
     # here, let's just check that the other models run and return >0 to avoid API calls
     assert num_tokens_from_messages(model_name='gpt-3.5-turbo-0301', messages=example_messages) > 0
-    assert num_tokens_from_messages(model_name='gpt-4-1106-preview', messages=example_messages) > 0
+    assert num_tokens_from_messages(model_name='gpt-4-turbo-2024-04-09', messages=example_messages) > 0  # noqa
     assert num_tokens_from_messages(model_name='gpt-4-0314', messages=example_messages) > 0
     with pytest.raises(NotImplementedError):
         num_tokens_from_messages(model_name='<not implemented>', messages=example_messages)
@@ -79,20 +79,74 @@ def test_message_formatter():  # noqa
     assert openai_message_formatter(None, None, None) == []
     messages = openai_message_formatter('System message', None, None)
     assert messages == [{'role': 'system', 'content': 'System message'}]
-    messages = openai_message_formatter(None, [ExchangeRecord(prompt='prompt', response='response')], None)  # noqa
-    assert messages == [{'role': 'user', 'content': 'prompt'}, {'role': 'assistant', 'content': 'response'}]  # noqa
+
+    messages = openai_message_formatter(
+        None,
+        [ExchangeRecord(prompt='prompt', response='response')],
+        None,
+    )
+    expected_value = [{'role': 'user', 'content': 'prompt'}, {'role': 'assistant', 'content': 'response'}]  # noqa
+    assert messages == expected_value
+    messages = openai_message_formatter(
+        None,
+        [('prompt', 'response')],
+        None,
+    )
+    assert messages == expected_value
+
     messages = openai_message_formatter(None, None, 'prompt')
     assert messages == [{'role': 'user', 'content': 'prompt'}]
+
     messages = openai_message_formatter(
         'System message',
         [ExchangeRecord(prompt='prompt', response='response')],
         'New Prompt.',
     )
-    assert messages == [
+    expected_value = [
         {'role': 'system', 'content': 'System message'},
-        {'role': 'user', 'content': 'prompt'}, {'role': 'assistant', 'content': 'response'},
+        {'role': 'user', 'content': 'prompt'},
+        {'role': 'assistant', 'content': 'response'},
         {'role': 'user', 'content': 'New Prompt.'},
     ]
+    assert messages == expected_value
+    messages = openai_message_formatter(
+        'System message',
+        [('prompt', 'response')],
+        'New Prompt.',
+    )
+    assert messages == expected_value
+
+
+    messages = openai_message_formatter(
+        'System message 0',
+        [
+            ExchangeRecord(prompt='prompt1', response='response1'),
+            ExchangeRecord(prompt='prompt2', response='response2'),
+            ExchangeRecord(prompt='prompt3', response='response3'),
+        ],
+        'New Prompt 0',
+    )
+    expected_value = [
+        {'role': 'system', 'content': 'System message 0'},
+        {'role': 'user', 'content': 'prompt1'},
+        {'role': 'assistant', 'content': 'response1'},
+        {'role': 'user', 'content': 'prompt2'},
+        {'role': 'assistant', 'content': 'response2'},
+        {'role': 'user', 'content': 'prompt3'},
+        {'role': 'assistant', 'content': 'response3'},
+        {'role': 'user', 'content': 'New Prompt 0'},
+    ]
+    assert messages == expected_value
+    messages = openai_message_formatter(
+        'System message 0',
+        [
+            ('prompt1', 'response1'),
+            ('prompt2', 'response2'),
+            ('prompt3', 'response3'),
+        ],
+        'New Prompt 0',
+    )
+    assert messages == expected_value
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test_OpenAIChat():  # noqa
@@ -1260,10 +1314,117 @@ def test_bug_where_costs_are_incorrect_after_changing_model_name_after_creation(
     """We can't set cost_per_token during object creation, because the model might change."""
     model = OpenAIChat()
     assert model.cost_per_token == MODEL_COST_PER_TOKEN[model.model_name]
-    model.model_name = 'gpt-4-1106-preview'
-    assert model.cost_per_token == MODEL_COST_PER_TOKEN['gpt-4-1106-preview']
+    model.model_name = 'gpt-4-turbo-2024-04-09'
+    assert model.cost_per_token == MODEL_COST_PER_TOKEN['gpt-4-turbo-2024-04-09']
 
     model = OpenAIEmbedding()
     assert model.cost_per_token == MODEL_COST_PER_TOKEN[model.model_name]
-    model.model_name = 'gpt-4-1106-preview'
-    assert model.cost_per_token == MODEL_COST_PER_TOKEN['gpt-4-1106-preview']
+    model.model_name = 'gpt-4-turbo-2024-04-09'
+    assert model.cost_per_token == MODEL_COST_PER_TOKEN['gpt-4-turbo-2024-04-09']
+
+user_assistant_formatted_messages = [
+        {
+            'user': "|User Message 1|",
+            'assistant': "|Assistant Response 1|",
+        },
+        {
+            'user': "|User Message 2|",
+            'assistant': "|Assistant Response 2|",
+        },
+    ]
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+@pytest.mark.parametrize(("message_history", "formatted_messages"), [
+    (
+        [
+            ('|User Message 1|', '|Assistant Response 1|'),
+            ('|User Message 2|', '|Assistant Response 2|'),
+        ],
+        user_assistant_formatted_messages,
+    ),
+    (
+        [
+            ExchangeRecord(prompt='|User Message 1|', response='|Assistant Response 1|'),
+            ExchangeRecord(prompt='|User Message 2|', response='|Assistant Response 2|'),
+        ],
+        user_assistant_formatted_messages,
+    ),
+    (
+        user_assistant_formatted_messages, user_assistant_formatted_messages,
+    ),
+])
+def test_OpenAIChat__set_system_parameters_set_messages(message_history: list, formatted_messages):  # noqa
+    model = OpenAIChat()
+    assert len(model.history()) == 0
+    assert model.previous_record() is None
+    assert model.previous_prompt is None
+    assert model.previous_response is None
+    assert model.cost == 0
+    assert model.total_tokens == 0
+    assert model.input_tokens == 0
+    assert model.response_tokens == 0
+
+    ####
+    # first interaction
+    ####
+    system_message = "|System message|"
+    model.set_system_message(system_message)
+    assert model.system_message == system_message
+    assert not model._chat_history
+    model.set_message_history(message_history)
+    expected_chat_history = [
+        ExchangeRecord(prompt=formatted_messages[0]['user'], response=formatted_messages[0]['assistant']),  # noqa
+        ExchangeRecord(prompt=formatted_messages[1]['user'], response=formatted_messages[1]['assistant']),  # noqa
+    ]
+    assert model._chat_history[0].prompt == expected_chat_history[0].prompt
+    assert model._chat_history[0].response == expected_chat_history[0].response
+    assert model._chat_history[1].prompt == expected_chat_history[1].prompt
+    assert model._chat_history[1].response == expected_chat_history[1].response
+
+    prompt_1 = "This is a question."
+    response_1 = model(prompt_1)
+    assert isinstance(response_1, str)
+    assert len(response_1) > 1
+
+    # previous memory is the input to ChatGPT
+    assert len(model._previous_messages) == 6
+    assert model._previous_messages[0]['role'] == 'system'
+    assert model._previous_messages[0]['content'] == model.system_message
+    assert model._previous_messages[0]['content'] == system_message
+    assert model._previous_messages[1]['role'] == 'user'
+    assert model._previous_messages[1]['content'] == formatted_messages[0]['user']
+    assert model._previous_messages[2]['role'] == 'assistant'
+    assert model._previous_messages[2]['content'] == formatted_messages[0]['assistant']
+    assert model._previous_messages[3]['role'] == 'user'
+    assert model._previous_messages[3]['content'] == formatted_messages[1]['user']
+    assert model._previous_messages[4]['role'] == 'assistant'
+    assert model._previous_messages[4]['content'] == formatted_messages[1]['assistant']
+    assert model._previous_messages[5]['role'] == 'user'
+    assert model._previous_messages[5]['content'] == prompt_1
+
+    ####
+    # second interaction
+    ####
+    prompt_2 = "This is another question."
+    response_2 = model(prompt_2)
+    assert isinstance(response_2, str)
+    assert len(response_2) > 1
+
+    # previous memory is the input to ChatGPT
+    assert len(model._previous_messages) == 8
+    assert model._previous_messages[0]['role'] == 'system'
+    assert model._previous_messages[0]['content'] == model.system_message
+    assert model._previous_messages[0]['content'] == system_message
+    assert model._previous_messages[1]['role'] == 'user'
+    assert model._previous_messages[1]['content'] == formatted_messages[0]['user']
+    assert model._previous_messages[2]['role'] == 'assistant'
+    assert model._previous_messages[2]['content'] == formatted_messages[0]['assistant']
+    assert model._previous_messages[3]['role'] == 'user'
+    assert model._previous_messages[3]['content'] == formatted_messages[1]['user']
+    assert model._previous_messages[4]['role'] == 'assistant'
+    assert model._previous_messages[4]['content'] == formatted_messages[1]['assistant']
+    assert model._previous_messages[5]['role'] == 'user'
+    assert model._previous_messages[5]['content'] == prompt_1
+    assert model._previous_messages[6]['role'] == 'assistant'
+    assert model._previous_messages[6]['content'] == response_1
+    assert model._previous_messages[7]['role'] == 'user'
+    assert model._previous_messages[7]['content'] == prompt_2

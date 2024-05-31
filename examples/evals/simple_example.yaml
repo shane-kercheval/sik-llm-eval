@@ -1,6 +1,6 @@
 metadata:
   name: Fibonacci Sequence
-test_sequence:
+prompt_sequence:
   - prompt: Create a python function called `fib` that takes an integer `n` and returns the `n`th number in the Fibonacci sequence. Use type hints and docstrings.
     checks:
       - check_type: REGEX
