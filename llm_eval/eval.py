@@ -856,7 +856,7 @@ class ResponseError(RuntimeError):
             candidate_obj (Candidate): The Candidate object involved in the error.
         """
         message = f"Error in evaluating {eval_obj.metadata.get('id', 'unknown')} for candidate " \
-            "{candidate_obj.metadata.get('id', 'unknown')}: {exception}"
+            f"{candidate_obj.metadata.get('id', 'unknown')}: {exception}"
         super().__init__(message)
         self.eval_obj = eval_obj
         self.candidate_obj = candidate_obj
