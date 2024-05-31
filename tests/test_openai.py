@@ -15,6 +15,7 @@ from llm_eval.llms.openai import (
     openai_message_formatter,
     num_tokens,
     num_tokens_from_messages,
+    CHAT_MODEL_COST_PER_TOKEN,
     MODEL_COST_PER_TOKEN,
 )
 
@@ -70,8 +71,9 @@ def test_num_tokens_from_messages():  # noqa
     # above we checked that the numbers match exactly from what OpenAI returns;
     # here, let's just check that the other models run and return >0 to avoid API calls
     assert num_tokens_from_messages(model_name='gpt-3.5-turbo-0301', messages=example_messages) > 0
-    assert num_tokens_from_messages(model_name='gpt-4-turbo-2024-04-09', messages=example_messages) > 0  # noqa
     assert num_tokens_from_messages(model_name='gpt-4-0314', messages=example_messages) > 0
+    assert num_tokens_from_messages(model_name='gpt-4-turbo-2024-04-09', messages=example_messages) > 0  # noqa
+    assert num_tokens_from_messages(model_name='gpt-4o-2024-05-13', messages=example_messages) > 0
     with pytest.raises(NotImplementedError):
         num_tokens_from_messages(model_name='<not implemented>', messages=example_messages)
 
@@ -147,6 +149,15 @@ def test_message_formatter():  # noqa
         'New Prompt 0',
     )
     assert messages == expected_value
+
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+@pytest.mark.parametrize('model_name', list(CHAT_MODEL_COST_PER_TOKEN.keys()))
+def test_OpenAIChat__all_supported_models_run(model_name):  # noqa
+    """Test to verify all supported models run. It doesn't test the actual functionality."""
+    model = OpenAIChat(model_name=model_name)
+    response = model("This is a test. My name is Tom. What is my name?")
+    assert "Tom" in response
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test_OpenAIChat():  # noqa
