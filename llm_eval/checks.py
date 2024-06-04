@@ -1,11 +1,15 @@
 """
-Defines classes for different types of checks and corresponding registry system.
+Defines classes for different types of checks and corresponding registry systems.
 
 A "check" is a single test defined within an Eval corresponding to a specific prompt. The goal of a
 check is to test various aspects of the LLMs response to the prompt. (An Eval can have multiple
 prompts; each prompt can have multiple checks.) The intent of the check can range from simple
 matching (i.e. does the LLM response exactly match the expected value provided) to using an
 LLM to evaluate the response.
+
+Registry systems are used to allow the user to save and load checks and check results from a
+dictionary (e.g. from an underlying yaml file). This is useful for defining/storing/running large
+amounts of checks/results.
 """
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -107,7 +111,7 @@ class CheckResult(BaseModel, ABC):
         """Return a dictionary representation of the CheckResult."""
         result_dict = self.model_dump(exclude_defaults=True, exclude_none=True)
         if self.result_type:
-            result_dict['result_type'] = self.result_type.upper()
+            result_dict['result_type'] = self.result_type
         if 'success' not in result_dict:
             result_dict['success'] = self.success
         return result_dict
@@ -115,7 +119,9 @@ class CheckResult(BaseModel, ABC):
     @property
     def result_type(self) -> str:
         """The type of check."""
-        return self.__class__._type_name.upper()
+        if hasattr(self, '_type_name'):
+            return self.__class__._type_name.upper()
+        return self.__class__.__name__
 
 
 @CheckResult.register(CheckResultsType.PASS_FAIL)
@@ -203,21 +209,42 @@ class Check(BaseModel, ABC):
         """Return a dictionary representation of the Check."""
         value = self.model_dump(exclude_defaults=True, exclude_none=True)
         if self.check_type:
-            value['check_type'] = self.check_type.upper()
+            value['check_type'] = self.check_type
         return value
 
     @property
     def check_type(self) -> str:
         """The type of check."""
-        return self.__class__._type_name.upper()
+        if hasattr(self, '_type_name'):
+            return self.__class__._type_name.upper()
+        return self.__class__.__name__
 
     def __str__(self) -> str:
         """String representation of the Check."""
         return f"{self.__class__.__name__}(metadata={self.metadata})"
 
 
+class CloneableCheck(Check):
+    """
+    CloneableCheck objects are used with the EvalHarness to clone checks/evals across multiple
+    Candidates.
+    """
+
+    @abstractmethod
+    def clone(self) -> 'Check':
+        """Returns a deep copy of the check."""
+
+
+class SerializableCheck(CloneableCheck):
+    """A Check that can be serialized/deserialized to/from a dictionary."""
+
+    def clone(self) -> 'SerializableCheck':
+        """Returns a deep copy of the check."""
+        return Check.from_dict(deepcopy(self.to_dict()))
+
+
 @Check.register(CheckType.MATCH)
-class MatchCheck(Check):
+class MatchCheck(SerializableCheck):
     """Checks if the LLM response exactly matches the provided value."""
 
     value: str = Field(description="The value to match the LLM response against.")
@@ -239,7 +266,7 @@ class MatchCheck(Check):
 
 
 @Check.register(CheckType.CONTAINS)
-class ContainsCheck(Check):
+class ContainsCheck(SerializableCheck):
     """
     Checks if the LLM response contains the provided value (i.e. the value is found anywhere in the
     response).
@@ -264,7 +291,7 @@ class ContainsCheck(Check):
 
 
 @Check.register(CheckType.REGEX)
-class RegexCheck(Check):
+class RegexCheck(SerializableCheck):
     """Checks if the a given regular expression matches the LLM response."""
 
     pattern: str = Field(description="The regular expression to match the LLM response against.")
@@ -286,7 +313,7 @@ class RegexCheck(Check):
 
 
 @Check.register(CheckType.PYTHON_CODE_BLOCKS_PRESENT)
-class PythonCodeBlocksPresent(Check):
+class PythonCodeBlocksPresent(SerializableCheck):
     """
     Checks that the response contains code blocks. The code blocks do not necessary need to run
     successfully (this check does not run the code blocks), but they must be present.
@@ -328,7 +355,7 @@ class PythonCodeBlocksPresent(Check):
 
 
 @Check.register(CheckType.PYTHON_CODE_BLOCK_TESTS)
-class PythonCodeBlockTests(Check):
+class PythonCodeBlockTests(SerializableCheck):
     """
     This Check tests that the code blocks contained within the response run successfully, and
     allows users to define custom tests that can be used to test the code blocks and the
@@ -583,7 +610,7 @@ class PythonCodeBlockTests(Check):
 
 
 @Check.register(CheckType.LLM)
-class LLMCheck(Check):
+class LLMCheck(SerializableCheck):
     """
     LLMCheck is a generic check that uses an LLM to evaluate the response of a separate/candidate
     LLM. The user can define the prompt that will be used by the evaluator to evaluate the
@@ -622,6 +649,10 @@ class LLMCheck(Check):
     def __str__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}()"
+
+    def clone(self) -> 'LLMCheck':
+        """TODO: consider how this should be implemented."""
+        raise NotImplementedError("LLMCheck cannot be cloned.")
 
 
 @Check.register(CheckType.TOXICITY)

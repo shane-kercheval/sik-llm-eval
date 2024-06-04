@@ -9,6 +9,9 @@ Llama-2-7b-Chat Q6_K.gguf (LLM) running locally on LM Studio (client). The latte
 of the same underlying model running on different hardware. They are likely to have very similar
 quality of responses (but this is also determined by the quantization) but may have very different
 performance (e.g. characters per second).
+
+Registry systems are used to allow the user to save and load candidates from a dictionary (e.g.
+from an underlying yaml file).
 """
 import yaml
 from copy import deepcopy
@@ -94,25 +97,16 @@ class Candidate(DictionaryEqualsMixin, ABC):
                 key is 'assistant' and the value is the assistant's response.
         """
 
-    @property
     @abstractmethod
-    def total_tokens(self) -> int:
-        """Returns the total number of tokens processed by the model."""
+    def clone(self) -> 'Candidate':
+        """
+        Returns a copy of the Candidate with the same state but with a different instance of the
+        underlying model (e.g. same parameters but reset history/context).
 
-    @property
-    @abstractmethod
-    def input_tokens(self) -> int:
-        """Returns the total number of input tokens processed by the model."""
-
-    @property
-    @abstractmethod
-    def response_tokens(self) -> int:
-        """Returns the total number of response tokens returned by the model."""
-
-    @property
-    @abstractmethod
-    def cost(self) -> float:
-        """Returns the total cost of using the model."""
+        This is needed because the same Candidate object should not be reused across multiple Eval
+        objects. This method allows the Eval object to create a new Candidate object and ensure
+        the original Candidate object is not modified.
+        """
 
     @classmethod
     def register(cls, candidate_type: str | Enum):  # noqa: ANN102
@@ -167,7 +161,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
         if self.parameters:
             value['parameters'] = deepcopy(self.parameters)
         if self.candidate_type:
-            value['candidate_type'] = self.candidate_type.upper()
+            value['candidate_type'] = self.candidate_type
         return value
 
     @property
@@ -176,7 +170,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
         # check that self.__class__ has _type_name attribute
         if hasattr(self.__class__, '_type_name'):
             return self.__class__._type_name.upper()
-        return None
+        return self.__class__.__name__
 
     @classmethod
     def from_yaml(cls, path: str) -> Union['Candidate', List['Candidate']]:  # noqa: ANN102
@@ -199,15 +193,6 @@ class Candidate(DictionaryEqualsMixin, ABC):
             {parameters}
         )
         """).strip()
-
-    def clone(self) -> 'Candidate':
-        """
-        Returns a copy of the Candidate with the same state but with a different instance of the
-        underlying model (e.g. same parameters but reset history/context).
-
-        Reques
-        """
-        return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
 @Candidate.register(CandidateType.CALLABLE_NO_SERIALIZE)
@@ -256,26 +241,6 @@ class CallableCandidate(Candidate):
         Reques
         """
         return CallableCandidate(model=self.model, metadata=self.metadata)
-
-    @property
-    def total_tokens(self) -> int:
-        """Not implemented for CallableCandidate."""
-        return None
-
-    @property
-    def input_tokens(self) -> int:
-        """Not implemented for CallableCandidate."""
-        return None
-
-    @property
-    def response_tokens(self) -> int:
-        """Not implemented for CallableCandidate."""
-        return None
-
-    @property
-    def cost(self) -> float:
-        """Not implemented for CallableCandidate."""
-        return None
 
 
 class ChatModelCandidate(Candidate):
@@ -348,6 +313,15 @@ class ChatModelCandidate(Candidate):
     def cost(self) -> float:
         """Returns the total cost of using the model."""
         return self.model.cost
+
+    def clone(self) -> 'Candidate':
+        """
+        Returns a copy of the Candidate with the same state but with a different instance of the
+        underlying model (e.g. same parameters but reset history/context).
+
+        Reques
+        """
+        return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
 @Candidate.register(CandidateType.OPENAI)
@@ -449,8 +423,3 @@ class HuggingFaceEndpointCandidate(ChatModelCandidate):
         if self.response_prefix:
             value['parameters']['response_prefix'] = self.response_prefix
         return value
-
-    @property
-    def cost(self) -> float:
-        """Not implemented for HuggingFace."""
-        return None

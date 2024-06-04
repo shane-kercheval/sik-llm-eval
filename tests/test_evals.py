@@ -8,6 +8,7 @@ import yaml
 from llm_eval.candidates import CallableCandidate, Candidate, CandidateType, ChatModelCandidate
 from llm_eval.checks import (
     Check,
+    CheckResult,
     CheckType,
     ContainsCheck,
     MatchCheck,
@@ -1274,96 +1275,99 @@ def test__Evals__sysem_message_previous_messages__run_base_candidate(fake_eval_w
     ####
     # test that the system message and previous messages are set correctly for the candidate object
     ####
-    candidate = MockChatCandidate()
-    assert candidate.model.system_message == initial_system_message
-    assert not candidate.model.chat_history
-    assert not candidate.model._previous_messages
+    try:
+        candidate = MockChatCandidate()
+        assert candidate.model.system_message == initial_system_message
+        assert not candidate.model.chat_history
+        assert not candidate.model._previous_messages
 
-    eval_obj = Eval(**config)
-    result = eval_obj(candidate)
-    assert result.responses == [eval_response_1, eval_response_2]
-    # system message and chat_history should not have changed; Candidate should be cloned and
-    # not used directly so it can be reused for other evals without side effects from evals
-    assert candidate.model.system_message == initial_system_message
-    assert not candidate.model.chat_history
-    assert not candidate.model._previous_messages
+        eval_obj = Eval(**config)
+        result = eval_obj(candidate)
+        assert result.responses == [eval_response_1, eval_response_2]
+        # system message and chat_history should not have changed; Candidate should be cloned and
+        # not used directly so it can be reused for other evals without side effects from evals
+        assert candidate.model.system_message == initial_system_message
+        assert not candidate.model.chat_history
+        assert not candidate.model._previous_messages
 
-    # the cloned candidate that was used should have the system message and the expected chat
-    # history
-    assert result.candidate_obj.model.system_message == config['system_message']
-    assert result.candidate_obj.model.chat_history[0].prompt == config['previous_messages'][0]['user']  # noqa
-    assert result.candidate_obj.model.chat_history[0].response == config['previous_messages'][0]['assistant']  # noqa
-    assert result.candidate_obj.model.chat_history[1].prompt == config['previous_messages'][1]['user']  # noqa
-    assert result.candidate_obj.model.chat_history[1].response == config['previous_messages'][1]['assistant']  # noqa
-    assert result.candidate_obj.model.chat_history[2].prompt == eval_obj.prompt_sequence[0].prompt
-    assert result.candidate_obj.model.chat_history[2].response == eval_response_1
-    assert result.candidate_obj.model.chat_history[3].prompt == eval_obj.prompt_sequence[1].prompt
-    assert result.candidate_obj.model.chat_history[3].response == eval_response_2
+        # the cloned candidate that was used should have the system message and the expected chat
+        # history
+        assert result.candidate_obj.model.system_message == config['system_message']
+        assert result.candidate_obj.model.chat_history[0].prompt == config['previous_messages'][0]['user']  # noqa
+        assert result.candidate_obj.model.chat_history[0].response == config['previous_messages'][0]['assistant']  # noqa
+        assert result.candidate_obj.model.chat_history[1].prompt == config['previous_messages'][1]['user']  # noqa
+        assert result.candidate_obj.model.chat_history[1].response == config['previous_messages'][1]['assistant']  # noqa
+        assert result.candidate_obj.model.chat_history[2].prompt == eval_obj.prompt_sequence[0].prompt  # noqa
+        assert result.candidate_obj.model.chat_history[2].response == eval_response_1
+        assert result.candidate_obj.model.chat_history[3].prompt == eval_obj.prompt_sequence[1].prompt  # noqa
+        assert result.candidate_obj.model.chat_history[3].response == eval_response_2
 
-    expected_prompt_1 = formatter(
-        system_message=system_message,
-        messages=config['previous_messages'],
-        prompt=eval_obj.prompt_sequence[0].prompt,
-    )
-    assert actual_prompts[0] == expected_prompt_1
-    # we now expected the "previous_messages" from the eval object plus the prompt on the eval
-    # and the new response from the assistant
-    expected_messages = config['previous_messages'] \
-        + [{'user': config['prompt_sequence'][0]['prompt'], 'assistant': eval_response_1}]
-    expected_prompt_2 = formatter(
-        system_message=system_message,
-        messages=expected_messages,
-        prompt=eval_obj.prompt_sequence[1].prompt,
-    )
-    assert actual_prompts[1] == expected_prompt_2
-    assert result.candidate_obj.model._previous_messages == expected_prompt_2
-    # remove prompts from actual_prompts so we can test the next eval
-    actual_prompts.clear()
+        expected_prompt_1 = formatter(
+            system_message=system_message,
+            messages=config['previous_messages'],
+            prompt=eval_obj.prompt_sequence[0].prompt,
+        )
+        assert actual_prompts[0] == expected_prompt_1
+        # we now expected the "previous_messages" from the eval object plus the prompt on the eval
+        # and the new response from the assistant
+        expected_messages = config['previous_messages'] \
+            + [{'user': config['prompt_sequence'][0]['prompt'], 'assistant': eval_response_1}]
+        expected_prompt_2 = formatter(
+            system_message=system_message,
+            messages=expected_messages,
+            prompt=eval_obj.prompt_sequence[1].prompt,
+        )
+        assert actual_prompts[1] == expected_prompt_2
+        assert result.candidate_obj.model._previous_messages == expected_prompt_2
+        # remove prompts from actual_prompts so we can test the next eval
+        actual_prompts.clear()
 
-    ####
-    # Test that an eval without a system message or previous messages does not change (e.g. set to
-    # null) the candidate's system message or previous messages; and test that the candidate is
-    # cloned and unaffected by the eval and can be reused for other evals without side effects
-    ####
-    # do not create a new candidate object; we want to test that the candidate object is unaffected
-    # candidate = MockChatCandidate()
-    assert candidate.model.system_message == initial_system_message
-    assert candidate.model._previous_messages is None
-    assert not candidate.model.chat_history
+        ####
+        # Test that an eval without a system message or previous messages does not change (e.g. set
+        # to null) the candidate's system message or previous messages; and test that the candidate
+        # is cloned and unaffected by the eval and can be reused for other evals without side
+        # effects
+        ####
+        # do not create a new candidate object; test that the candidate object is unaffected
+        # candidate = MockChatCandidate()
+        assert candidate.model.system_message == initial_system_message
+        assert candidate.model._previous_messages is None
+        assert not candidate.model.chat_history
 
-    no_messages_config = deepcopy(config)
-    del no_messages_config['system_message']
-    del no_messages_config['previous_messages']
-    eval_obj = Eval(**no_messages_config)
-    result = eval_obj(candidate)
-    assert result.responses == [eval_response_1, eval_response_2]
-    # system message and chat_history should not have changed; Candidate should be cloned and
-    # not used directly so it can be reused for other evals without side effects from evals
-    assert candidate.model.system_message == initial_system_message
-    assert not candidate.model.chat_history
-    assert not candidate.model._previous_messages
-    # the cloned candidate that was used should have the system message and the expected chat
-    # history
-    assert result.candidate_obj.model.system_message == initial_system_message
-    assert result.candidate_obj.model.chat_history[0].prompt == eval_obj.prompt_sequence[0].prompt
-    assert result.candidate_obj.model.chat_history[0].response == eval_response_1
-    assert result.candidate_obj.model.chat_history[1].prompt == eval_obj.prompt_sequence[1].prompt
-    assert result.candidate_obj.model.chat_history[1].response == eval_response_2
-    expected_message = formatter(
-        system_message=initial_system_message,
-        messages=[],
-        prompt=eval_obj.prompt_sequence[0].prompt,
-    )
-    assert actual_prompts[0] == expected_message
-    expected_message = formatter(
-        system_message=initial_system_message,
-        messages=[(eval_obj.prompt_sequence[0].prompt, eval_response_1)],
-        prompt=eval_obj.prompt_sequence[1].prompt,
-    )
-    assert result.candidate_obj.model._previous_messages == expected_message
-    assert actual_prompts[1] == expected_message
-    # unregister the candidate class so it doesn't interfere with other tests
-    Candidate.registry._registry.pop('MOCK_CHAT_CANDIDATE')
+        no_messages_config = deepcopy(config)
+        del no_messages_config['system_message']
+        del no_messages_config['previous_messages']
+        eval_obj = Eval(**no_messages_config)
+        result = eval_obj(candidate)
+        assert result.responses == [eval_response_1, eval_response_2]
+        # system message and chat_history should not have changed; Candidate should be cloned and
+        # not used directly so it can be reused for other evals without side effects from evals
+        assert candidate.model.system_message == initial_system_message
+        assert not candidate.model.chat_history
+        assert not candidate.model._previous_messages
+        # the cloned candidate that was used should have the system message and the expected chat
+        # history
+        assert result.candidate_obj.model.system_message == initial_system_message
+        assert result.candidate_obj.model.chat_history[0].prompt == eval_obj.prompt_sequence[0].prompt  # noqa
+        assert result.candidate_obj.model.chat_history[0].response == eval_response_1
+        assert result.candidate_obj.model.chat_history[1].prompt == eval_obj.prompt_sequence[1].prompt  # noqa
+        assert result.candidate_obj.model.chat_history[1].response == eval_response_2
+        expected_message = formatter(
+            system_message=initial_system_message,
+            messages=[],
+            prompt=eval_obj.prompt_sequence[0].prompt,
+        )
+        assert actual_prompts[0] == expected_message
+        expected_message = formatter(
+            system_message=initial_system_message,
+            messages=[(eval_obj.prompt_sequence[0].prompt, eval_response_1)],
+            prompt=eval_obj.prompt_sequence[1].prompt,
+        )
+        assert result.candidate_obj.model._previous_messages == expected_message
+        assert actual_prompts[1] == expected_message
+    finally:
+        # unregister the candidate class so it doesn't interfere with other tests
+        Candidate.registry._registry.pop('MOCK_CHAT_CANDIDATE')
 
 @pytest.fixture()
 def eval_fixture(request):  # noqa
@@ -1409,96 +1413,98 @@ def test__Evals__sysem_message_previous_messages__run_base_candidate_with_EvalHa
         def __init__(self):
             super().__init__(model=MockChatModel())
 
-    ####
-    # test that the system message and previous messages are set correctly for the candidate object
-    ####
-    candidate = MockChatCandidate()
-    assert candidate.model.system_message == initial_system_message
-    assert not candidate.model.chat_history
-    assert not candidate.model._previous_messages
+    try:
+        ####
+        # test that the system message and previous messages are set correctly for the candidate
+        ####
+        candidate = MockChatCandidate()
+        assert candidate.model.system_message == initial_system_message
+        assert not candidate.model.chat_history
+        assert not candidate.model._previous_messages
 
-    no_messages_config = deepcopy(eval_config)
-    del no_messages_config['system_message']
-    del no_messages_config['previous_messages']
-    harness = EvalHarness(
-        evals=[eval_config, no_messages_config],
-        candidates=[candidate],
-        num_cpus=1,
-    )
-    results = harness()
-    result_with_messages = results[0][0]
-    result_without_messages = results[0][1]
-    assert result_with_messages.responses == [eval_response_1, eval_response_2]
-    assert result_without_messages.responses == [eval_response_1, eval_response_2]
+        no_messages_config = deepcopy(eval_config)
+        del no_messages_config['system_message']
+        del no_messages_config['previous_messages']
+        harness = EvalHarness(
+            evals=[eval_config, no_messages_config],
+            candidates=[candidate],
+            num_cpus=1,
+        )
+        results = harness()
+        result_with_messages = results[0][0]
+        result_without_messages = results[0][1]
+        assert result_with_messages.responses == [eval_response_1, eval_response_2]
+        assert result_without_messages.responses == [eval_response_1, eval_response_2]
 
-    # system message and chat_history should not have changed; Candidate should be cloned and
-    # not used directly so it can be reused for other evals without side effects from evals
-    assert candidate.model.system_message == initial_system_message
-    assert not candidate.model.chat_history
-    assert not candidate.model._previous_messages
+        # system message and chat_history should not have changed; Candidate should be cloned and
+        # not used directly so it can be reused for other evals without side effects from evals
+        assert candidate.model.system_message == initial_system_message
+        assert not candidate.model.chat_history
+        assert not candidate.model._previous_messages
 
-    # the cloned candidate that was used should have the system message and the expected chat
-    # history
-    assert result_with_messages.candidate_obj.model.system_message == str(eval_config['system_message'])  # noqa
-    assert result_with_messages.candidate_obj.model.chat_history[0].prompt == str(eval_config['previous_messages'][0]['user'])  # noqa
-    assert result_with_messages.candidate_obj.model.chat_history[0].response == str(eval_config['previous_messages'][0]['assistant'])  # noqa
-    assert result_with_messages.candidate_obj.model.chat_history[1].prompt == str(eval_config['previous_messages'][1]['user'])  # noqa
-    assert result_with_messages.candidate_obj.model.chat_history[1].response == str(eval_config['previous_messages'][1]['assistant'])  # noqa
-    assert result_with_messages.candidate_obj.model.chat_history[2].prompt == str(eval_config['prompt_sequence'][0]['prompt'])  # noqa
-    assert result_with_messages.candidate_obj.model.chat_history[2].response == eval_response_1
-    assert result_with_messages.candidate_obj.model.chat_history[3].prompt == str(eval_config['prompt_sequence'][1]['prompt'])  # noqa
-    assert result_with_messages.candidate_obj.model.chat_history[3].response == eval_response_2
+        # the cloned candidate that was used should have the system message and the expected chat
+        # history
+        assert result_with_messages.candidate_obj.model.system_message == str(eval_config['system_message'])  # noqa
+        assert result_with_messages.candidate_obj.model.chat_history[0].prompt == str(eval_config['previous_messages'][0]['user'])  # noqa
+        assert result_with_messages.candidate_obj.model.chat_history[0].response == str(eval_config['previous_messages'][0]['assistant'])  # noqa
+        assert result_with_messages.candidate_obj.model.chat_history[1].prompt == str(eval_config['previous_messages'][1]['user'])  # noqa
+        assert result_with_messages.candidate_obj.model.chat_history[1].response == str(eval_config['previous_messages'][1]['assistant'])  # noqa
+        assert result_with_messages.candidate_obj.model.chat_history[2].prompt == eval_config['prompt_sequence'][0]['prompt']  # noqa
+        assert result_with_messages.candidate_obj.model.chat_history[2].response == eval_response_1
+        assert result_with_messages.candidate_obj.model.chat_history[3].prompt == eval_config['prompt_sequence'][1]['prompt']  # noqa
+        assert result_with_messages.candidate_obj.model.chat_history[3].response == eval_response_2
 
-    formatted_messages = [
-        {k:str(v) for k, v in x.items()}
-        for x in eval_config['previous_messages']
-    ]
-    expected_prompt_1 = formatter(
-        system_message=str(system_message),
-        messages=formatted_messages,
-        prompt=str(eval_config['prompt_sequence'][0]['prompt']),
-    )
-    assert actual_prompts[0] == expected_prompt_1
-    # we now expected the "previous_messages" from the eval object plus the prompt on the eval
-    # and the new response from the assistant
-    expected_messages = [
-        *formatted_messages,
-        {'user': str(eval_config['prompt_sequence'][0]['prompt']), 'assistant': eval_response_1},
-    ]
-    expected_prompt_2 = formatter(
-        system_message=system_message,
-        messages=expected_messages,
-        prompt=eval_config['prompt_sequence'][1]['prompt'],
-    )
-    assert actual_prompts[1] == expected_prompt_2
-    assert result_with_messages.candidate_obj.model._previous_messages == expected_prompt_2
+        formatted_messages = [
+            {k:str(v) for k, v in x.items()}
+            for x in eval_config['previous_messages']
+        ]
+        expected_prompt_1 = formatter(
+            system_message=str(system_message),
+            messages=formatted_messages,
+            prompt=eval_config['prompt_sequence'][0]['prompt'],
+        )
+        assert actual_prompts[0] == expected_prompt_1
+        # we now expected the "previous_messages" from the eval object plus the prompt on the eval
+        # and the new response from the assistant
+        expected_messages = [
+            *formatted_messages,
+            {'user': eval_config['prompt_sequence'][0]['prompt'], 'assistant': eval_response_1},
+        ]
+        expected_prompt_2 = formatter(
+            system_message=system_message,
+            messages=expected_messages,
+            prompt=eval_config['prompt_sequence'][1]['prompt'],
+        )
+        assert actual_prompts[1] == expected_prompt_2
+        assert result_with_messages.candidate_obj.model._previous_messages == expected_prompt_2
 
-    ####
-    # Test that an eval without a system message or previous messages does not change (e.g. set to
-    # null) the candidate's system message or previous messages; and test that the candidate is
-    # cloned and unaffected by the eval and can be reused for other evals without side effects
-    ####
-    assert result_without_messages.candidate_obj.model.system_message == initial_system_message
-    assert result_without_messages.candidate_obj.model.chat_history[0].prompt == str(eval_config['prompt_sequence'][0]['prompt'])  # noqa
-    assert result_without_messages.candidate_obj.model.chat_history[0].response == eval_response_1
-    assert result_without_messages.candidate_obj.model.chat_history[1].prompt == str(eval_config['prompt_sequence'][1]['prompt'])  # noqa
-    assert result_without_messages.candidate_obj.model.chat_history[1].response == eval_response_2
-    expected_message = formatter(
-        system_message=initial_system_message,
-        messages=[],
-        prompt=str(eval_config['prompt_sequence'][0]['prompt']),
-    )
-    assert actual_prompts[2] == expected_message
-    expected_message = formatter(
-        system_message=initial_system_message,
-        messages=[(str(eval_config['prompt_sequence'][0]['prompt']), eval_response_1)],
-        prompt=str(eval_config['prompt_sequence'][1]['prompt']),
-    )
-    assert result_without_messages.candidate_obj.model._previous_messages == expected_message
-    assert actual_prompts[3] == expected_message
-
-    # unregister the candidate class so it doesn't interfere with other tests
-    Candidate.registry._registry.pop('MOCK_CHAT_CANDIDATE')
+        ####
+        # Test that an eval without a system message or previous messages does not change (e.g. set
+        # to null) the candidate's system message or previous messages; and test that the candidate
+        # is cloned and unaffected by the eval and can be reused for other evals without side
+        # effects
+        ####
+        assert result_without_messages.candidate_obj.model.system_message == initial_system_message
+        assert result_without_messages.candidate_obj.model.chat_history[0].prompt == eval_config['prompt_sequence'][0]['prompt']  # noqa
+        assert result_without_messages.candidate_obj.model.chat_history[0].response == eval_response_1  # noqa
+        assert result_without_messages.candidate_obj.model.chat_history[1].prompt == eval_config['prompt_sequence'][1]['prompt']  # noqa
+        assert result_without_messages.candidate_obj.model.chat_history[1].response == eval_response_2  # noqa
+        expected_message = formatter(
+            system_message=initial_system_message,
+            messages=[],
+            prompt=eval_config['prompt_sequence'][0]['prompt'],
+        )
+        assert actual_prompts[2] == expected_message
+        expected_message = formatter(
+            system_message=initial_system_message,
+            messages=[(eval_config['prompt_sequence'][0]['prompt'], eval_response_1)],
+            prompt=eval_config['prompt_sequence'][1]['prompt'],
+        )
+        assert result_without_messages.candidate_obj.model._previous_messages == expected_message
+        assert actual_prompts[3] == expected_message
+    finally:
+        # unregister the candidate class so it doesn't interfere with other tests
+        Candidate.registry._registry.pop('MOCK_CHAT_CANDIDATE')
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__Evals__sysem_message_previous_messages__run_with_OpenAI(fake_eval_with_previous_messages, openai_candidate_template):  # noqa
@@ -1677,10 +1683,10 @@ def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values):
     assert eval_obj.previous_messages[1]['user'] == str(eval_config['previous_messages'][1]['user'])  # noqa
     assert isinstance(eval_obj.previous_messages[1]['assistant'], str)
     assert eval_obj.previous_messages[1]['assistant'] == str(eval_config['previous_messages'][1]['assistant'])  # noqa
-    assert isinstance(eval_obj.prompt_sequence[0].prompt, str)
-    assert eval_obj.prompt_sequence[0].prompt == str(eval_config['prompt_sequence'][0]['prompt'])
-    assert isinstance(eval_obj.prompt_sequence[1].prompt, str)
-    assert eval_obj.prompt_sequence[1].prompt == str(eval_config['prompt_sequence'][1]['prompt'])
+    assert isinstance(eval_obj.prompt_sequence[0].prompt, int)
+    assert eval_obj.prompt_sequence[0].prompt == eval_config['prompt_sequence'][0]['prompt']
+    assert isinstance(eval_obj.prompt_sequence[1].prompt, int)
+    assert eval_obj.prompt_sequence[1].prompt == eval_config['prompt_sequence'][1]['prompt']
 
 def error_callback(exception: Exception, eval_obj: Eval, candidate_obj: Candidate) -> None:
     """
@@ -1962,6 +1968,7 @@ def test__MultiEval__with_regular_eval(eval_fixture):  # noqa
     evals = MultiEval.from_dict(config)()
     assert len(evals) == 1
     assert evals[0] == Eval(**config)
+    # evals[0].to_dict() == Eval(**config).to_dict()
     # ensure we didn't change config
     assert config == eval_fixture
 
@@ -2629,3 +2636,156 @@ def test__EvalHarness__list_MultEval_object_and_dict__from_constructor(eval_fixt
     assert len(results) == 2
     assert len(results[0]) == (expected_num_evals_from_prompt_comparison * 2) + 1
     assert len(results[1]) == (expected_num_evals_from_prompt_comparison * 2) + 1
+
+class UnregisteredCheckResult(CheckResult):  # noqa
+    pass
+
+class UnregisteredCheck(Check):  # noqa
+    def __call__(self, response: object) -> UnregisteredCheckResult:  # noqa
+        return UnregisteredCheckResult(success=response is not None, value=response, metadata={})
+
+    def clone(self) -> Check:  # noqa
+        return UnregisteredCheck()
+
+class UnregisteredCandidate(Candidate):  # noqa
+    def __init__(self, response: object) -> None:
+        super().__init__()
+        self.has_executed = False
+        self.response = response
+
+    def __call__(self, prompt: dict) -> dict:  # noqa
+        # Candidates should not be reused in the same Eval
+        if self.has_executed:
+            raise Exception('Candidate should not be called more than once')
+        self.has_executed = True
+        # returns dictionary instead of string
+        return {'prompt': prompt, 'response': self.response}
+
+    def set_system_message(self, system_message: str) -> None:  # noqa
+        pass
+
+    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
+        pass
+
+    def clone(self) -> 'UnregisteredCandidate':  # noqa
+        return UnregisteredCandidate(response=self.response)
+
+def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa
+    """
+    We should be able to use unregistered Check and Candidate classes with non-string prompts and
+    responses. These classes won't be able to be saved/loaded from a dictionary, and so we can't
+    use them with EvalHarness, but we should be able to use them individually.
+    """
+    eval_ = Eval(
+        prompt_sequence=PromptTest(
+            prompt={'prompt': 'Test Prompt'},
+            checks=[UnregisteredCheck()],
+        ),
+    )
+    assert eval_.to_dict() == {'prompt_sequence': [{'prompt': {'prompt': 'Test Prompt'}, 'checks': [{'check_type': 'UnregisteredCheck'}]}]}  # noqa
+    assert UnregisteredCandidate(42).to_dict() == {'candidate_type': 'UnregisteredCandidate'}
+    result = eval_(UnregisteredCandidate(42))
+    assert len(result.responses) == 1
+    assert result.responses[0] == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}
+    assert len(result.results) == 1
+    assert len(result.results[0]) == 1
+    check_result = result.results[0][0]
+    assert check_result.value == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}
+    assert check_result.success is True
+    assert check_result.to_dict() == {'value': {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}, 'success': True, 'result_type': 'UnregisteredCheckResult'}  # noqa
+    assert len(result.all_check_results) == 1
+    assert result.perc_successful_checks == 1
+    assert result.all_check_results[0].value == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}  # noqa
+    assert result.all_check_results[0].success is True
+    assert result.prompts == [{'prompt': 'Test Prompt'}]
+    assert result.response_characters is None  # only applicable for string responses
+    assert result.characters_per_second is None  # only applicable for string responses
+    assert result.expects_code_blocks is False
+    assert result.get_code_block_tests_result() is None
+    assert result.get_num_code_blocks_successful() is None
+    assert result.get_num_code_tests_defined() is None
+    assert result.get_num_code_tests_successful() is None
+    # ensure that we can convert the results (which contain unregistered checks/candidates) to
+    # a string and dictionary (which call underlying str and to_dict methods on
+    # checks/candidates)
+    assert len(str(result)) > 10
+    assert result.to_dict()['eval_obj'] == eval_.to_dict()
+    assert result.to_dict()['candidate_obj'] == UnregisteredCandidate(42).to_dict()
+    assert result.to_dict()['results'][0][0] == check_result.to_dict()
+
+def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa
+        harness = EvalHarness(
+            # num_cpus=1, async_batch_size=1,
+            evals=[
+                Eval(
+                    prompt_sequence=PromptTest(
+                        prompt={'prompt': 'Test Prompt 1'},  # test with dictionary prompt
+                        checks=[UnregisteredCheck()],
+                    ),
+                ),
+                Eval(
+                    prompt_sequence=PromptTest(
+                        prompt={'prompt': 'Test Prompt 2'},  # test with dictionary prompt
+                        checks=[UnregisteredCheck()],
+                    ),
+                ),
+            ],
+            candidates = [
+                UnregisteredCandidate('Response 1'),
+                UnregisteredCandidate('Response 2'),
+            ],
+        )
+        results = harness()
+        assert len(results) == 2  # 2 candidates
+        assert len(results[0]) == 2  # 2 evals
+        assert len(results[1]) == 2  # same 2 evals
+        assert results[0][0].responses == [{'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}]  # noqa
+        assert results[0][1].responses == [{'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 1'}]  # noqa
+        assert results[1][0].responses == [{'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 2'}]  # noqa
+        assert results[1][1].responses == [{'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}]  # noqa
+        assert len(results[0][0].all_check_results) == 1
+        assert results[0][0].perc_successful_checks == 1
+        assert results[0][0].all_check_results[0].value == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}  # noqa
+        assert results[0][0].all_check_results[0].success is True
+        assert len(results[0][1].all_check_results) == 1
+        assert results[0][1].perc_successful_checks == 1
+        assert results[0][1].all_check_results[0].value == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 1'}  # noqa
+        assert results[0][1].all_check_results[0].success is True
+        assert len(results[1][0].all_check_results) == 1
+        assert results[1][0].perc_successful_checks == 1
+        assert results[1][0].all_check_results[0].value == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 2'}  # noqa
+        assert results[1][0].all_check_results[0].success is True
+        assert len(results[1][1].all_check_results) == 1
+        assert results[1][1].perc_successful_checks == 1
+        assert results[1][1].all_check_results[0].value == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}  # noqa
+        assert results[1][1].all_check_results[0].success is True
+
+        assert results[0][0].prompts == [{'prompt': 'Test Prompt 1'}]
+        assert results[0][1].prompts == [{'prompt': 'Test Prompt 2'}]
+        assert results[1][0].prompts == [{'prompt': 'Test Prompt 1'}]
+        assert results[1][1].prompts == [{'prompt': 'Test Prompt 2'}]
+
+        # if these work on the first result, they should work on the rest
+        assert results[0][0].response_characters is None  # only applicable for string responses
+        assert results[0][0].characters_per_second is None  # only applicable for string responses
+        assert results[0][0].expects_code_blocks is False
+        assert results[0][0].get_code_block_tests_result() is None
+        assert results[0][0].get_num_code_blocks_successful() is None
+        assert results[0][0].get_num_code_tests_defined() is None
+        assert results[0][0].get_num_code_tests_successful() is None
+        # ensure that we can convert the results (which contain unregistered checks/candidates) to
+        # a string and dictionary (which call underlying str and to_dict methods on
+        # checks/candidates)
+        assert len(str(results[0][0])) > 10
+        assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
+        assert results[0][0].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
+        assert results[0][0].to_dict()['results'][0][0] == results[0][0].results[0][0].to_dict()
+        assert results[0][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
+        assert results[0][1].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
+        assert results[0][1].to_dict()['results'][0][0] == results[0][1].results[0][0].to_dict()
+        assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
+        assert results[1][0].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
+        assert results[1][0].to_dict()['results'][0][0] == results[1][0].results[0][0].to_dict()
+        assert results[1][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
+        assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
+        assert results[1][1].to_dict()['results'][0][0] == results[1][1].results[0][0].to_dict()
