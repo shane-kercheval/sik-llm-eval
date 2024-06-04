@@ -51,28 +51,14 @@ class MockCandidate(Candidate):
         """Invokes the underlying model with the prompt and returns the response."""
         return self.model(prompt)
 
-
     def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
         return
 
     def set_system_message(self, system_message: str) -> None:  # noqa
         return
 
-    @property
-    def total_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def input_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def response_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def cost(self) -> float:  # noqa
-        return None
+    def clone(self) -> 'Candidate':  # noqa
+        return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
 def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa

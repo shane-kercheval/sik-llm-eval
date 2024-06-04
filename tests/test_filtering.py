@@ -51,21 +51,8 @@ class MockCandidate(Candidate):
     def set_message_history(self, messages: list[dict] | list[tuple]) -> None:
         """Not needed."""
 
-    @property
-    def total_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def input_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def response_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def cost(self) -> float:  # noqa
-        return None
+    def clone(self) -> 'MockCandidate':  # noqa
+        return MockCandidate(parameters=self.parameters, metadata=self.metadata)
 
 
 def test_filter_tags(  # noqa: PLR0915

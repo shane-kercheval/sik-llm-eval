@@ -1,4 +1,5 @@
 """Configures the pytests."""
+from copy import deepcopy
 import os
 from collections.abc import Callable
 import re
@@ -216,21 +217,15 @@ class MockCandidate(Candidate):
         value['responses'] = self.responses
         return value
 
-    @property
-    def total_tokens(self) -> int:  # noqa
-        return None
+    def clone(self) -> 'Candidate':
+        """
+        Returns a copy of the Candidate with the same state but with a different instance of the
+        underlying model (e.g. same parameters but reset history/context).
 
-    @property
-    def input_tokens(self) -> int:  # noqa
-        return None
+        Reques
+        """
+        return Candidate.from_dict(deepcopy(self.to_dict()))
 
-    @property
-    def response_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def cost(self) -> float:  # noqa
-        return None
 
 
 @Candidate.register('MockCandidateCannedResponse')
@@ -256,21 +251,15 @@ class MockCandidateCannedResponse(Candidate):  # noqa
         """Need to add `responses` to enable proper to_dict values."""
         return super().to_dict()
 
-    @property
-    def total_tokens(self) -> int:  # noqa
-        return None
+    def clone(self) -> 'Candidate':
+        """
+        Returns a copy of the Candidate with the same state but with a different instance of the
+        underlying model (e.g. same parameters but reset history/context).
 
-    @property
-    def input_tokens(self) -> int:  # noqa
-        return None
+        Reques
+        """
+        return Candidate.from_dict(deepcopy(self.to_dict()))
 
-    @property
-    def response_tokens(self) -> int:  # noqa
-        return None
-
-    @property
-    def cost(self) -> float:  # noqa
-        return None
 
 
 @pytest.fixture()
@@ -469,7 +458,7 @@ def openai_candidate_template() -> dict:
 @pytest.fixture()
 def hugging_face_candidate_template() -> dict:
     """Returns the yaml template for a Hugging Face Endpoint candidate."""
-    with open('examples/candidates/hugging_face_endpoint_mistral_a10g.yaml') as f:
+    with open('examples/candidates/additional_examples/hugging_face_endpoint_mistral_a10g.yaml') as f:  # noqa
         config = yaml.safe_load(f)
     config['parameters']['endpoint_url'] = os.getenv('HUGGING_FACE_ENDPOINT_UNIT_TESTS')
     return config

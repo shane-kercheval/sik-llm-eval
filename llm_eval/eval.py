@@ -46,7 +46,7 @@ class PromptTest(DictionaryEqualsMixin):
 
     def __init__(
             self,
-            prompt: str,
+            prompt: str | dict | list,
             ideal_response: str | None = None,
             checks: list[Check | dict] | None = None) -> None:
         """
@@ -66,7 +66,7 @@ class PromptTest(DictionaryEqualsMixin):
                 Check subclasses need to be registered via `Check.register(...)`.
                 The dictionary needs a `check_type` key with the registration value.
         """
-        self.prompt = dedent(str(prompt)).lstrip()
+        self.prompt = dedent(prompt).lstrip() if isinstance(prompt, str) else prompt
         self.ideal_response = dedent(ideal_response) if ideal_response else None
         checks = checks or []
         if not isinstance(checks, list):
@@ -116,6 +116,14 @@ class PromptTest(DictionaryEqualsMixin):
         if self.checks:
             value['checks'] = [c.to_dict() for c in self.checks]
         return value
+
+    def clone(self) -> 'PromptTest':
+        """Returns a copy of the PromptTest with the same state."""
+        return PromptTest(
+            prompt=deepcopy(self.prompt),
+            ideal_response=self.ideal_response,
+            checks=[c.clone() for c in self.checks],
+        )
 
 
 class Eval(DictionaryEqualsMixin):
@@ -173,6 +181,7 @@ class Eval(DictionaryEqualsMixin):
             metadata:
                 Metadata associated with the Eval.
         """
+        self._has_executed = False
         self._candidate = None
         self._responses = None
         self._duration = None
@@ -205,7 +214,7 @@ class Eval(DictionaryEqualsMixin):
         for test in prompt_sequence:
             if isinstance(test, dict):
                 test_copy = deepcopy(test)
-                test_copy['prompt'] = str(test_copy['prompt'])
+                test_copy['prompt'] = test_copy['prompt']
                 tests_created.append(PromptTest(**test_copy))
             elif isinstance(test, PromptTest):
                 tests_created.append(test)
@@ -262,7 +271,7 @@ class Eval(DictionaryEqualsMixin):
         return cls(**config)
 
     def _to_candidate(self, candidate: Candidate | Callable | dict) -> Candidate:
-        """Converts a candidate to a Candidate object."""
+        """Converts the candidate parameter to a Candidate object."""
         if isinstance(candidate, dict):
             candidate = Candidate.from_dict(candidate)
         elif not isinstance(candidate, Candidate) and isinstance(candidate, Callable):
@@ -322,7 +331,8 @@ class Eval(DictionaryEqualsMixin):
         code_blocks = []
         for test, response in zip(self.prompt_sequence, self._responses):
             check_results = []
-            code_blocks.extend(extract_code_blocks(response))
+            if isinstance(response, str):
+                code_blocks.extend(extract_code_blocks(response))
             parameters = {
                 'prompt': test.prompt,
                 'ideal_response': test.ideal_response,
@@ -361,6 +371,9 @@ class Eval(DictionaryEqualsMixin):
                 not be able to be called when deserialized, since the underlying function will not
                 be serialized.
         """
+        if self._has_executed:
+            raise RuntimeError("Eval has already been executed; create a new Eval object")
+        self._has_executed = True
         self._generate_responses(candidate)
         # _generate_responses has side effects of setting self._responses, self._duration, and
         # self._candidate that _execute_check relies on;
@@ -397,10 +410,14 @@ class Eval(DictionaryEqualsMixin):
         """
         Returns a copy of the Candidate with the same state but with a different instance of the
         underlying model (e.g. same parameters but reset history/context).
-
-        Reques
         """
-        return Eval(**deepcopy(self.to_dict()))
+        # return Eval(**deepcopy(self.to_dict()))
+        return Eval(
+            prompt_sequence=[p.clone() for p in self.prompt_sequence],
+            system_message=self.system_message,
+            previous_messages=deepcopy(self.previous_messages),
+            metadata=deepcopy(self.metadata),
+        )
 
 
 class PromptComparison:
@@ -598,7 +615,7 @@ class EvalResult(DictionaryEqualsMixin):
         self,
         eval_obj: Eval | dict,
         candidate_obj: Candidate | dict,
-        responses: list[str],
+        responses: list[str | object],
         total_time_seconds: float,
         num_code_blocks: int,
         cost : float | None,
@@ -615,7 +632,7 @@ class EvalResult(DictionaryEqualsMixin):
                 Candidate subclasses need to be registered via `Candidate.register(...)`.
                 The dictionary needs a `candidate_type` key with the registration value.
             responses:
-                A list of responses (strings) from the LLM.
+                A list of responses (e.g. strings) from the LLM.
             total_time_seconds:
                 The total time (in seconds) it took to run the Eval.
             num_code_blocks:
@@ -675,13 +692,17 @@ class EvalResult(DictionaryEqualsMixin):
         return [p.ideal_response for p in self.eval_obj.prompt_sequence]
 
     @property
-    def response_characters(self) -> int:
+    def response_characters(self) -> int | None:
         """Returns the number of characters across all responses."""
+        if not self.responses or not isinstance(self.responses[0], str):
+            return None
         return sum(len(r) for r in self.responses)
 
     @property
-    def characters_per_second(self) -> float:
+    def characters_per_second(self) -> float | None:
         """Returns the number of characters per second across all responses."""
+        if not self.responses or not isinstance(self.responses[0], str):
+            return None
         # Adding a tiny value to prevent divide-by-zero error
         return sum(len(r) for r in self.responses) / (self.total_time_seconds + 1e-6)
 
@@ -769,18 +790,26 @@ class EvalResult(DictionaryEqualsMixin):
 
     def __str__(self) -> str:
         cost_str = f'\n{" " * 12}Cost:{" " * 22} ${self.cost:.4f}' if self.cost else ''
+        # check if candidate_obj has metadata field
         candidate_name = self.candidate_obj.metadata.get('name', '')
         if candidate_name:
             candidate_name = f"Candidate:{' ' * 18}{candidate_name}\n{' ' * 12}"
         eval_name = self.eval_obj.metadata.get('name', '')
         if eval_name:
             eval_name = f"Eval:{' ' * 24}{eval_name}\n{' ' * 12}"
+        # response_characters and characters_per_second are properties that can return None
+        if self.response_characters is None:
+            response_characters = 'N/A'
+            characters_per_second = 'N/A'
+        else:
+            response_characters = f'{self.response_characters:,}'
+            characters_per_second = f'{self.characters_per_second:,.1f}'
         result = f"""
         EvalResult:
             {candidate_name}{eval_name}# of Prompts Tested:         {len(self.eval_obj.prompt_sequence)}{cost_str}
             Total Response Time:         {self.total_time_seconds:0.1f} seconds
-            # of Response Characters:    {self.response_characters:,}
-            Characters per Second:       {self.characters_per_second:,.1f}
+            # of Response Characters:    {response_characters}
+            Characters per Second:       {characters_per_second}
             # of Checks:                 {self.num_checks}
             # of Successful Checks:      {self.num_successful_checks}
             % of Successful Checks:      {self.perc_successful_checks or 0:.1%}
@@ -876,10 +905,15 @@ class EvalHarness:
     An EvalHarness provides a interface for evaluating multiple Evals against multiple
     Candidates/LLMs.
 
-    Candidates must be registered so that we can clone them. This is necessary because we need to
+    Candidates must implement the clone() function. This is necessary because we need to
     clone the Candidate for each Eval so that we can run each Eval against a unique Candidate in
     memory (i.e. if the Candidate maintains state/history between prompts, we don't want to reuse
     the same candidate for each eval).
+
+    Candidates must be registered via Candidate.register if they are passed in as dictionaries.
+
+    Checks used by EvalHarness must be a CloneableCheck because Evals (and corresponding Check
+    objects) are cloned across multiple candidates.
 
     The EvalHarness is responsible for calling each Eval object with each Candidate and returning a
     collection of EvalResults.
