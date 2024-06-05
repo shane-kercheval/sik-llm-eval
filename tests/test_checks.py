@@ -345,7 +345,11 @@ def test__MatchCheck__has_check_type():  # noqa
     assert MatchCheck(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-def test__MatchCheck():  # noqa
+@pytest.mark.parametrize(
+    'negate',
+    [True, False],
+)
+def test__MatchCheck(negate: bool):  # noqa
     assert CheckType.MATCH.name in Check.registry
     assert CheckType.MATCH in Check.registry
 
@@ -354,84 +358,109 @@ def test__MatchCheck():  # noqa
         Check.from_dict({'check_type': CheckType.MATCH})
 
     # check check_type with Enum
-    check = Check.from_dict({'check_type': CheckType.MATCH, 'value': 'foo'})
+    original_dict = {'check_type': CheckType.MATCH, 'value': 'foo'}
+    if negate:
+        original_dict['negate'] = negate
+    check = Check.from_dict(original_dict)
     assert check.value == 'foo'
     assert check.check_type == CheckType.MATCH.name
+    assert check.negate == negate
     assert check.metadata == {}
     assert str(check)
-    check_dict = check.to_dict()
-    assert check_dict == {
+    actual_dict = check.to_dict()
+    expected_dict = {
         'check_type': CheckType.MATCH.name,
         'value': 'foo',
         # 'metadata': {},
     }
-    assert MatchCheck(**check_dict) == check
+    if negate:
+        expected_dict['negate'] = negate
+
+    assert actual_dict == expected_dict
+    assert MatchCheck(**actual_dict) == check
 
     # check check_type with lower case
-    check = Check.from_dict({'check_type': CheckType.MATCH.name.lower(), 'value': 'foo'})
+    original_dict = {'check_type': CheckType.MATCH.name.lower(), 'value': 'foo'}
+    if negate:
+        original_dict['negate'] = negate
+    check = Check.from_dict(original_dict)
     assert check.value == 'foo'
     assert check.check_type == CheckType.MATCH.name
+    assert check.negate == negate
     assert check.metadata == {}
     assert str(check)
-    check_dict = check.to_dict()
-    assert check_dict == {
+    actual_dict = check.to_dict()
+    expected_dict = {
         'check_type': CheckType.MATCH.name,
         'value': 'foo',
     }
-    assert MatchCheck(**check_dict) == check
+    if negate:
+        expected_dict['negate'] = negate
+    assert actual_dict == expected_dict
+    assert MatchCheck(**actual_dict) == check
 
-    result = check(response='foo')  # passing in the matching value which should pass
-    assert result.success
-    assert result.value
+    result = check(response='foo')  # passing in the matching value which should match
+    assert result.success == (not negate)
+    assert result.value == (not negate)
     assert result.metadata['check_type'] == CheckType.MATCH.name
     assert result.metadata['check_value'] == 'foo'
+    assert result.metadata['check_negate'] == negate
     assert result.metadata['check_metadata'] == {}
     assert str(result)
     result_dict = result.to_dict()
-    assert result_dict == {
-        'value': True,
-        'success': True,
+    expected_dict = {
+        'value': not negate,
+        'success': not negate,
         'metadata': {
             'check_type': CheckType.MATCH.name,
             'check_value': 'foo',
+            'check_negate': negate,
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
     }
+    assert result_dict == expected_dict
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
     check = Check.from_dict({
         'check_type': CheckType.MATCH.name.lower(),
         'value': 'bar',
+        'negate': negate,
         'metadata': {'bar': 'foo'},
     })
     assert check.value == 'bar'
     assert check.check_type == CheckType.MATCH.name
+    assert check.negate == negate
     assert check.metadata == {'bar': 'foo'}
     assert str(check)
-    check_dict = check.to_dict()
-    assert check_dict == {
+    expected_dict = {
         'check_type': CheckType.MATCH.name,
         'value': 'bar',
         'metadata': {'bar': 'foo'},
     }
-    assert MatchCheck(**check_dict) == check
+    if negate:
+        expected_dict['negate'] = negate
+    actual_dict = check.to_dict()
+    assert actual_dict == expected_dict
+    assert MatchCheck(**actual_dict) == check
 
-    result = check(response='foo')  # passing in the non-matching value which should fail
-    assert not result.success
-    assert not result.value
+    result = check(response='foo')  # passing in the non-matching value which should not match
+    assert result.success == negate
+    assert result.value == negate
     assert result.metadata['check_type'] == CheckType.MATCH.name
     assert result.metadata['check_value'] == 'bar'
+    assert result.metadata['check_negate'] == negate
     assert result.metadata['check_metadata'] == {'bar': 'foo'}
     assert str(result)
     result_dict = result.to_dict()
     assert result_dict == {
-        'value': False,
-        'success': False,
+        'value': negate,
+        'success': negate,
         'metadata': {
             'check_type': CheckType.MATCH.name,
             'check_value': 'bar',
+            'check_negate': negate,
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -454,7 +483,11 @@ def test__ContainsCheck__has_check_type():  # noqa
     assert ContainsCheck(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-def test__ContainsCheck():  # noqa
+@pytest.mark.parametrize(
+    'negate',
+    [True, False],
+)
+def test__ContainsCheck(negate: bool):  # noqa
     assert CheckType.CONTAINS.name in Check.registry
     assert CheckType.CONTAINS in Check.registry
 
@@ -463,48 +496,64 @@ def test__ContainsCheck():  # noqa
         Check.from_dict({'check_type': CheckType.CONTAINS})
 
     # check check_type with Enum
-    check = Check.from_dict({'check_type': CheckType.CONTAINS, 'value': 'o ba'})
+    check_dict = {'check_type': CheckType.CONTAINS, 'value': 'o ba'}
+    if negate:
+        check_dict['negate'] = negate
+    check = Check.from_dict(check_dict)
     assert check.value == 'o ba'
     assert check.check_type == CheckType.CONTAINS.name
+    assert check.negate == negate
     assert check.metadata == {}
     assert str(check)
     check_dict = check.to_dict()
-    assert check_dict == {
+    expected_value = {
         'check_type': CheckType.CONTAINS.name,
         'value': 'o ba',
         # 'metadata': {},
     }
+    if negate:
+        expected_value['negate'] = negate
+    assert check_dict == expected_value
     assert ContainsCheck(**check_dict) == check
 
     # check check_type with lower case
-    check = Check.from_dict({'check_type': CheckType.CONTAINS.name.lower(), 'value': 'o ba'})
+    check_dict = {'check_type': CheckType.CONTAINS.name.lower(), 'value': 'o ba'}
+    if negate:
+        check_dict['negate'] = negate
+    check = Check.from_dict(check_dict)
     assert check.value == 'o ba'
     assert check.check_type == CheckType.CONTAINS.name
+    assert check.negate == negate
     assert check.metadata == {}
     assert str(check)
     check_dict = check.to_dict()
-    assert check_dict == {
+    expected_value = {
         'check_type': CheckType.CONTAINS.name,
         'value': 'o ba',
         # 'metadata': {},
     }
+    if negate:
+        expected_value['negate'] = negate
+    assert check_dict == expected_value
     assert ContainsCheck(**check_dict) == check
 
-    # passing in str that is contained within value which should pass
+    # passing in str that is contained within value which should match
     result = check(response='foo bar')
-    assert result.success
-    assert result.value
+    assert result.success == (not negate)
+    assert result.value == (not negate)
     assert result.metadata['check_type'] == CheckType.CONTAINS.name
     assert result.metadata['check_value'] == 'o ba'
+    assert result.metadata['check_negate'] == negate
     assert result.metadata['check_metadata'] == {}
     assert str(result)
     result_dict = result.to_dict()
     assert result_dict == {
-        'value': True,
-        'success': True,
+        'value': not negate,
+        'success': not negate,
         'metadata': {
             'check_type': CheckType.CONTAINS.name,
             'check_value': 'o ba',
+            'check_negate': negate,
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -515,35 +564,42 @@ def test__ContainsCheck():  # noqa
     check = Check.from_dict({
         'check_type': CheckType.CONTAINS.name.lower(),
         'value': 'o ba',
+        'negate': negate,
         'metadata': {'bar': 'foo'},
     })
     assert check.value == 'o ba'
     assert check.check_type == CheckType.CONTAINS.name
+    assert check.negate == negate
     assert check.metadata == {'bar': 'foo'}
     assert str(check)
     check_dict = check.to_dict()
-    assert check_dict == {
+    expected_value = {
         'check_type': CheckType.CONTAINS.name,
         'value': 'o ba',
         'metadata': {'bar': 'foo'},
     }
+    if negate:
+        expected_value['negate'] = negate
+    assert check_dict == expected_value
     assert ContainsCheck(**check_dict) == check
 
-    # passing in str that is not contained within value which should fail
+    # passing in str that is not contained within value which should not match
     result = check(response='bar foo')
-    assert not result.success
-    assert not result.value
+    assert result.success == negate
+    assert result.value == negate
     assert result.metadata['check_type'] == CheckType.CONTAINS.name
     assert result.metadata['check_value'] == 'o ba'
+    assert result.metadata['check_negate'] == negate
     assert result.metadata['check_metadata'] == {'bar': 'foo'}
     assert str(result)
     result_dict = result.to_dict()
     assert result_dict == {
-        'value': False,
-        'success': False,
+        'value': negate,
+        'success': negate,
         'metadata': {
             'check_type': CheckType.CONTAINS.name,
             'check_value': 'o ba',
+            'check_negate': negate,
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -566,7 +622,11 @@ def test__RegexCheck__has_check_type():  # noqa
     assert RegexCheck(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-def test__RegexCheck():  # noqa
+@pytest.mark.parametrize(
+    'negate',
+    [True, False],
+)
+def test__RegexCheck(negate: bool):  # noqa
     assert CheckType.REGEX.name in Check.registry
     assert CheckType.REGEX in Check.registry
 
@@ -576,34 +636,43 @@ def test__RegexCheck():  # noqa
 
     # example of regex to test
     regex = r'^[a-z]+$'  # this regex matches any string that is all lowercase letters
-    check = Check.from_dict({'check_type': CheckType.REGEX, 'pattern': regex})
+    check_dict = {'check_type': CheckType.REGEX, 'pattern': regex}
+    if negate:
+        check_dict['negate'] = negate
+    check = Check.from_dict(check_dict)
     assert check.pattern == regex
     assert check.check_type == CheckType.REGEX.name
+    assert check.negate == negate
     assert check.metadata == {}
     assert str(check)
     check_dict = check.to_dict()
-    assert check_dict == {
+    expected_value = {
         'check_type': CheckType.REGEX.name,
         'pattern': regex,
         # 'metadata': {},
     }
+    if negate:
+        expected_value['negate'] = negate
+    assert check_dict == expected_value
     assert RegexCheck(**check_dict) == check
 
-    # passing in str that matches the regex which should pass
+    # passing in str that matches the regex which should match
     result = check(response='foo')
-    assert result.success
-    assert result.value
+    assert result.success == (not negate)
+    assert result.value == (not negate)
     assert result.metadata['check_type'] == CheckType.REGEX.name
     assert result.metadata['check_pattern'] == regex
+    assert result.metadata['check_negate'] == negate
     assert result.metadata['check_metadata'] == {}
     assert str(result)
     result_dict = result.to_dict()
     assert result_dict == {
-        'value': True,
-        'success': True,
+        'value': not negate,
+        'success': not negate,
         'metadata': {
             'check_type': CheckType.REGEX.name,
             'check_pattern': regex,
+            'check_negate': negate,
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -611,38 +680,47 @@ def test__RegexCheck():  # noqa
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
-    check = Check.from_dict({
+    check_dict = {
         'check_type': CheckType.REGEX.name.lower(),
         'pattern': regex,
         'metadata': {'bar': 'foo'},
-    })
+    }
+    if negate:
+        check_dict['negate'] = negate
+    check = Check.from_dict(check_dict)
     assert check.pattern == regex
     assert check.check_type == CheckType.REGEX.name
+    assert check.negate == negate
     assert check.metadata == {'bar': 'foo'}
     assert str(check)
     check_dict = check.to_dict()
-    assert check_dict == {
+    expected_value = {
         'check_type': CheckType.REGEX.name,
         'pattern': regex,
         'metadata': {'bar': 'foo'},
     }
+    if negate:
+        expected_value['negate'] = negate
+    assert check_dict == expected_value
     assert RegexCheck(**check_dict) == check
 
-    # passing in str that does not match the regex which should fail
+    # passing in str that does not match the regex which should not match
     result = check(response='Foo')
-    assert not result.success
-    assert not result.value
+    assert result.success == negate
+    assert result.value == negate
     assert result.metadata['check_type'] == CheckType.REGEX.name
     assert result.metadata['check_pattern'] == regex
+    assert result.metadata['check_negate'] == negate
     assert result.metadata['check_metadata'] == {'bar': 'foo'}
     assert str(result)
     result_dict = result.to_dict()
     assert result_dict == {
-        'value': False,
-        'success': False,
+        'value': negate,
+        'success': negate,
         'metadata': {
             'check_type': CheckType.REGEX.name,
             'check_pattern': regex,
+            'check_negate': negate,
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -650,10 +728,16 @@ def test__RegexCheck():  # noqa
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
-    assert check(response='foo').success
-    assert not check(response='foo123').success
-    assert not check(response='123foo').success
-    assert not check(response='Foo').success
+    assert check(response='foo').success == (not negate)
+    assert check(response='foo123').success == negate
+    assert check(response='123foo').success == negate
+    assert check(response='Foo').success == negate
+
+    check.negate = not negate
+    assert check(response='foo').success == negate
+    assert check(response='foo123').success == (not negate)
+    assert check(response='123foo').success == (not negate)
+    assert check(response='Foo').success == (not negate)
 
 def test__RegexCheck__multiline_response():  # noqa
     response = r"""

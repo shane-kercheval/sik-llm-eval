@@ -248,14 +248,19 @@ class MatchCheck(SerializableCheck):
     """Checks if the LLM response exactly matches the provided value."""
 
     value: str = Field(description="The value to match the LLM response against.")
+    negate: bool = Field(
+        default=False,
+        description="If True, the check will pass if the response does not match the value.",
+    )
 
     def __call__(self, response: str) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
         return PassFailResult(
-            value=response == self.value,
+            value=self.value == response if not self.negate else self.value != response,
             metadata={
                 'check_type': self.check_type,
                 'check_value': self.value,
+                'check_negate': self.negate,
                 'check_metadata': self.metadata,
             },
         )
@@ -273,14 +278,19 @@ class ContainsCheck(SerializableCheck):
     """
 
     value: str = Field(description="The value to match the LLM response against. If the response contains the value, the check is considered successful.")  # noqa
+    negate: bool = Field(
+        default=False,
+        description="If True, the check will pass if the response does not contain the value.",
+    )
 
     def __call__(self, response: str) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
         return PassFailResult(
-            value=self.value in response,
+            value=self.value in response if not self.negate else self.value not in response,
             metadata={
                 'check_type': self.check_type,
                 'check_value': self.value,
+                'check_negate': self.negate,
                 'check_metadata': self.metadata,
             },
         )
@@ -295,14 +305,20 @@ class RegexCheck(SerializableCheck):
     """Checks if the a given regular expression matches the LLM response."""
 
     pattern: str = Field(description="The regular expression to match the LLM response against.")
+    negate: bool = Field(
+        default=False,
+        description="If True, the check will pass if the response does not match the regular expression.",  # noqa
+    )
 
     def __call__(self, response: str) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
+        found = re.search(self.pattern, response, re.MULTILINE) is not None
         return PassFailResult(
-            value=re.search(self.pattern, response, re.MULTILINE) is not None,
+            value=found if not self.negate else not found,
             metadata={
                 'check_type': self.check_type,
                 'check_pattern': self.pattern,
+                'check_negate': self.negate,
                 'check_metadata': self.metadata,
             },
         )
