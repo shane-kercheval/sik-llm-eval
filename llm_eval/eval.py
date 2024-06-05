@@ -10,18 +10,19 @@ from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
 from textwrap import dedent, indent
-from typing import Callable
+from typing import Any, Callable
 from llm_eval.candidates import CallableCandidate, Candidate
 from llm_eval.checks import (
     Check,
     CheckResult,
     CheckType,
+    PassFailResult,
     PythonCodeBlockTests,
+    RequestData,
 )
 from llm_eval.utilities.internal_utilities import (
     DictionaryEqualsMixin,
     extract_code_blocks,
-    extract_valid_parameters,
     get_callable_info,
     has_property,
 )
@@ -31,13 +32,14 @@ class PromptTest(DictionaryEqualsMixin):
     """
     A PromptTest represents a prompt, an optional ideal response, and a list of checks to run
     against the response. There can be one or more PromptTests in an Eval. If more than one
-    PromptTest is provided, the intent is evaluate a conversation and, therefore, it's expected
-    that the underlying Candidate (model/client) will maintain state between multiple
-    prompt/response exchanges.
+    PromptTest is provided, the intent is to evaluate a conversation (multiple sequential
+    prompts/responses) and, therefore, it's expected that the underlying Candidate (model/client)
+    will maintain state, if needed, between each PromptTest.
 
-    Checks are optional because even a test without checks still collects performance information
-    (e.g. characters per second) as well as responses (which can be visually/subjectively compared
-    against either the ideal response or the responses from other LLMs).
+    Although most PromptTests will contain 'checks', checks are optional because even a test
+    without checks still collects performance information (e.g. characters per second) as well as
+    responses (which can be visually/subjectively compared against either the ideal response or the
+    responses from other LLMs).
 
     A PromptTest only contains information (it is not directly callable). An Eval object is
     responsible for calling the PromptTest(s), executing the checks, and returning a EvalResult
@@ -48,7 +50,7 @@ class PromptTest(DictionaryEqualsMixin):
             self,
             prompt: str | dict | list,
             ideal_response: str | None = None,
-            checks: list[Check | dict] | None = None) -> None:
+            checks: list[Check | dict | Callable[[Any], CheckResult]] | None = None) -> None:
         """
         Initializes the PromptTest.
 
@@ -65,6 +67,9 @@ class PromptTest(DictionaryEqualsMixin):
                 'A list of checks to run against the response. If a dictionary is provided, the
                 Check subclasses need to be registered via `Check.register(...)`.
                 The dictionary needs a `check_type` key with the registration value.
+                If a callable is provided, it will not be cloned and so should not have any state.
+                Additionally it cannot be serialized/deserialized via to_dict()/from_dict() since
+                the underlying callable will not have those methods.
         """
         self.prompt = dedent(prompt).lstrip() if isinstance(prompt, str) else prompt
         self.ideal_response = dedent(ideal_response) if ideal_response else None
@@ -76,10 +81,10 @@ class PromptTest(DictionaryEqualsMixin):
             if isinstance(check, dict):
                 assert 'check_type' in check, "Check dictionary must contain a 'check_type' key"
                 checks_created.append(Check.from_dict(check))
-            elif isinstance(check, Check):
+            elif isinstance(check, (Callable, Check)):
                 checks_created.append(check)
             else:
-                raise TypeError("Checks must be either a Check instance or a dictionary")
+                raise TypeError("Checks must be either a Check, dictionary, or callable.")
         # Cannot add more than one PythonCodeBlockTests check
         if len([c for c in checks_created if isinstance(c, PythonCodeBlockTests)]) > 1:
             raise ValueError("Cannot add more than one PythonCodeBlockTests check")
@@ -109,32 +114,47 @@ class PromptTest(DictionaryEqualsMixin):
         """).strip()
 
     def to_dict(self) -> dict:
-        """Return a dictionary representation of the PromptTest."""
+        """
+        Return a dictionary representation of the PromptTest.
+
+        NOTE: if the underlying checks do not have a to_dict method, (e.g. lambda function) they
+        will be converted to a string. This means that the check cannot be deserialized via
+        from_dict.
+        """
         value = {'prompt': self.prompt}
         if self.ideal_response:
             value['ideal_response'] = self.ideal_response
         if self.checks:
-            value['checks'] = [c.to_dict() for c in self.checks]
+            value['checks'] = [
+                c.to_dict() if hasattr(c, 'to_dict') else str(c) for c in self.checks
+            ]
         return value
 
     def clone(self) -> 'PromptTest':
-        """Returns a copy of the PromptTest with the same state."""
+        """
+        Returns a copy of the PromptTest with the same state.
+
+        NOTE: This method only clones checks that have a clone method. If a check does not have a
+        clone method (e.g. lambda function), it will not be cloned and it is assumed that the check
+        is stateless and multiple usage of the check will not cause side effects.
+        """
         return PromptTest(
             prompt=deepcopy(self.prompt),
             ideal_response=self.ideal_response,
-            checks=[c.clone() for c in self.checks],
+            checks=[c.clone() if hasattr(c, 'clone') else c for c in self.checks],
         )
 
 
 class Eval(DictionaryEqualsMixin):
     """
     An Eval is single scenario (i.e. one or more prompts) that the user is interested in
-    evaluating. Multiple prompts can be used to test conversations (i.e. sequential
-    prompt/response exchanges where the assumption is the LLM client maintains conversational
-    history). Additionally, each Eval is associated with custom "checks". Examples of checks are:
-    if the response matches an exact value, if it contain a particular value, if it contain code
-    blocks, if those code blocks run, if the variables/functions/etc created by those code blocks
-    contain the expected values/behavior.
+    evaluating (via one or more checks), which is encapsulated in a PromptTest object.  Multiple
+    prompts can be used to test conversations (i.e. sequential prompt/response exchanges where the
+    assumption is the LLM client maintains conversational history) encapsulated in a list of
+    PromptTests. Additionally, each Eval is associated with custom "checks". Examples of checks
+    include: if the response matches an exact value, if it contain a particular value, if it
+    contain code blocks, if those code blocks run, if the variables/functions/etc created by those
+    code blocks contain the expected values/behavior.
 
     An Eval is a callable object that is executed by calling it with a Candidate object, or a
     dictionary representing a Candidate that has been registered via `Candidate.register(...)`.
@@ -333,15 +353,14 @@ class Eval(DictionaryEqualsMixin):
             check_results = []
             if isinstance(response, str):
                 code_blocks.extend(extract_code_blocks(response))
-            parameters = {
-                'prompt': test.prompt,
-                'ideal_response': test.ideal_response,
-                'response': response,
-                'code_blocks': code_blocks,
-            }
+            data = RequestData(
+                prompt=test.prompt,
+                ideal_response=test.ideal_response,
+                response=response,
+                code_blocks=code_blocks,
+            )
             for check in test.checks:
-                valid_parameters = extract_valid_parameters(check.__call__, parameters)
-                check_results.append(check(**valid_parameters))
+                check_results.append(check(data))
             results.append(check_results)
 
         return EvalResult(
@@ -355,7 +374,7 @@ class Eval(DictionaryEqualsMixin):
             results=results,
         )
 
-    def __call__(self, candidate: Candidate | Callable | dict) -> 'EvalResult':
+    def __call__(self, candidate: Candidate | Callable[[Any], Any] | dict) -> 'EvalResult':
         """
         Evaluates the model against the prompts and tests.
 
@@ -676,8 +695,11 @@ class EvalResult(DictionaryEqualsMixin):
                     test_results_created.append(CheckResult.from_dict(r))
                 elif isinstance(r, CheckResult):
                     test_results_created.append(r)
+                elif isinstance(r, bool):
+                    # if a boolean is passed in, convert it to a CheckResult
+                    test_results_created.append(PassFailResult(value=r))
                 else:
-                    raise TypeError("results must be either a CheckResult or a dictionary")
+                    raise TypeError("results must be a CheckResult, dictionary, or bool")
             results_created.append(test_results_created)
         self.results = results_created
 
@@ -905,7 +927,13 @@ class EvalHarness:
     An EvalHarness provides a interface for evaluating multiple Evals against multiple
     Candidates/LLMs.
 
-    Candidates must implement the clone() function. This is necessary because we need to
+    Candidates must implement the clone() function if they contain state.
+    TODO add more detail and cleanup.
+    This is necessary because we need a consistant way of cloning the Candidate for each Eval so
+    that we can run multiple Evals against the same Candidate without affecting the state of the
+    Candidate.
+    TODO.
+
     clone the Candidate for each Eval so that we can run each Eval against a unique Candidate in
     memory (i.e. if the Candidate maintains state/history between prompts, we don't want to reuse
     the same candidate for each eval).
@@ -1096,7 +1124,10 @@ class EvalHarness:
         for file_path in glob.glob(path):
             self.add_eval_from_yaml(file_path)
 
-    def add_candidates(self, candidate: list[Candidate | dict] | Candidate | dict) -> None:
+    def add_candidates(
+            self,
+            candidate: list[Candidate | dict | Callable[[Any], Any]] | Candidate | dict | Callable[[Any], Any],  # noqa
+            ) -> None:
         """
         Adds a Candidate object. This method can be called multiple times to add additional
         Candidate objects.
@@ -1114,11 +1145,15 @@ class EvalHarness:
                 self.candidates.extend(candidate)
             else:
                 self.candidates.append(candidate)
-        elif isinstance(candidate, Candidate):
-            self.candidates.append(candidate)
         elif isinstance(candidate, list):
             for obj in candidate:
                 self.add_candidates(obj)
+        elif isinstance(candidate, Candidate):
+            self.candidates.append(candidate)
+        elif isinstance(candidate, Callable):
+            self.candidates.append(CallableCandidate(candidate))
+        else:
+            raise TypeError(f"incompatible type {type(candidate)} for candidate")
 
     def add_candidate_from_yaml(self, path: str) -> None:
         """

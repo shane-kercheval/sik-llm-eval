@@ -13,6 +13,7 @@ from llm_eval.checks import (
     ContainsCheck,
     MatchCheck,
     PassFailResult,
+    RequestData,
     ScoreResult,
 )
 from llm_eval.eval import (
@@ -2641,8 +2642,12 @@ class UnregisteredCheckResult(CheckResult):  # noqa
     pass
 
 class UnregisteredCheck(Check):  # noqa
-    def __call__(self, response: object) -> UnregisteredCheckResult:  # noqa
-        return UnregisteredCheckResult(success=response is not None, value=response, metadata={})
+    def __call__(self, data: RequestData) -> UnregisteredCheckResult:  # noqa
+        return UnregisteredCheckResult(
+            success=data.response is not None,
+            value=data.response,
+            metadata={},
+        )
 
     def clone(self) -> Check:  # noqa
         return UnregisteredCheck()
@@ -2758,6 +2763,147 @@ def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_pr
         assert len(results[1][1].all_check_results) == 1
         assert results[1][1].perc_successful_checks == 1
         assert results[1][1].all_check_results[0].value == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}  # noqa
+        assert results[1][1].all_check_results[0].success is True
+
+        assert results[0][0].prompts == [{'prompt': 'Test Prompt 1'}]
+        assert results[0][1].prompts == [{'prompt': 'Test Prompt 2'}]
+        assert results[1][0].prompts == [{'prompt': 'Test Prompt 1'}]
+        assert results[1][1].prompts == [{'prompt': 'Test Prompt 2'}]
+
+        # if these work on the first result, they should work on the rest
+        assert results[0][0].response_characters is None  # only applicable for string responses
+        assert results[0][0].characters_per_second is None  # only applicable for string responses
+        assert results[0][0].expects_code_blocks is False
+        assert results[0][0].get_code_block_tests_result() is None
+        assert results[0][0].get_num_code_blocks_successful() is None
+        assert results[0][0].get_num_code_tests_defined() is None
+        assert results[0][0].get_num_code_tests_successful() is None
+        # ensure that we can convert the results (which contain unregistered checks/candidates) to
+        # a string and dictionary (which call underlying str and to_dict methods on
+        # checks/candidates)
+        assert len(str(results[0][0])) > 10
+        assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
+        assert results[0][0].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
+        assert results[0][0].to_dict()['results'][0][0] == results[0][0].results[0][0].to_dict()
+        assert results[0][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
+        assert results[0][1].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
+        assert results[0][1].to_dict()['results'][0][0] == results[0][1].results[0][0].to_dict()
+        assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
+        assert results[1][0].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
+        assert results[1][0].to_dict()['results'][0][0] == results[1][0].results[0][0].to_dict()
+        assert results[1][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
+        assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
+        assert results[1][1].to_dict()['results'][0][0] == results[1][1].results[0][0].to_dict()
+
+def test__Eval__callable_check__callable_candidate__non_string_prompt_and_response():  # noqa
+    """
+    We should be able to use callable Checks and Candidates (e.g. functions) with non-string
+    prompts and responses. Lambdas can't be pickled, so we can't use them with EvalHarness (with
+    multi-processing), but we can use them with Evals individually.
+    """
+    eval_ = Eval(
+        prompt_sequence=PromptTest(
+            prompt={'prompt': 'Test Prompt'},  # non-string prompt
+            checks=[
+                lambda data: 'Response' in data.response['response'],  # should pass
+                lambda data: 'does not exist' in data.response['response'],  # should fail
+            ],
+        ),
+    )
+    assert 'prompt_sequence' in eval_.to_dict()
+    assert eval_.to_dict()['prompt_sequence'][0]['prompt'] == {'prompt': 'Test Prompt'}
+    assert len(eval_.to_dict()['prompt_sequence'][0]['checks']) == 2
+
+    # return dictionary instead of string
+    result = eval_(lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response'})
+    assert len(result.responses) == 1
+    assert result.responses[0] == {'prompt': 'Test Prompt', 'response': 'Test Prompt & Response'}
+    assert len(result.results) == 1
+    assert len(result.results[0]) == 2
+    check_result_1 = result.results[0][0]
+    assert check_result_1.value is True
+    assert check_result_1.success is True
+    assert check_result_1.to_dict() == {'value': True, 'success': True, 'result_type': 'PASS_FAIL'}
+    check_result_2 = result.results[0][1]
+    assert check_result_2.value is False
+    assert check_result_2.success is False
+    assert check_result_2.to_dict() == {'value': False, 'success': False, 'result_type': 'PASS_FAIL'}  # noqa
+
+    assert len(result.all_check_results) == 2
+    assert result.perc_successful_checks == 0.5
+    assert result.all_check_results[0].value == check_result_1.value
+    assert result.all_check_results[0].success == check_result_1.success
+    assert result.all_check_results[1].value == check_result_2.value
+    assert result.all_check_results[1].success == check_result_2.success
+
+    assert result.prompts == [{'prompt': 'Test Prompt'}]
+    assert result.response_characters is None  # only applicable for string responses
+    assert result.characters_per_second is None  # only applicable for string responses
+    assert result.expects_code_blocks is False
+    assert result.get_code_block_tests_result() is None
+    assert result.get_num_code_blocks_successful() is None
+    assert result.get_num_code_tests_defined() is None
+    assert result.get_num_code_tests_successful() is None
+    # ensure that we can convert the results (which contain unregistered checks/candidates) to
+    # a string and dictionary (which call underlying str and to_dict methods on
+    # checks/candidates)
+    assert len(str(result)) > 10
+    assert result.to_dict()['eval_obj'] == eval_.to_dict()
+    assert result.to_dict()['candidate_obj']['candidate_type'] == 'CALLABLE_NO_SERIALIZE'
+    assert result.to_dict()['results'][0][0] == check_result_1.to_dict()
+    assert result.to_dict()['results'][0][1] == check_result_2.to_dict()
+
+def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response():  # noqa
+        harness = EvalHarness(
+            num_cpus=1, async_batch_size=1,
+            evals=[
+                Eval(
+                    prompt_sequence=PromptTest(
+                        prompt={'prompt': 'Test Prompt 1'},  # test with dictionary prompt
+                        checks=[lambda data: 'Response1' in data.response['response']],
+                    ),
+                ),
+                Eval(
+                    prompt_sequence=PromptTest(
+                        prompt={'prompt': 'Test Prompt 2'},  # test with dictionary prompt
+                        checks=[lambda data: 'Response2' in data.response['response']],
+                    ),
+                ),
+            ],
+            candidates = [
+                lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response1'},
+                lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response2'},
+            ],
+        )
+        assert len(harness.evals) == 2
+        assert len(harness.candidates) == 2
+        results = harness()
+        assert len(results) == 2  # 2 candidates
+        assert len(results[0]) == 2  # 2 evals
+        assert len(results[1]) == 2  # same 2 evals
+        assert results[0][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}]  # noqa
+        assert results[0][1].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}]  # noqa
+        assert results[1][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response2'}]  # noqa
+        assert results[1][1].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}]  # noqa
+        # eval 1 candidate 1
+        assert len(results[0][0].all_check_results) == 1
+        assert results[0][0].perc_successful_checks == 1
+        assert results[0][0].all_check_results[0].value is True
+        assert results[0][0].all_check_results[0].success is True
+        # eval 2 candidate 1
+        assert len(results[0][1].all_check_results) == 1
+        assert results[0][1].perc_successful_checks == 0
+        assert results[0][1].all_check_results[0].value is False
+        assert results[0][1].all_check_results[0].success is False
+        # eval 1 candidate 2
+        assert len(results[1][0].all_check_results) == 1
+        assert results[1][0].perc_successful_checks == 0
+        assert results[1][0].all_check_results[0].value is False
+        assert results[1][0].all_check_results[0].success is False
+        # eval 2 candidate 2
+        assert len(results[1][1].all_check_results) == 1
+        assert results[1][1].perc_successful_checks == 1
+        assert results[1][1].all_check_results[0].value is True
         assert results[1][1].all_check_results[0].success is True
 
         assert results[0][0].prompts == [{'prompt': 'Test Prompt 1'}]
