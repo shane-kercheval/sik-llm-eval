@@ -3,6 +3,7 @@ from copy import deepcopy
 import os
 import re
 from textwrap import dedent
+import pandas as pd
 from pydantic import ValidationError
 import pytest
 from llm_eval.candidates import Candidate
@@ -1713,6 +1714,59 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert result.metadata['code_test_errors'][1] is None
     assert result.metadata['code_test_errors'][2] == {'error': 'TimeoutError', 'message': ''}
     assert result.metadata['code_test_errors'][3] is None
+
+def test__PythonCodeBlockTests__with_env_namespace():  # noqa
+    code = dedent("""
+    import pandas as pd
+    # df = pd.DataFrame({'col_1': [20, 5, 50], 'col_2': ['a', 'a', 'b']})
+    answer = df.groupby('col_2')['col_1'].sum()
+    """).strip()
+
+    # first ensure that without env_namespace the check will fail
+    check = PythonCodeBlockTests(
+        code_tests=[
+            "assert int(answer['a']) == 25",
+            "assert int(answer['b']) == 50",
+        ],
+    )
+    result = check(RequestData(code_blocks=[code]))
+    assert result.success is False
+    assert result.value == 0
+    assert result.metadata['num_code_blocks'] == 1
+    assert result.metadata['num_code_blocks_successful'] == 0
+    assert result.metadata['code_blocks'] == [code]
+    assert 'error' in result.metadata['code_block_errors'][0]
+    assert result.metadata['code_block_errors'][0]['error'] == 'NameError'
+    assert 'df' in result.metadata['code_block_errors'][0]['message']
+    assert result.metadata['num_code_tests'] == 2
+    assert result.metadata['num_code_tests_successful'] == 0
+    assert result.metadata['code_test_results'] == [False, False]
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
+    assert Check.from_dict(check.to_dict()) == check
+    assert CheckResult.from_dict(result.to_dict()) == result
+
+    # now use env_namespace to pass in the DataFrame, which should successfully run the code
+    env_namespace = {'df': pd.DataFrame({'col_1': [20, 5, 50], 'col_2': ['a', 'a', 'b']})}
+    check = PythonCodeBlockTests(
+        code_tests=[
+            "assert int(answer['a']) == 25",
+            "assert int(answer['b']) == 50",
+        ],
+        env_namespace=env_namespace,
+    )
+    result = check(RequestData(code_blocks=[code]))
+    assert result.success is True
+    assert result.value == 1
+    assert result.metadata['num_code_blocks'] == 1
+    assert result.metadata['num_code_blocks_successful'] == 1
+    assert result.metadata['code_blocks'] == [code]
+    assert result.metadata['code_block_errors'][0] is None
+    assert result.metadata['num_code_tests'] == 2
+    assert result.metadata['num_code_tests_successful'] == 2
+    assert result.metadata['code_test_results'] == [True, True]
+    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
+    assert Check.from_dict(check.to_dict()) == check
+    assert CheckResult.from_dict(result.to_dict()) == result
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__LLMCheck__openai(openai_candidate_template):  # noqa
