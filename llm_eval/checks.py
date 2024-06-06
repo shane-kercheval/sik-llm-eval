@@ -429,6 +429,23 @@ class PythonCodeBlockTests(SerializableCheck):
         will continue to run.
         """,
     )
+    env_namespace: dict[str, Any] | None = Field(
+        default=None,
+        description="""
+        The environment namespace to use when executing the code blocks and custom tests. This
+        allows the user to define variables, functions, etc. that can be used by the code blocks
+        and custom tests. If `env_namespace` is not provided, the code blocks and custom tests will
+        be executed in a clean environment.
+
+        The namespace is a dictionary where the keys define environment variables and the values
+        define the values of those variables).
+
+        The following is an example of a dictionary that can be passed to `env_namespace` to define
+        a pandas DataFrame called `df`, which can be used by the code blocks and custom tests:
+
+        `{'df': pd.DataFrame({'col_1': [20, 5, 50], 'col_2': ['a', 'a', 'b']})}`
+        """,
+    )
     code_block_timeout: int | None = Field(
         default=None,
         description="""
@@ -506,6 +523,7 @@ class PythonCodeBlockTests(SerializableCheck):
         the code blocks and function checks (if `functions` is used), along with additional
         metadata (e.g. the code blocks, errors, etc.).
         """
+        env_namespace = self.env_namespace or {}
         code_blocks = data.code_blocks or []
         code_block_errors = []
         test_results = []
@@ -518,8 +536,6 @@ class PythonCodeBlockTests(SerializableCheck):
 
         if code_blocks:
             code_blocks = code_blocks.copy()
-            env_namespace = {}
-
             if self.code_setup:
                 # execute code setup; if there are errors, raise an exception and fail the check
                 setup_errors = execute_code_blocks(
