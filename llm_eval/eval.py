@@ -1318,7 +1318,11 @@ class EvalHarness:
         num_samples = num_samples or self.num_samples
         if num_samples > 1:
             evals = [eval_obj.clone() for eval_obj in evals for _ in range(num_samples)]
-        if num_cpus == 1:
+        # currently, if num_cpus is set to >1, each candidate will be run in parallel on a
+        # separate CPU; if num_cpus is set to 1, each candidate will be run sequentially;
+        # if there is only one candidate, there is nothing to parallelize with this implementation;
+        # future implementations could parallelize batches evals for 1 or more candidates
+        if num_cpus == 1 or len(self.candidates) == 1:
             return [
                 EvalHarness._run_evals(
                     candidate=candidate,
