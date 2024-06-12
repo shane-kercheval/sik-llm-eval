@@ -213,7 +213,10 @@ class CallableCandidate(Candidate):
             model: Callable | None = None,
             metadata: dict | None = None) -> None:
         """
-        Initialize a CallableCandidate object.
+        Initialize a CallableCandidate object. The model is a callable object that takes a prompt
+        and returns a response. If clone() is called (which happens if the candidate is used
+        in the EvalHarness), then the model is assumed to be stateless and will be used against
+        multiple Evals.
 
         Args:
             model: The callable model.
