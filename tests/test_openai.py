@@ -11,6 +11,7 @@ from llm_eval.llms.memory import (
 )
 from llm_eval.llms.openai import (
     OpenAIChat,
+    OpenAITools,
     OpenAIEmbedding,
     openai_message_formatter,
     num_tokens,
@@ -1439,3 +1440,152 @@ def test_OpenAIChat__set_system_parameters_set_messages(message_history: list, f
     assert model._previous_messages[6]['content'] == response_1
     assert model._previous_messages[7]['role'] == 'user'
     assert model._previous_messages[7]['content'] == prompt_2
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test_OpenAITools(tool_weather, tool_stocks):  # noqa
+    tools = [
+        {"type": "function", "function": tool_weather},
+        {"type": "function", "function": tool_stocks},
+    ]
+
+    model = OpenAITools(tools=tools)
+    assert len(model.history()) == 0
+    assert model.previous_record() is None
+    assert model.previous_prompt is None
+    assert model.previous_response is None
+    assert model.cost == 0
+    assert model.total_tokens == 0
+    assert model.input_tokens == 0
+    assert model.response_tokens == 0
+    assert model.tools == tools
+    assert model.tool_choice == "required"
+
+    ####
+    # first interaction
+    ####
+    prompt = "What's the weather like in Boston today in degrees F?"
+    response = model(prompt)
+    assert isinstance(response, list)
+    assert len(response) == 1
+
+    # ensure the response is from the weather tool and contains the correct parameters
+    assert response[0]['name'] == 'get_current_weather'
+    assert 'location' in response[0]['arguments']
+    assert response[0]['arguments']['location']
+    assert isinstance(response[0]['arguments']['location'], str)
+    assert 'unit' in response[0]['arguments']
+    assert response[0]['arguments']['unit'] in ['celsius', 'fahrenheit']
+
+    # previous memory is the input to ChatGPT
+    assert model._previous_messages[0]['role'] == 'system'
+    assert model._previous_messages[0]['content'] == model.system_message
+    assert model._previous_messages[-1]['role'] == 'user'
+    assert model._previous_messages[-1]['content'] == prompt
+
+    assert len(model.history()) == 1
+    assert len(model.chat_history) == 1
+    assert model.history() == model.chat_history
+    assert model.chat_history[0].prompt == prompt
+    assert model.chat_history[0].response == response
+
+    message = model.previous_record()
+    assert isinstance(message, ExchangeRecord)
+    assert message.prompt == prompt
+    assert message.response == response
+    assert message.metadata['model_name'] == model.model_name
+    assert message.metadata['messages'] == model._previous_messages
+    assert message.cost > 0
+    assert message.total_tokens == message.input_tokens + message.response_tokens
+    assert message.uuid
+    assert message.timestamp
+
+    assert model.previous_prompt == prompt
+    assert model.previous_response == response
+    assert model.cost_per_token == MODEL_COST_PER_TOKEN[model.model_name]
+    assert model.cost == message.cost
+    assert model.total_tokens == message.total_tokens
+    assert model.input_tokens == message.input_tokens
+    assert model.response_tokens == message.response_tokens
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test_OpenAITools__unrelated_prompt__auto(tool_weather, tool_stocks):  # noqa
+    tools = [
+        {"type": "function", "function": tool_weather},
+        {"type": "function", "function": tool_stocks},
+    ]
+
+    model = OpenAITools(tools=tools, tool_choice="auto")
+    assert len(model.history()) == 0
+    assert model.previous_record() is None
+    assert model.previous_prompt is None
+    assert model.previous_response is None
+    assert model.cost == 0
+    assert model.total_tokens == 0
+    assert model.input_tokens == 0
+    assert model.response_tokens == 0
+    assert model.tools == tools
+    assert model.tool_choice == "auto"
+
+    ####
+    # first interaction
+    ####
+    prompt = "How's it going?"
+    response = model(prompt)
+    assert isinstance(response, list)
+    assert len(response) == 0
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test_OpenAITools__unrelated_prompt__required(tool_weather, tool_stocks):  # noqa
+    tools = [
+        {"type": "function", "function": tool_weather},
+        {"type": "function", "function": tool_stocks},
+    ]
+
+    model = OpenAITools(tools=tools, tool_choice="required")
+    assert len(model.history()) == 0
+    assert model.previous_record() is None
+    assert model.previous_prompt is None
+    assert model.previous_response is None
+    assert model.cost == 0
+    assert model.total_tokens == 0
+    assert model.input_tokens == 0
+    assert model.response_tokens == 0
+    assert model.tools == tools
+    assert model.tool_choice == "required"
+
+    ####
+    # first interaction
+    ####
+    prompt = "How's it going?"
+    response = model(prompt)
+    assert isinstance(response, list)
+    # since the prompt is unrelated to any tool
+    assert response[0]['name'] in [t['function']['name'] for t in tools]
+    assert response[0]['arguments']
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test_OpenAITools__unrelated_prompt__none(tool_weather, tool_stocks):  # noqa
+    tools = [
+        {"type": "function", "function": tool_weather},
+        {"type": "function", "function": tool_stocks},
+    ]
+
+    model = OpenAITools(tools=tools, tool_choice="none")
+    assert len(model.history()) == 0
+    assert model.previous_record() is None
+    assert model.previous_prompt is None
+    assert model.previous_response is None
+    assert model.cost == 0
+    assert model.total_tokens == 0
+    assert model.input_tokens == 0
+    assert model.response_tokens == 0
+    assert model.tools == tools
+    assert model.tool_choice == "none"
+
+    ####
+    # first interaction
+    ####
+    prompt = "How's it going?"
+    response = model(prompt)
+    assert isinstance(response, list)
+    assert len(response) == 0

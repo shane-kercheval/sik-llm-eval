@@ -456,9 +456,53 @@ def openai_candidate_template() -> dict:
 
 
 @pytest.fixture()
+def openai_tools_candidate_template() -> dict:
+    """Returns the yaml template for an OpenAI Tools."""
+    with open('examples/candidates/openai_tools_3.5.yaml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture()
 def hugging_face_candidate_template() -> dict:
     """Returns the yaml template for a Hugging Face Endpoint candidate."""
     with open('examples/candidates/additional_examples/hugging_face_endpoint_mistral_a10g.yaml') as f:  # noqa
         config = yaml.safe_load(f)
     config['parameters']['endpoint_url'] = os.getenv('HUGGING_FACE_ENDPOINT_UNIT_TESTS')
     return config
+
+@pytest.fixture()
+def tool_weather() -> dict:
+    """Returns a dictionary defining a weather tool."""
+    return {
+        "name": "get_current_weather",
+        "description": "Get the current weather in a given location",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA",
+                },
+                "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+            },
+            "required": ["location"],
+        },
+    }
+
+@pytest.fixture()
+def tool_stocks() -> dict:
+    """Returns a dictionary defining a stock tool."""
+    return {
+        "name": "get_current_stocks",
+        "description": "Get the current stock price of a given company",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "company": {
+                    "type": "string",
+                    "description": "The name of the company, e.g. Apple",
+                },
+            },
+            "required": ["company"],
+        },
+    }

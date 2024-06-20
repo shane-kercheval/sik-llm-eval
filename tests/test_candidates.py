@@ -171,6 +171,7 @@ def test__CallableCandidate():  # noqa
     }
     assert str(candidate)  # ensure __str__ doesn't raise an error
 
+@pytest.mark.skip("We removed the functionality where multiple model parameters (as a list) are supported. We should add this functionality back in with a new format/syntax. Let's keep this test for now. We can remove in the future if we don't think we will add the functionality back in.")  # noqa
 def test__candidate__multiple_model_params_returns_multiple_candidates():  # noqa
     test_params = {'param_1': 'param_a', 'param_2': 'param_b'}
     candidate_dict = {
@@ -459,3 +460,26 @@ def test__HuggingFaceEndpointCandidate__invalid_parameters(hugging_face_candidat
     exception = exception.value
     assert exception.error_type.lower() == 'validation'
     assert 'temperature' in exception.error_message
+
+def test__OpenAICandidate__from_yaml(openai_tools_candidate_template: dict, tool_weather, tool_stocks):  # noqa
+    candidate = Candidate.from_yaml('examples/candidates/openai_tools_3.5.yaml')
+    assert candidate.candidate_type == CandidateType.OPENAI_TOOLS.name
+    assert candidate.to_dict() == openai_tools_candidate_template
+    assert candidate.model.model_name == candidate.to_dict()['parameters']['model_name']
+    assert isinstance(candidate.model.tools, list)
+    assert len(candidate.model.tools) == 2
+    assert isinstance(candidate.model.tools[0], dict)
+    assert candidate.model.tools[0]['function'] == tool_weather
+    assert isinstance(candidate.model.tools[1], dict)
+    assert candidate.model.tools[1]['function'] == tool_stocks
+
+    response = candidate("What's the weather like in Boston today in degrees F?")
+    assert isinstance(response, list)
+    assert len(response) == 1
+    # ensure the response is from the weather tool and contains the correct parameters
+    assert response[0]['name'] == 'get_current_weather'
+    assert 'location' in response[0]['arguments']
+    assert response[0]['arguments']['location']
+    assert isinstance(response[0]['arguments']['location'], str)
+    assert 'unit' in response[0]['arguments']
+    assert response[0]['arguments']['unit'] in ['celsius', 'fahrenheit']

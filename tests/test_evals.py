@@ -15,6 +15,7 @@ from llm_eval.checks import (
     PassFailResult,
     RequestData,
     ScoreResult,
+    ToolCallsCheck,
 )
 from llm_eval.eval import (
     Eval,
@@ -654,6 +655,7 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
 
+@pytest.mark.skip("We removed the functionality where multiple model parameters (as a list) are supported. We should add this functionality back in with a new format/syntax. Let's keep this test for now. We can remove in the future if we don't think we will add the functionality back in.")  # noqa
 def test__EvalHarness__add_multiple_candidates_from_single_dict(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     candidate_dict = {
         'metadata': {'uuid': 'candidate_1'},
@@ -713,6 +715,7 @@ def callback(x: EvalResult) -> None:
     with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
         yaml.dump(x.to_dict(), f, default_flow_style=False, sort_keys=False)
 
+@pytest.mark.skip("We removed the functionality where multiple model parameters (as a list) are supported. We should add this functionality back in with a new format/syntax. Let's keep this test for now. We can remove in the future if we don't think we will add the functionality back in.")  # noqa
 def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_create_multiple_candidates():  # noqa
     test_params = {
         'param_1': 'param_a',
@@ -2935,3 +2938,30 @@ def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and
         assert results[1][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
         assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
         assert results[1][1].to_dict()['results'][0][0] == results[1][1].results[0][0].to_dict()
+
+@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template):  # noqa
+    """Integration test that tests Evaling a real OpenAITool API call against the ToolsCheck."""
+    candidate = Candidate.from_dict(openai_tools_candidate_template)
+    candidate
+    eval_ = Eval(
+        prompt_sequence=PromptTest(
+            prompt="What's the weather like in Boston today in degrees F?",
+            checks=[
+                ToolCallsCheck(
+                    function_name='get_current_weather',
+                    function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
+                ),
+            ],
+        ),
+    )
+    result = eval_(candidate)
+    tool_response = result.responses[0][0]
+    assert tool_response['name'] == 'get_current_weather'
+    assert 'location' in tool_response['arguments']
+    assert tool_response['arguments']['location']
+    assert isinstance(tool_response['arguments']['location'], str)
+    assert 'unit' in tool_response['arguments']
+    assert tool_response['arguments']['unit'] in ['celsius', 'fahrenheit']
+    # check that it gets at least the function name correctly
+    assert result.all_check_results[0].value >= 0.5

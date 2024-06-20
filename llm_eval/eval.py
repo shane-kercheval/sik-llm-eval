@@ -353,6 +353,8 @@ class Eval(DictionaryEqualsMixin):
             check_results = []
             if isinstance(response, str):
                 code_blocks.extend(extract_code_blocks(response))
+            else:
+                code_blocks = []
             data = RequestData(
                 prompt=test.prompt,
                 ideal_response=test.ideal_response,

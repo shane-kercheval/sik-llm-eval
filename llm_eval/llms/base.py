@@ -281,7 +281,7 @@ class ExchangeRecord(TokenUsageRecord):
     """
 
     prompt: str | list
-    response: str
+    response: str | list
     input_tokens: int | None = None
     response_tokens: int | None = None
 
@@ -433,6 +433,8 @@ class PromptModel(LanguageModel):
         response, metadata = self._run(prompt)
         input_tokens = self._token_calculator(prompt)
         response_tokens = self._token_calculator(response)
+        if isinstance(response, str):
+            response = response.strip()
         total_tokens = input_tokens + response_tokens
         if self._cost_calculator:
             cost = self._cost_calculator(input_tokens, response_tokens)
@@ -440,7 +442,7 @@ class PromptModel(LanguageModel):
             cost = None
         response = ExchangeRecord(
             prompt=prompt,
-            response=response.strip(),
+            response=response,
             metadata=metadata,
             input_tokens=input_tokens,
             response_tokens=response_tokens,
