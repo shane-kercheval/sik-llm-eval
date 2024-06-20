@@ -18,16 +18,15 @@ from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Callable, List, Type, Union
+from typing import Any, Callable, List, Type, Union
 from llm_eval.llms.base import ChatModel
 from llm_eval.llms.hugging_face import HuggingFaceEndpointChat
 from llm_eval.llms.message_formatters import MessageFormatter
-from llm_eval.llms.openai import OpenAIChat
+from llm_eval.llms.openai import OpenAIChat, OpenAITools
 from llm_eval.utilities.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
     Registry,
-    generate_dict_combinations,
 )
 
 
@@ -35,6 +34,7 @@ class CandidateType(EnumMixin, Enum):
     """Provides a typesafe representation of the built-in types of Candidates."""
 
     OPENAI = auto()
+    OPENAI_TOOLS = auto()
     HUGGING_FACE_ENDPOINT = auto()
     CALLABLE_NO_SERIALIZE = auto()
 
@@ -68,7 +68,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
         self.parameters = deepcopy(parameters)
 
     @abstractmethod
-    def __call__(self, prompt: str) -> str:
+    def __call__(self, prompt: Any) -> Any:  # noqa: ANN401
         """Invokes the underlying model with the prompt and returns the response."""
 
     @abstractmethod
@@ -121,10 +121,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
     @classmethod
     def from_dict(cls, data: dict) -> Union['Candidate', List['Candidate']]:  # noqa: ANN102
         """
-        Creates a Candidate object (or multiple objects) from a dictionary. If any of the values
-        within the `parameters` dict is a list (i.e. multiple parameters to evaluate
-        against), this method will return a list of Candidates corresponding to all combinations of
-        model parameters.
+        Creates a Candidate object.
 
         This method requires that the Candidate subclass has been registered with the `register`
         decorator before calling this method. It also requires that the dictionary has a
@@ -133,22 +130,6 @@ class Candidate(DictionaryEqualsMixin, ABC):
         data = deepcopy(data)
         candidate_type = data.pop('candidate_type', '')
         if candidate_type in cls.registry:
-            # check if any of the model parameters (values) are lists
-            params_are_lists = 'parameters' in data \
-                and any(isinstance(v, list) for v in data['parameters'].values())
-            if params_are_lists:
-                    # create a list of all combinations of the model parameters
-                    # `data` will potentially have `metadata` or other fields
-                    parameters = data.pop('parameters')
-                    parameters = generate_dict_combinations(deepcopy(parameters))
-                    return [
-                        cls.registry.create_instance(
-                            type_name=candidate_type,
-                            # merge the original data with the model parameters
-                            **(data | {'parameters': p}),
-                        )
-                        for p in parameters
-                    ]
             return cls.registry.create_instance(type_name=candidate_type, **data)
         raise ValueError(f"Unknown type {candidate_type}")
 
@@ -358,6 +339,42 @@ class OpenAICandidate(ChatModelCandidate):
             parameters = {}
         super().__init__(
             model=OpenAIChat(**deepcopy(parameters)),
+            metadata=metadata,
+            parameters=parameters,
+        )
+
+
+@Candidate.register(CandidateType.OPENAI_TOOLS)
+class OpenAIToolsCandidate(ChatModelCandidate):
+    """
+    Wrapper around the OpenAI API that allows the user to create an OpenAI candidate with tools
+    from a dictionary. The client is a callable object that takes a prompt and returns a response.
+    It will also track the history/messages, supporting stateful conversations, which is needed
+    to evaluate multiple prompts in a single Eval object.
+
+    NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
+    """
+
+    def __init__(  # noqa: D417
+            self,
+            metadata: dict | None = None,
+            parameters: dict | None = None) -> None:
+        """
+        Initialize a OpenAICandidate object.
+
+        Args:
+            metadata:
+                A dictionary of metadata about the Candidate.
+            parameters:
+                A dictionary of parameters passed to OpenAI. `model_name` (e.g.
+                'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
+                such as `system_message` and model-specific parameters (e.g. `temperature`) can be
+                passed.
+        """  # noqa
+        if parameters is None:
+            parameters = {}
+        super().__init__(
+            model=OpenAITools(**deepcopy(parameters)),
             metadata=metadata,
             parameters=parameters,
         )

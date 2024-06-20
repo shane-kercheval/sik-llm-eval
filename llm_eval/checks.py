@@ -40,6 +40,7 @@ class CheckType(EnumMixin, Enum):
     PYTHON_CODE_BLOCK_TESTS = auto()
     LLM = auto()
     TOXICITY = auto()
+    TOOL_CALL = auto()
 
 
 class CheckResultsType(EnumMixin, Enum):
@@ -727,3 +728,84 @@ class ToxicityCheck(LLMCheck):
                 'check_metadata': self.metadata,
             },
         )
+
+
+@Check.register(CheckType.TOOL_CALL)
+class ToolCallsCheck(Check):
+    """Checks that the tool call contains the expected function name and arguments."""
+
+    success_threshold: float = Field(
+        default=1.0,
+        description="""
+        The minimum **percent** of successfully executed code blocks and custom tests (if
+        `code_tests` is used) required for the check to be considered successful. Defaulted to 1.0
+        (i.e. 100% of code blocks must run successfully).
+        """,
+    )
+    function_name: str = Field(description="The name of the function the tool should call.")
+    function_arguments: dict = Field(description="""
+        The function arguments the tool should call the function with.""")
+    allow_regex: bool = Field(
+        default=False,
+        description="""
+        If True, the function arguments will be treated as regex patterns. The check
+        will pass if  the regex pattern is found in the tool call arguments.
+        """,
+    )
+    penalize_extraneous_arguments: bool = Field(
+        default=True,
+        description="""
+        If True, the check will penalize the tool call if there are
+        extraneous arguments in the tool call.
+        """,
+    )
+
+    def __call__(self, data: RequestData) -> CheckResult:
+        """Executes the check on the response and returns a ScoreResult."""
+        score = 0
+        metadata = {
+            'check_type': self.check_type,
+            'function_name': self.function_name,
+            'function_arguments': self.function_arguments,
+            'allow_regex': self.allow_regex,
+            'penalize_extraneous_arguments': self.penalize_extraneous_arguments,
+            'check_metadata': self.metadata,
+        }
+        response = data.response
+        if not isinstance(response, (dict, list)):
+            return ScoreResult(
+                value=score,
+                success_threshold=self.success_threshold,
+                metadata=metadata,
+            )
+        tools = response if isinstance(response, list) else [response]
+        for tool in tools:
+            tool_dict = tool
+            if tool_dict["name"] == self.function_name:
+                num_arguments = len(self.function_arguments)
+                num_arguments_successful = 0
+                tool_call_function_arguments = deepcopy(tool_dict["arguments"])
+                for key, value in dict(self.function_arguments).items():
+                    if key in tool_call_function_arguments:
+                        tool_call_value = tool_call_function_arguments.pop(key)
+                        if self.allow_regex:
+                            if re.search(value, tool_call_value):
+                                num_arguments_successful += 1
+                        elif tool_call_value == value:
+                            num_arguments_successful += 1
+                if self.penalize_extraneous_arguments:
+                    num_arguments_successful -= len(tool_call_function_arguments)
+                    if num_arguments_successful < 0:
+                        num_arguments_successful = 0
+                score = num_arguments_successful / num_arguments
+                break
+
+        return ScoreResult(
+            value=score,
+            success_threshold=self.success_threshold,
+            metadata=metadata,
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}(arguments='{self.arguments}', metadata={self.metadata})"

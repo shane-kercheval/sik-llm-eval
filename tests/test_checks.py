@@ -21,6 +21,7 @@ from llm_eval.checks import (
     RegexCheck,
     RequestData,
     ScoreResult,
+    ToolCallsCheck,
     ToxicityCheck,
 )
 
@@ -1767,6 +1768,140 @@ def test__PythonCodeBlockTests__with_env_namespace():  # noqa
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert Check.from_dict(check.to_dict()) == check
     assert CheckResult.from_dict(result.to_dict()) == result
+
+def test__ToolCallsCheck():  # noqa
+    """Test that the template for an OpenAI candidate works."""
+    check = ToolCallsCheck(
+        function_name='get_current_weather',
+        function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
+    )
+    result = check(RequestData(response=[{
+        'arguments': {'location':'Boston, MA', 'unit':'fahrenheit'},
+        'name': 'get_current_weather',
+    }]))
+    assert isinstance(result, CheckResult)
+    assert result.success is True
+    assert result.value == 1
+    assert result.metadata['function_name'] == 'get_current_weather'
+    assert result.metadata['function_arguments'] == {
+        'location': 'Boston, MA', 'unit': 'fahrenheit',
+    }
+    assert result.metadata['allow_regex'] is False
+    assert result.metadata['check_type'] == CheckType.TOOL_CALL
+
+def test__ToolCallsCheck__multiple_functions():  # noqa
+    """Test that the template for an OpenAI candidate works."""
+    check = ToolCallsCheck(
+        function_name='get_current_weather',
+        function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
+    )
+    result = check(RequestData(response=[
+        {
+            "arguments": {"location":"Boston, MA", "unit":"fahrenheit"},
+            "name": "get_current_weather",
+        },
+        {
+            "arguments": {"location":"Boston, MA"},
+            "name": "get_location",
+        },
+    ]))
+    assert isinstance(result, CheckResult)
+    assert result.success is True
+    assert result.value == 1
+    assert result.metadata['function_name'] == 'get_current_weather'
+    assert result.metadata['function_arguments'] == {
+        'location': 'Boston, MA', 'unit': 'fahrenheit',
+    }
+    assert result.metadata['allow_regex'] is False
+    assert result.metadata['check_type'] == CheckType.TOOL_CALL
+
+def test__ToolCallsCheck__allow_regex():  # noqa
+    check = ToolCallsCheck(
+        function_name='get_current_weather',
+        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
+        allow_regex=True,
+    )
+    result = check(RequestData(response=[{
+        'arguments': {'location':'Boston, MA', 'unit':'fahrenheit'},
+        'name': 'get_current_weather',
+    }]))
+    assert isinstance(result, CheckResult)
+    assert result.success is True
+    assert result.value == 1
+    assert result.metadata['function_name'] == 'get_current_weather'
+    assert result.metadata['function_arguments'] == {
+        'location': 'Boston', 'unit': 'fahrenheit',
+    }
+    assert result.metadata['allow_regex'] is True
+    assert result.metadata['check_type'] == CheckType.TOOL_CALL
+
+def test__ToolCallsCheck__penalize_extraneous_arguments():  # noqa
+    """Test that the template for an OpenAI candidate works."""
+    check = ToolCallsCheck(
+        function_name='get_current_weather',
+        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
+    )
+    fake_response = [{
+        'arguments': {
+            'location':'Boston, MA',
+            'unit':'fahrenheit',
+            'lat': 42.3601,
+            'lon': 71.0589,
+        },
+        'name': 'get_current_weather',
+    }]
+    result = check(RequestData(response=fake_response))
+    assert isinstance(result, CheckResult)
+    assert result.success is False
+    assert result.value == 0
+    assert result.metadata['function_name'] == 'get_current_weather'
+    assert result.metadata['function_arguments'] == {'location': 'Boston', 'unit': 'fahrenheit'}
+    assert result.metadata['allow_regex'] is False
+    assert result.metadata['check_type'] == CheckType.TOOL_CALL
+    assert result.metadata['penalize_extraneous_arguments']
+
+def test__ToolCallsCheck__incorrect_function_name():  # noqa
+    check = ToolCallsCheck(
+        function_name='get_current_weather',
+        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
+    )
+    result = check(RequestData(response=[{
+        'arguments': {'location':'Boston, MA', 'unit':'fahrenheit'},
+        'name': 'get_current_weather_2',
+    }]))
+    assert isinstance(result, CheckResult)
+    assert result.success is False
+    assert result.value == 0
+
+def test__ToolCallsCheck__empty_string_response():  # noqa
+    check = ToolCallsCheck(
+        function_name='get_current_weather',
+        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
+    )
+    result = check(RequestData(response=""))
+    assert isinstance(result, CheckResult)
+    assert result.success is False
+    assert result.value == 0
+
+def test__ToolCallsCheck__empty_list_response():  # noqa
+    check = ToolCallsCheck(
+        function_name='get_current_weather',
+        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
+    )
+    result = check(RequestData(response=[]))
+    assert isinstance(result, CheckResult)
+    assert result.success is False
+    assert result.value == 0
+
+def test__ToolCallsCheck__string_response():  # noqa
+    check = ToolCallsCheck(
+        function_name='get_current_weather',
+        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
+    )
+    result = check(RequestData(response="This is a test."))
+    assert isinstance(result, CheckResult)
+    assert result.success is False
+    assert result.value == 0
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__LLMCheck__openai(openai_candidate_template):  # noqa

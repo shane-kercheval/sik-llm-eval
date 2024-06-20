@@ -1,5 +1,6 @@
 """Contains helper functions for interacting with OpenAI models."""
-from typing import Callable
+import json
+from typing import Callable, Literal
 from functools import cache
 import numpy as np
 import tiktoken
@@ -364,3 +365,149 @@ class OpenAIServerChat(OpenAIChat):
     def _create_client(self) -> object:
         from openai import OpenAI
         return OpenAI(base_url=self.endpoint_url, api_key=self.api_key)
+
+
+class OpenAITools(ChatModel):
+    """A wrapper around the OpenAI chat model that allows the user to enable tools."""
+
+    def __init__(
+            self,
+            tools: list[dict],
+            tool_choice: Literal['none', 'auto', 'required'] | dict[str] = 'required',
+            model_name: str = 'gpt-3.5-turbo-0125',
+            system_message: str = 'You are a helpful AI assistant.',
+            memory_manager: MemoryManager | None = None,
+            timeout: int = 90,
+            seed: int | None = None,
+            **model_kwargs: dict,
+            ) -> None:
+        """
+        Args:
+            tools:
+                List of tools to enable. Each tool should be a dictionary with the following keys:
+                - "name": the name of the tool
+                - "description": a description of the tool
+                - "parameters": a dictionary of parameters that can be passed to the tool
+            tool_choice:
+                Controls which tool is called by the model. 'required' means the model must call
+                one or more tools. 'auto' means the model can pick between generating a message or
+                calling one or more tools. 'none' means the model will not call any tool and
+                instead generates a message. Specifying a particular tool via {"type": "function",
+                "function": {"name": "my_function"}} forces the model to call that tool.
+            model_name:
+                e.g. 'gpt-3.5-turbo-0125'
+            system_message:
+                The content of the message associated with the "system" `role`.
+            memory_manager:
+                MemoryManager object (or callable that takes a list of ExchangeRecord objects and
+                returns a list of ExchangeRecord objects. The underlying logic should return the
+                messages sent to the OpenAI model.
+            timeout:
+                timeout value passed to OpenAI model.
+            seed:
+                seed value passed to OpenAI model.
+            model_kwargs:
+                Additional keyword arguments that are forwarded to the OpenAI model. For example:
+                ```
+                **{
+                    'temperature': 0.01,
+                    'max_tokens': 4096,
+                }
+                ```
+        """  # noqa
+        super().__init__(
+            system_message=system_message,
+            message_formatter=openai_message_formatter,
+            token_calculator=self._token_calc,
+            cost_calculator=self._cost_calc,
+            memory_manager=memory_manager,
+        )
+        self.tools = tools
+        self.tool_choice = tool_choice
+        self.model_name = model_name
+        self.parameters = model_kwargs or {}
+        self.timeout = timeout
+        self.seed = seed
+
+    def _cost_calc(self, *_: tuple) -> float:
+        """
+        _cost_calc needs to be an instance method rather than e.g. defining inside __init__ so
+        it is picklable and can be used with multiprocessing.
+        """
+        model_costs = MODEL_COST_PER_TOKEN[self.model_name]
+        return (
+            self._token_usage.prompt_tokens * model_costs['input'] +
+            self._token_usage.completion_tokens * model_costs['output']
+        )
+
+    def _token_calc(self, messages: str | list[dict]) -> int:
+        if isinstance(messages, str):
+            return self._token_usage.prompt_tokens
+        return self._token_usage.completion_tokens
+
+    @property
+    def cost_per_token(self) -> dict:
+        """
+        Returns a dictionary containing 'input' and 'output' keys each containing a float
+        corresponding to the cost-per-token for the corresponding token type and model.
+        We need to dynamically look this up since the model_name can change over the course of the
+        object's lifetime.
+        """
+        return MODEL_COST_PER_TOKEN[self.model_name]
+
+    def _create_client(self) -> object:
+        """
+        _create_client is used to create the OpenAI client. We cannot define this in __init__
+        because it is not picklable and cannot be used with multiprocessing. Additionally, this
+        function lets OpenAIServerChat override the client creation and set the endpoint_url to use
+        with a local server.
+        """
+        from openai import OpenAI
+        return OpenAI()
+
+    def _run(self, messages: list[dict]) -> tuple[dict, dict]:
+        """
+        `client.chat.completions.create` expects a list of messages with various roles (i.e.
+        system, user, assistant). This function builds the list of messages based on the history of
+        messages and based on an optional 'memory_manager' that filters the history based on
+        it's own logic. The `system_message` is always the first message regardless if a
+        `memory_manager` is passed in.
+        """
+        client = self._create_client()
+        response = retry_handler()(
+            client.chat.completions.create,
+            model=self.model_name,
+            messages=messages,
+            timeout=self.timeout,
+            stream=False,
+            logprobs=True,
+            seed=self.seed,
+            tools=self.tools,
+            tool_choice=self.tool_choice,
+            **self.parameters,
+        )
+        # TODO is tool_calls always present? e..g `none` for tool_choice
+        tool_calls = response.choices[0].message.tool_calls or []
+        self._token_usage = response.usage
+        formatted_response = []
+        for tool in tool_calls:
+            if tool and tool.function:
+                try:
+                    arguments = json.loads(tool.function.arguments)
+                except json.JSONDecodeError:
+                    arguments = tool.function.arguments
+                formatted_response.append({
+                    'name': tool.function.name,
+                    'arguments': arguments,
+                })
+            else:
+                formatted_response.append({
+                    'name': None,
+                    'arguments': None,
+                })
+        metadata = {
+            'model_name': self.model_name,
+            'parameters': self.parameters,
+            'timeout': self.timeout,
+        }
+        return formatted_response, metadata
