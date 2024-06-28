@@ -18,7 +18,7 @@ from llm_eval.checks import (
     CheckType,
     PassFailResult,
     PythonCodeBlockTests,
-    RequestData,
+    ResponseData,
 )
 from llm_eval.utilities.internal_utilities import (
     DictionaryEqualsMixin,
@@ -355,7 +355,7 @@ class Eval(DictionaryEqualsMixin):
                 code_blocks.extend(extract_code_blocks(response))
             else:
                 code_blocks = []
-            data = RequestData(
+            data = ResponseData(
                 prompt=test.prompt,
                 ideal_response=test.ideal_response,
                 response=response,

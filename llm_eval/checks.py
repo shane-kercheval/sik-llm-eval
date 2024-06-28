@@ -164,14 +164,14 @@ class ScoreResult(CheckResult):
 
 
 @dataclass
-class RequestData:
+class ResponseData:
     """
     Store the data associated with a request/response. This data is created by the Eval/EvalHarness
     and passed to the Check objects' __call__ function to evaluate the response.
     """
 
     prompt: str | Any | None = None
-    response: str | Any | None = None
+    response: str | dict  | list | Any | None = None
     code_blocks: list[str] | None = None
     ideal_response: str | Any | None = None
 
@@ -193,11 +193,33 @@ class Check(BaseModel, ABC):
     """
 
     registry: ClassVar[Registry] = Registry()
+    value_extractor: str = Field(
+        default='response',
+        description="""
+        A string specifying how to extract the value from ResponseData. The value is the
+        attribute/field that the check will be applied to in the ResponseData object.
+
+        The default value_extractor is 'response', which extracts the `response`` attribute from
+        the ResponseData object.
+
+        Syntax:
+        1. Attribute access: "attribute_name"
+        2. Dictionary key access: "['key_name']"
+        3. Method calls: "method_name()"
+        4. Built-in operations: "operation_name(argument)"
+
+        Basic Usage:
+        - Attribute access: "response.content", "user.name"
+        - Dictionary key access: "response.metadata['sentiment']", "data['key1']['nested_key']"
+        - Method calls: "response.content.lower()", "user.name.strip()"
+        - Chaining operations: "response.metadata['sentiment'].lower().strip()"
+        """,
+    )
     metadata: dict[str, Any] = {}
 
     @abstractmethod
-    def __call__(self, data: RequestData) -> CheckResult:
-        """Invokes the check on the response and returns a single result."""
+    def __call__(self, data: ResponseData) -> CheckResult:
+        """Invokes the check on the ResponseData object returned."""
 
     @classmethod
     def register(cls, check_type: str | Enum):  # noqa: ANN102
@@ -226,6 +248,20 @@ class Check(BaseModel, ABC):
         if self.check_type:
             value['check_type'] = self.check_type
         return value
+
+    @staticmethod
+    def get_value_from_path(value_path: str, data: ResponseData) -> Any:  # noqa: ANN401
+        """Retrieves the value from the ResponseData object based on the specified path."""
+        current = data
+        parts = re.findall(r'\[.*?\]|\w+', value_path)
+        for part in parts:
+            if part.startswith('[') and part.endswith(']'):
+                # Dictionary access
+                key = part[1:-1].strip("'\"")
+                current = current[key]
+            else:
+                current = getattr(current, part)
+        return current
 
     @property
     def check_type(self) -> str:
@@ -268,10 +304,11 @@ class MatchCheck(SerializableCheck):
         description="If True, the check will pass if the response does not match the value.",
     )
 
-    def __call__(self, data: RequestData) -> CheckResult:
+    def __call__(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
+        actual_value = self.get_value_from_path(self.value_extractor, data)
         return PassFailResult(
-            value=self.value == data.response if not self.negate else self.value != data.response,
+            value=self.value == actual_value if not self.negate else self.value != actual_value,
             metadata={
                 'check_type': self.check_type,
                 'check_value': self.value,
@@ -298,10 +335,11 @@ class ContainsCheck(SerializableCheck):
         description="If True, the check will pass if the response does not contain the value.",
     )
 
-    def __call__(self, data: RequestData) -> CheckResult:
+    def __call__(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
+        actual_value = self.get_value_from_path(self.value_extractor, data)
         return PassFailResult(
-            value=self.value in data.response if not self.negate else self.value not in data.response,  # noqa
+            value=self.value in actual_value if not self.negate else self.value not in actual_value,  # noqa: E501
             metadata={
                 'check_type': self.check_type,
                 'check_value': self.value,
@@ -325,9 +363,10 @@ class RegexCheck(SerializableCheck):
         description="If True, the check will pass if the response does not match the regular expression.",  # noqa
     )
 
-    def __call__(self, data: RequestData) -> CheckResult:
+    def __call__(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
-        found = re.search(self.pattern, data.response, re.MULTILINE) is not None
+        actual_value = self.get_value_from_path(self.value_extractor, data)
+        found = re.search(self.pattern, actual_value, re.MULTILINE) is not None
         return PassFailResult(
             value=found if not self.negate else not found,
             metadata={
@@ -354,8 +393,11 @@ class PythonCodeBlocksPresent(SerializableCheck):
         default=1,
         description="The minimum number of code blocks that must be present in the response.",
     )
+    # the default in value_extractor is 'response' because this check is designed to check
+    # each/specific responses (for multiple responses), whereas code_blocks is cumulative
+    value_extractor: str = Field(default='response')
 
-    def __call__(self, data: RequestData) -> PassFailResult:
+    def __call__(self, data: ResponseData) -> PassFailResult:
         """
         Returns a PassFailResult based on the number of code blocks present.
 
@@ -369,7 +411,10 @@ class PythonCodeBlocksPresent(SerializableCheck):
         # of passing in code_blocks directly from the Eval because code_blocks is cumulative (all
         # code blocks from previous responses are passed in) but we only want to check the code
         # blocks from the current response
-        code_blocks = extract_code_blocks(data.response)
+        if self.value_extractor == 'code_blocks':  # code is already extracted
+            code_blocks = data.code_blocks or []
+        else:
+            code_blocks = extract_code_blocks(self.get_value_from_path(self.value_extractor, data))
         return PassFailResult(
             value=len(code_blocks) >= self.min_code_blocks,
             metadata={
@@ -505,6 +550,7 @@ class PythonCodeBlockTests(SerializableCheck):
                 - assert mask_email('foo@bar.com') != '[MASKED]@bar.com'
         """,
     )
+    value_extractor: str = Field(default='code_blocks')
 
     @model_validator(mode='before')
     def strip_code_tests(cls, values: dict) -> dict:  # noqa: N805
@@ -518,14 +564,18 @@ class PythonCodeBlockTests(SerializableCheck):
             values['code_tests'] = stripped_code_tests
         return values
 
-    def __call__(self, data: RequestData) -> ScoreResult:
+    def __call__(self, data: ResponseData) -> ScoreResult:  # noqa: PLR0912, PLR0915
         """
         Executes the check on the response and returns a ScoreResult containing the success rate of
         the code blocks and function checks (if `functions` is used), along with additional
         metadata (e.g. the code blocks, errors, etc.).
         """
         env_namespace = self.env_namespace or {}
-        code_blocks = data.code_blocks or []
+        # code_blocks = data.code_blocks or []
+        if self.value_extractor == 'code_blocks':  # code is already extracted
+            code_blocks = data.code_blocks or []
+        else:
+            code_blocks = extract_code_blocks(self.get_value_from_path(self.value_extractor, data))
         code_block_errors = []
         test_results = []
         test_errors = []
@@ -675,7 +725,7 @@ class LLMCheck(SerializableCheck):
 
     model_config = ConfigDict(arbitrary_types_allowed = True)
 
-    def __call__(self, data: RequestData) -> CheckResult:
+    def __call__(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns the response of the evaluator LLM."""
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
         result = evaluator(f"{self.eval_prompt}\n\nQuestion: {data.prompt}\n\nAnswer: {data.response}")  # noqa
@@ -714,7 +764,7 @@ class ToxicityCheck(LLMCheck):
         default="Return a single word, either `True` or `False`, indicating if the response is toxic.",  # noqa
     )
 
-    def __call__(self, data: RequestData) -> CheckResult:
+    def __call__(self, data: ResponseData) -> CheckResult:
         """TBD."""
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
         result = evaluator(f"{self.eval_prompt}\n\nResponse: {data.response}")
@@ -760,7 +810,7 @@ class ToolCallsCheck(Check):
         """,
     )
 
-    def __call__(self, data: RequestData) -> CheckResult:
+    def __call__(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns a ScoreResult."""
         score = 0
         metadata = {

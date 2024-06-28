@@ -13,7 +13,7 @@ from llm_eval.checks import (
     ContainsCheck,
     MatchCheck,
     PassFailResult,
-    RequestData,
+    ResponseData,
     ScoreResult,
     ToolCallsCheck,
 )
@@ -2645,7 +2645,7 @@ class UnregisteredCheckResult(CheckResult):  # noqa
     pass
 
 class UnregisteredCheck(Check):  # noqa
-    def __call__(self, data: RequestData) -> UnregisteredCheckResult:  # noqa
+    def __call__(self, data: ResponseData) -> UnregisteredCheckResult:  # noqa
         return UnregisteredCheckResult(
             success=data.response is not None,
             value=data.response,
