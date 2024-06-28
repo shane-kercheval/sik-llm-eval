@@ -227,7 +227,6 @@ class MockCandidate(Candidate):
         return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
-
 @Candidate.register('MockCandidateCannedResponse')
 class MockCandidateCannedResponse(Candidate):  # noqa
     def __init__(
@@ -259,7 +258,6 @@ class MockCandidateCannedResponse(Candidate):  # noqa
         Reques
         """
         return Candidate.from_dict(deepcopy(self.to_dict()))
-
 
 
 @pytest.fixture()
@@ -442,11 +440,13 @@ def fake_multi_eval_non_string_values() -> dict:
     with open('tests/fake_data/fake_multi_eval_non_string_values.yaml') as f:
         return yaml.safe_load(f)
 
+
 @pytest.fixture()
 def fake_multi_eval_with_prompt_sequence() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_multi_eval_with_prompt_sequence.yaml') as f:
         return yaml.safe_load(f)
+
 
 @pytest.fixture()
 def openai_candidate_template() -> dict:
@@ -470,6 +470,7 @@ def hugging_face_candidate_template() -> dict:
     config['parameters']['endpoint_url'] = os.getenv('HUGGING_FACE_ENDPOINT_UNIT_TESTS')
     return config
 
+
 @pytest.fixture()
 def tool_weather() -> dict:
     """Returns a dictionary defining a weather tool."""
@@ -488,6 +489,7 @@ def tool_weather() -> dict:
             "required": ["location"],
         },
     }
+
 
 @pytest.fixture()
 def tool_stocks() -> dict:
