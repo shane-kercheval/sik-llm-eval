@@ -519,6 +519,18 @@ def test__MatchCheck(negate: bool):  # noqa
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
+def test__MatchCheck__value_extractor():  # noqa
+    response = {'foo': 'bar'}
+    check = MatchCheck(value='bar', value_extractor='response["foo"]')
+    result = check(ResponseData(response=response))
+    assert result.success
+    assert result.value
+
+    check = MatchCheck(value='bar', value_extractor='response["foo"]', negate=True)
+    result = check(ResponseData(response=response))
+    assert not result.success
+    assert not result.value
+
 def test__ContainsCheck__has_check_type():  # noqa
     """
     Test that the check has a check_type upon object creation (without using create_instance from
@@ -657,6 +669,18 @@ def test__ContainsCheck(negate: bool):  # noqa
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
+
+def test__ContainsCheck__value_extractor():  # noqa
+    response = {'foo': 'the bar'}
+    check = ContainsCheck(value='bar', value_extractor='response["foo"]')
+    result = check(ResponseData(response=response))
+    assert result.success
+    assert result.value
+
+    check = ContainsCheck(value='bar', value_extractor='response["foo"]', negate=True)
+    result = check(ResponseData(response=response))
+    assert not result.success
+    assert not result.value
 
 def test__RegexCheck__has_check_type():  # noqa
     """
@@ -841,6 +865,18 @@ def test__RegexCheck__multiline_response():  # noqa
     check = RegexCheck(pattern='def mask_emails\\([a-zA-Z_]+\\: str\\) -> str\\:')
     result = check(ResponseData(response=response))
     assert not result.success
+
+def test__RegexCheck__value_extractor():  # noqa
+    response = {'foo': 'the bar'}
+    check = RegexCheck(pattern='bar', value_extractor='response["foo"]')
+    result = check(ResponseData(response=response))
+    assert result.success
+    assert result.value
+
+    check = RegexCheck(pattern='bar', value_extractor='response["foo"]', negate=True)
+    result = check(ResponseData(response=response))
+    assert not result.success
+    assert not result.value
 
 def test__PythonCodeBlocksPresent__has_check_type():  # noqa
     """
