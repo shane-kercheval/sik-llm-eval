@@ -526,6 +526,9 @@ def test__MatchCheck__value_extractor():  # noqa
     assert result.success
     assert result.value
 
+    assert 'value_extractor' in check.to_dict()
+    assert check == Check.from_dict(check.to_dict())
+
     check = MatchCheck(value='bar', value_extractor='response["foo"]', negate=True)
     result = check(ResponseData(response=response))
     assert not result.success
@@ -676,6 +679,9 @@ def test__ContainsCheck__value_extractor():  # noqa
     result = check(ResponseData(response=response))
     assert result.success
     assert result.value
+
+    assert 'value_extractor' in check.to_dict()
+    assert check == Check.from_dict(check.to_dict())
 
     check = ContainsCheck(value='bar', value_extractor='response["foo"]', negate=True)
     result = check(ResponseData(response=response))
@@ -873,6 +879,9 @@ def test__RegexCheck__value_extractor():  # noqa
     assert result.success
     assert result.value
 
+    assert 'value_extractor' in check.to_dict()
+    assert check == Check.from_dict(check.to_dict())
+
     check = RegexCheck(pattern='bar', value_extractor='response["foo"]', negate=True)
     result = check(ResponseData(response=response))
     assert not result.success
@@ -930,6 +939,8 @@ def test__test__PythonCodeBlocksPresent():  # noqa
     assert result.metadata['min_code_blocks'] == 1
     assert result.metadata['code_blocks'] == []
 
+    assert 'value_extractor' in check.to_dict()
+    assert check == Check.from_dict(check.to_dict())
 
     check = PythonCodeBlocksPresent(min_code_blocks=1, value_extractor='response')
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -943,6 +954,8 @@ def test__test__PythonCodeBlocksPresent():  # noqa
     assert result.metadata['num_code_blocks'] == 0
     assert result.metadata['min_code_blocks'] == 1
     assert result.metadata['code_blocks'] == []
+
+    assert check == Check.from_dict(check.to_dict())
 
     check = PythonCodeBlocksPresent(
         min_code_blocks=1,
