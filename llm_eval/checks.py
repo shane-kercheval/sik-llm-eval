@@ -35,6 +35,7 @@ class CheckType(EnumMixin, Enum):
     MATCH = auto()
     CONTAINS = auto()
     REGEX = auto()
+    LAMBDA = auto()
     PYTHON_FUNCTION = auto()
     PYTHON_CODE_BLOCKS_PRESENT = auto()
     PYTHON_CODE_BLOCK_TESTS = auto()
@@ -380,6 +381,37 @@ class RegexCheck(SerializableCheck):
     def __str__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}(pattern='{self.pattern}', metadata={self.metadata})"
+
+
+@Check.register(CheckType.LAMBDA)
+class LambdaCheck(SerializableCheck):
+    """
+    Check that runs a Python lambda function against the response. The lambda function is passed
+    in as a string so that the class is serializable. The lambda function should take a single
+    argument and return a boolean value indicating whether the check passes or fails.
+    """
+
+    lambda_str: str = Field(description="The lambda function to run against the response.")
+
+    def __call__(self, data: ResponseData) -> PassFailResult:
+        """Executes the check on the response and returns a PassFailResult."""
+        # execute the lambda function
+        actual_value = self.get_value_from_path(self.value_extractor, data)
+        try:
+            result = eval(self.lambda_str)(actual_value)
+        except Exception as e:
+            return PassFailResult(
+                value=False,
+                metadata={'lambda_str': self.lambda_str, 'error': str(e)},
+            )
+        return PassFailResult(
+            value=result,
+            metadata={'lambda_str': self.lambda_str},
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}(value={self.lambda_str}, metadata={self.metadata})"
 
 
 @Check.register(CheckType.PYTHON_CODE_BLOCKS_PRESENT)
