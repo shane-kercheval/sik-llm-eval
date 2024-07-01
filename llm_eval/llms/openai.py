@@ -260,6 +260,8 @@ class OpenAIChat(ChatModel):
         (i.e. a ExchangeRecord object).
         """
         client = self._create_client()
+        tokens = []
+        log_probs = []
         if self.streaming_callback:
             response = retry_handler()(
                 client.chat.completions.create,
@@ -281,8 +283,6 @@ class OpenAIChat(ChatModel):
                 return content, log_prob
 
             response_message = ''
-            tokens = []
-            log_probs = []
             for chunk in response:
                 delta, log_prob = get_delta(chunk)
                 if delta:
@@ -301,8 +301,9 @@ class OpenAIChat(ChatModel):
                 seed=self.seed,
                 **self.parameters,
             )
-            tokens = [x.token for x in response.choices[0].logprobs.content]
-            log_probs = [x.logprob for x in response.choices[0].logprobs.content]
+            if response.choices[0].logprobs is not None:
+                tokens = [x.token for x in response.choices[0].logprobs.content]
+                log_probs = [x.logprob for x in response.choices[0].logprobs.content]
             response_message = response.choices[0].message.content
 
         metadata = {

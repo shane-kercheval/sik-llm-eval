@@ -22,7 +22,7 @@ from typing import Any, Callable, List, Type, Union
 from llm_eval.llms.base import ChatModel
 from llm_eval.llms.hugging_face import HuggingFaceEndpointChat
 from llm_eval.llms.message_formatters import MessageFormatter
-from llm_eval.llms.openai import OpenAIChat, OpenAITools
+from llm_eval.llms.openai import OpenAIChat, OpenAITools, OpenAIServerChat
 from llm_eval.utilities.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
@@ -37,6 +37,7 @@ class CandidateType(EnumMixin, Enum):
     OPENAI_TOOLS = auto()
     HUGGING_FACE_ENDPOINT = auto()
     CALLABLE_NO_SERIALIZE = auto()
+    OPENAI_SERVER = auto()
 
 
 class Candidate(DictionaryEqualsMixin, ABC):
@@ -443,3 +444,37 @@ class HuggingFaceEndpointCandidate(ChatModelCandidate):
         if self.response_prefix:
             value['parameters']['response_prefix'] = self.response_prefix
         return value
+
+
+@Candidate.register(CandidateType.OPENAI_SERVER)
+class OpenAIServerCandidate(ChatModelCandidate):
+    """
+    Wrapper around the OpenAI API that allows the user to create an OpenAI compatible candidate
+    from a dictionary. The client is a callable object that takes a prompt and returns a response.
+    It will also track the history/messages, supporting stateful conversations, which is needed to
+    evaluate multiple prompts in a single Eval object.
+    """
+
+    def __init__(  # noqa: D417
+            self,
+            metadata: dict | None = None,
+            parameters: dict | None = None) -> None:
+        """
+        Initialize a OpenAIServerCandidate object.
+
+        Args:
+            metadata:
+                A dictionary of metadata about the Candidate.
+            parameters:
+                A dictionary of parameters passed to OpenAIServerChat. `endpoint_url` is the only 
+                required parameters. However, other parameters such as `system_message` 
+                can be passed.
+        """  # noqa
+        if parameters is None:
+            parameters = {}
+        super().__init__(
+            model=OpenAIServerChat(**deepcopy(parameters)),
+            metadata=metadata,
+            parameters=parameters,
+        )
+
