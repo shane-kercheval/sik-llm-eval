@@ -206,14 +206,17 @@ class Check(BaseModel, ABC):
         Syntax:
         1. Attribute access: "attribute_name"
         2. Dictionary key access: "['key_name']"
-        3. Method calls: "method_name()"
-        4. Built-in operations: "operation_name(argument)"
+        3. List index access: "[index]"
 
         Basic Usage:
-        - Attribute access: "response.content", "user.name"
-        - Dictionary key access: "response.metadata['sentiment']", "data['key1']['nested_key']"
-        - Method calls: "response.content.lower()", "user.name.strip()"
-        - Chaining operations: "response.metadata['sentiment'].lower().strip()"
+        - Attribute access: "response.content"
+        - Dictionary key access: "response.metadata['sentiment']"
+        - List index access: "response.content[0]"
+        - Chaining operations: "response.metadata[0]['sentiment']"
+
+        NOTE: Integer values used in brackets (e.g. [0]) will be converted to integers for support
+        of list indexing. This means that dictionaries with integer keys will work as expected,
+        but dictionaries with string keys that are digits will not index correctly.
         """,
     )
     metadata: dict[str, Any] = {}
@@ -257,8 +260,11 @@ class Check(BaseModel, ABC):
         parts = re.findall(r'\[.*?\]|\w+', value_path)
         for part in parts:
             if part.startswith('[') and part.endswith(']'):
-                # Dictionary access
+                # Dictionary or list access
                 key = part[1:-1].strip("'\"")
+                # Check if key is a digit (including negative numbers)
+                if key.lstrip('-').isdigit():
+                    key = int(key)  # Convert key to int if it's a digit
                 current = current[key]
             else:
                 current = getattr(current, part)
@@ -307,13 +313,15 @@ class MatchCheck(SerializableCheck):
 
     def __call__(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
-        actual_value = self.get_value_from_path(self.value_extractor, data)
+        comparison = self.get_value_from_path(self.value_extractor, data)
         return PassFailResult(
-            value=self.value == actual_value if not self.negate else self.value != actual_value,
+            value=self.value == comparison if not self.negate else self.value != comparison,
             metadata={
                 'check_type': self.check_type,
                 'check_value': self.value,
                 'check_negate': self.negate,
+                'check_value_extractor': self.value_extractor,
+                'comparison': comparison,
                 'check_metadata': self.metadata,
             },
         )
@@ -338,13 +346,15 @@ class ContainsCheck(SerializableCheck):
 
     def __call__(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
-        actual_value = self.get_value_from_path(self.value_extractor, data)
+        comparison = self.get_value_from_path(self.value_extractor, data)
         return PassFailResult(
-            value=self.value in actual_value if not self.negate else self.value not in actual_value,  # noqa: E501
+            value=self.value in comparison if not self.negate else self.value not in comparison,
             metadata={
                 'check_type': self.check_type,
                 'check_value': self.value,
                 'check_negate': self.negate,
+                'check_value_extractor': self.value_extractor,
+                'comparison': comparison,
                 'check_metadata': self.metadata,
             },
         )
@@ -366,14 +376,16 @@ class RegexCheck(SerializableCheck):
 
     def __call__(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns a PassFailResult."""
-        actual_value = self.get_value_from_path(self.value_extractor, data)
-        found = re.search(self.pattern, actual_value, re.MULTILINE) is not None
+        comparison = self.get_value_from_path(self.value_extractor, data)
+        found = re.search(self.pattern, comparison, re.MULTILINE) is not None
         return PassFailResult(
             value=found if not self.negate else not found,
             metadata={
                 'check_type': self.check_type,
                 'check_pattern': self.pattern,
                 'check_negate': self.negate,
+                'check_value_extractor': self.value_extractor,
+                'comparison': comparison,
                 'check_metadata': self.metadata,
             },
         )
@@ -396,15 +408,17 @@ class LambdaCheck(SerializableCheck):
     def __call__(self, data: ResponseData) -> PassFailResult:
         """Executes the check on the response and returns a PassFailResult."""
         # execute the lambda function
-        actual_value = self.get_value_from_path(self.value_extractor, data)
+        comparison = self.get_value_from_path(self.value_extractor, data)
         try:
-            result = eval(self.lambda_str)(actual_value)
+            result = eval(self.lambda_str)(comparison)
         except Exception as e:
             return PassFailResult(
                 value=False,
                 metadata={
                     'check_type': self.check_type,
                     'check_metadata': self.metadata,
+                    'check_value_extractor': self.value_extractor,
+                    'comparison': comparison,
                     'lambda_str': self.lambda_str,
                     'lambda_error': str(e),
                 },
