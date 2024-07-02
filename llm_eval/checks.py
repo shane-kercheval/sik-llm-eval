@@ -402,11 +402,20 @@ class LambdaCheck(SerializableCheck):
         except Exception as e:
             return PassFailResult(
                 value=False,
-                metadata={'lambda_str': self.lambda_str, 'error': str(e)},
+                metadata={
+                    'check_type': self.check_type,
+                    'check_metadata': self.metadata,
+                    'lambda_str': self.lambda_str,
+                    'lambda_error': str(e),
+                },
             )
         return PassFailResult(
             value=result,
-            metadata={'lambda_str': self.lambda_str},
+            metadata={
+                'check_type': self.check_type,
+                'check_metadata': self.metadata,
+                'lambda_str': self.lambda_str,
+            },
         )
 
     def __str__(self) -> str:

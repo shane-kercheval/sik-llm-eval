@@ -900,19 +900,23 @@ def test__LambdaCheck__has_check_type():  # noqa
     assert Check.from_dict(check_dict) == check
 
 def test__LambdaCheck():  # noqa
-    check = LambdaCheck(lambda_str='lambda x: x == 1')
+    check = LambdaCheck(lambda_str='lambda x: x == 1', metadata={'foo': 'bar'})
     result = check(ResponseData(response=1))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 1'
-    assert 'error' not in result.metadata
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {'foo': 'bar'}
+    assert 'lambda_error' not in result.metadata
     assert str(result)
 
     result = check(ResponseData(response=2))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 1'
-    assert 'error' not in result.metadata
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {'foo': 'bar'}
+    assert 'lambda_error' not in result.metadata
 
 def test__LambdaCheck__value_extractor():  # noqa
     check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor='response["foo"]')
@@ -920,20 +924,26 @@ def test__LambdaCheck__value_extractor():  # noqa
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert 'error' not in result.metadata
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {}
+    assert 'lambda_error' not in result.metadata
 
     result = check(ResponseData(response={'foo': [2, 3]}))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert 'error' not in result.metadata
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {}
+    assert 'lambda_error' not in result.metadata
 
     check = LambdaCheck(lambda_str='lambda x: len(x) == 3', value_extractor='response["foo"]')
     result = check(ResponseData(response={'foo': [1, 2, 3]}))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
-    assert 'error' not in result.metadata
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {}
+    assert 'lambda_error' not in result.metadata
 
 def test__LambdaCheck__value_extractor__from_dict():  # noqa
     check_dict = {
@@ -946,13 +956,13 @@ def test__LambdaCheck__value_extractor__from_dict():  # noqa
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert 'error' not in result.metadata
+    assert 'lambda_error' not in result.metadata
 
     result = check(ResponseData(response={'foo': [2, 3]}))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert 'error' not in result.metadata
+    assert 'lambda_error' not in result.metadata
 
     check_dict = {
         'check_type': CheckType.LAMBDA.name,
@@ -964,15 +974,17 @@ def test__LambdaCheck__value_extractor__from_dict():  # noqa
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
-    assert 'error' not in result.metadata
+    assert 'lambda_error' not in result.metadata
 
 def test__LambdaCheck__error_handling():  # noqa
-    check = LambdaCheck(lambda_str='lambda x: y == 1')
+    check = LambdaCheck(lambda_str='lambda x: y == 1', metadata={'foo': 'bar'})
     result = check(ResponseData(response=1))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: y == 1'
-    assert 'error' in result.metadata
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {'foo': 'bar'}
+    assert 'lambda_error' in result.metadata
 
 def test__PythonCodeBlocksPresent__has_check_type():  # noqa
     """
