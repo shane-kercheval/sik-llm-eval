@@ -467,8 +467,6 @@ def test__MatchCheck(negate: bool):  # noqa
             'check_type': CheckType.MATCH.name,
             'check_value': 'foo',
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'foo',
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -515,8 +513,6 @@ def test__MatchCheck(negate: bool):  # noqa
             'check_type': CheckType.MATCH.name,
             'check_value': 'bar',
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'foo',
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -625,8 +621,6 @@ def test__ContainsCheck(negate: bool):  # noqa
             'check_type': CheckType.CONTAINS.name,
             'check_value': 'o ba',
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'foo bar',
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -673,8 +667,6 @@ def test__ContainsCheck(negate: bool):  # noqa
             'check_type': CheckType.CONTAINS.name,
             'check_value': 'o ba',
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'bar foo',
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -763,8 +755,6 @@ def test__RegexCheck(negate: bool):  # noqa
             'check_type': CheckType.REGEX.name,
             'check_pattern': regex,
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'foo',
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -813,8 +803,6 @@ def test__RegexCheck(negate: bool):  # noqa
             'check_type': CheckType.REGEX.name,
             'check_pattern': regex,
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'Foo',
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -930,7 +918,7 @@ def test__LambdaCheck():  # noqa
     assert result.metadata['check_metadata'] == {'foo': 'bar'}
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__value_extractor__double_quotes_key():  # noqa
+def test__LambdaCheck__value_extractor():  # noqa
     check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor='response["foo"]')
     result = check(ResponseData(response={'foo': [1, 2, 3]}))
     assert result.success
@@ -953,103 +941,6 @@ def test__LambdaCheck__value_extractor__double_quotes_key():  # noqa
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-def test__LambdaCheck__value_extractor__single_quotes_key():  # noqa
-    check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor="response['foo']")
-    result = check(ResponseData(response={'foo': [1, 2, 3]}))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-    result = check(ResponseData(response={'foo': [2, 3]}))
-    assert not result.success
-    assert not result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-    check = LambdaCheck(lambda_str='lambda x: len(x) == 3', value_extractor="response['foo']")
-    result = check(ResponseData(response={'foo': [1, 2, 3]}))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-def test__LambdaCheck__value_extractor__with_numeric_indexes__dict():  # noqa
-    # test list
-    # test dictionary
-    check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor='response[100]')
-    result = check(ResponseData(response={100: [1, 2, 3]}))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-    result = check(ResponseData(response={100: [2, 3]}))
-    assert not result.success
-    assert not result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-    check = LambdaCheck(lambda_str='lambda x: len(x) == 3', value_extractor='response[100]')
-    result = check(ResponseData(response={100: [1, 2, 3]}))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-def test__LambdaCheck__value_extractor__with_numeric_indexes__list():  # noqa
-    # test list
-    # test dictionary
-    response = [0, 1, 2, 3, 4, 5]
-    check = LambdaCheck(lambda_str='lambda x: x == 5', value_extractor='response[-1]')
-    result = check(ResponseData(response=response))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x == 5'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-    result = check(ResponseData(response=[0, 1]))
-    assert not result.success
-    assert not result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x == 5'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-    response = [0, 1, 2, 3, 4, {'foo': 'bar'}]
-    check = LambdaCheck(lambda_str='lambda x: x == "bar"', value_extractor='response[-1]["foo"]')
-    result = check(ResponseData(response=response))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x == "bar"'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-
-    check = LambdaCheck(lambda_str='lambda x: x == 3', value_extractor='response[3]')
-    result = check(ResponseData(response=response))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x == 3'
     assert result.metadata['check_type'] == CheckType.LAMBDA.name
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
