@@ -678,8 +678,6 @@ class EvalResult(DictionaryEqualsMixin):
         else:
             raise TypeError("candidate_obj must be either a Candidate or a dictionary")
         self.responses = responses
-        if total_time_seconds <= 0:
-            raise ValueError("Total time must be greater than zero")
         self.total_time_seconds = total_time_seconds
         self.num_code_blocks = num_code_blocks
         self.cost = cost
