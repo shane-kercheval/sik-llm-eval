@@ -44,9 +44,9 @@ def test__register_check__success__str__ensure_creation():  # noqa
     class FakeCheck(Check):
         """Mock test for testing."""
 
-        def __call__(self, data: ResponseData) -> CheckResult:
+        def _call(self, value: str) -> bool:
             return PassFailResult(
-                value=data.response is not None,
+                value=value is not None,
                 metadata=self.metadata,
             )
 
@@ -113,10 +113,10 @@ def test__register_check__success__ensure_creation__with_required_params():  # n
 
         required_field: str
 
-        def __call__(self, data: ResponseData) -> CheckResult:
+        def _call(self, value: str) -> CheckResult:
             return PassFailResult(
                 check_type=CheckType.PASS_FAIL,
-                passed=data.response is not None,
+                passed=value is not None,
                 metadata=self.metadata,
             )
 
@@ -343,19 +343,19 @@ def test__Check__value_extractor__get_value_from_path():  # noqa
         response=expected_response,
         code_blocks=expected_code_blocks,
     )
-    value = Check.get_value_from_path(value_path='prompt', data=response_data)
+    value = Check._get_value_from_path(value_path='prompt', data=response_data)
     assert value == expected_prompt
 
-    value = Check.get_value_from_path(value_path='response', data=response_data)
+    value = Check._get_value_from_path(value_path='response', data=response_data)
     assert value == expected_response
 
-    value = Check.get_value_from_path(value_path='response["foo"]', data=response_data)
+    value = Check._get_value_from_path(value_path='response["foo"]', data=response_data)
     assert value == expected_response['foo']
 
-    value = Check.get_value_from_path(value_path='response["foo"]["bar"]', data=response_data)
+    value = Check._get_value_from_path(value_path='response["foo"]["bar"]', data=response_data)
     assert value == expected_response['foo']['bar']
 
-    value = Check.get_value_from_path(value_path='code_blocks', data=response_data)
+    value = Check._get_value_from_path(value_path='code_blocks', data=response_data)
     assert value == expected_code_blocks
 
     # test nested objects
@@ -365,14 +365,133 @@ def test__Check__value_extractor__get_value_from_path():  # noqa
 
     expected_response = MockObject(value={'foo': MockObject(value={'bar': 'baz'})})
     response_data = ResponseData(response=expected_response)
-    value = Check.get_value_from_path(value_path='response.value', data=response_data)
+    value = Check._get_value_from_path(value_path='response.value', data=response_data)
     assert value == expected_response.value
 
-    value = Check.get_value_from_path(value_path='response.value["foo"]', data=response_data)
+    value = Check._get_value_from_path(value_path='response.value["foo"]', data=response_data)
     assert value == expected_response.value['foo']
 
-    value = Check.get_value_from_path(value_path='response.value["foo"].value', data=response_data)
+    value = Check._get_value_from_path(value_path='response.value["foo"].value', data=response_data)  # noqa
     assert value == expected_response.value['foo'].value
+
+def test__Check__value_extractor():  # noqa
+    """The default value_extractor should use the response in the check."""
+    @Check.register('FAKECHECK__VALUE_EXTRACT')
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        def _call(self, value: str) -> bool:
+            return PassFailResult(
+                value=value is not None,
+                metadata=self.metadata,
+            )
+    try:
+        check = FakeCheck()
+        # should be successful default is to look in response and which we are using
+        # and 'foo' is not None
+        result = check(ResponseData(response='foo'))
+        assert result.value
+        assert result.success
+        assert result.metadata == {}
+        # should fail because default is still looking in response but we are using prompt
+        # so response will default to None and check will fail
+        result = check(ResponseData(prompt='foo'))
+        assert not result.value
+        assert not result.success
+        assert result.metadata == {}
+
+        check = FakeCheck(value_extractor='prompt')
+        # should fail because we are extracting prompt but prompt is None
+        result = check(ResponseData(response='foo'))
+        assert not result.value
+        assert not result.success
+        # now, because we are using prompt, which is not the default value_extractor,
+        # metadata will be populated with the value_extractor and value_extracted
+        assert result.metadata == {
+            'value_extractor': 'prompt',
+            'value_extracted': None,  # None because prompt is None
+        }
+        # should be successful because we are extracting prompt and 'foo' is not None
+        result = check(ResponseData(prompt='foo'))
+        assert result.value
+        assert result.success
+        assert result.metadata == {
+            'value_extractor': 'prompt',
+            'value_extracted': 'foo',  # 'foo' is the value of prompt
+        }
+    finally:
+        Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
+
+def test__Check__value_extractor__override():  # noqa
+    """The default value_extractor should use the response in the check."""
+    @Check.register('FAKECHECK__VALUE_EXTRACT')
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        @property
+        def default_value_extractor(self) -> str:
+            return ''  # should return the entire ResponseData object
+
+        def _call(self, data: ResponseData) -> bool:
+            assert isinstance(data, ResponseData)
+            return PassFailResult(
+                value=data.response is not None and data.prompt is not None,
+                metadata=self.metadata,
+            )
+    try:
+        check = FakeCheck()
+        result = check(ResponseData(prompt='foo', response='bar'))
+        assert result.value
+        assert result.success
+        assert result.metadata == {
+            'value_extractor': '',
+            'value_extracted': ResponseData(prompt='foo', response='bar'),
+        }
+
+        result = check(ResponseData(prompt='foo'))
+        assert not result.value
+        assert not result.success
+        assert result.metadata == {
+            'value_extractor': '',
+            'value_extracted': ResponseData(prompt='foo'),
+        }
+    finally:
+        Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
+
+def test__Check__value_extractor__error_extracting_value():  # noqa
+    """
+    The expected behavior when we get an error extracting the variable is that the check should
+    fail (but not throw an exception) and the metadata should be populated with the error message.
+    """
+    @Check.register('FAKECHECK__VALUE_EXTRACT')
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        def _call(self, value: str) -> bool:
+            return PassFailResult(
+                value=value is not None,
+                metadata=self.metadata,
+            )
+    try:
+        check = FakeCheck(value_extractor='response["foo"]')
+        # None cannot be indexed so this should fail
+        result = check(ResponseData())
+        assert not result.value
+        assert not result.success
+        assert result.metadata['value_extractor'] == 'response["foo"]'
+        assert result.metadata['value_extracted'] is None
+        assert 'value_extractor_error' in result.metadata
+
+        check = FakeCheck(value_extractor='response["foo"]')
+        # foo does not exist in response so this should fail
+        result = check(ResponseData(response='foo'))
+        assert not result.value
+        assert not result.success
+        assert result.metadata['value_extractor'] == 'response["foo"]'
+        assert result.metadata['value_extracted'] is None
+        assert 'value_extractor_error' in result.metadata
+    finally:
+        Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
 
 def test__MatchCheck__has_check_type():  # noqa
     """
@@ -467,8 +586,6 @@ def test__MatchCheck(negate: bool):  # noqa
             'check_type': CheckType.MATCH.name,
             'check_value': 'foo',
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'foo',
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -515,8 +632,6 @@ def test__MatchCheck(negate: bool):  # noqa
             'check_type': CheckType.MATCH.name,
             'check_value': 'bar',
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'foo',
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -625,8 +740,6 @@ def test__ContainsCheck(negate: bool):  # noqa
             'check_type': CheckType.CONTAINS.name,
             'check_value': 'o ba',
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'foo bar',
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -673,8 +786,6 @@ def test__ContainsCheck(negate: bool):  # noqa
             'check_type': CheckType.CONTAINS.name,
             'check_value': 'o ba',
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'bar foo',
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -763,8 +874,6 @@ def test__RegexCheck(negate: bool):  # noqa
             'check_type': CheckType.REGEX.name,
             'check_pattern': regex,
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'foo',
             'check_metadata': {},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -813,8 +922,6 @@ def test__RegexCheck(negate: bool):  # noqa
             'check_type': CheckType.REGEX.name,
             'check_pattern': regex,
             'check_negate': negate,
-            'check_value_extractor': 'response',
-            'comparison': 'Foo',
             'check_metadata': {'bar': 'foo'},
         },
         'result_type': CheckResultsType.PASS_FAIL.name,
@@ -922,7 +1029,26 @@ def test__LambdaCheck():  # noqa
     assert 'lambda_error' not in result.metadata
     assert str(result)
 
+    new_check = Check.from_dict(check.to_dict())
+    assert new_check == check
+    result = new_check(ResponseData(response=1))
+    assert result.success
+    assert result.value
+    assert result.metadata['lambda_str'] == 'lambda x: x == 1'
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {'foo': 'bar'}
+    assert 'lambda_error' not in result.metadata
+    assert str(result)
+
     result = check(ResponseData(response=2))
+    assert not result.success
+    assert not result.value
+    assert result.metadata['lambda_str'] == 'lambda x: x == 1'
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {'foo': 'bar'}
+    assert 'lambda_error' not in result.metadata
+
+    result = new_check(ResponseData(response=2))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 1'
@@ -1085,7 +1211,17 @@ def test__LambdaCheck__value_extractor__from_dict():  # noqa
     assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__error_handling():  # noqa
+def test__LambdaCheck__error_handling__lambda():  # noqa
+    check = LambdaCheck(lambda_str='lambda x: y == 1', metadata={'foo': 'bar'})
+    result = check(ResponseData(response=1))
+    assert not result.success
+    assert not result.value
+    assert result.metadata['lambda_str'] == 'lambda x: y == 1'
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {'foo': 'bar'}
+    assert 'lambda_error' in result.metadata
+
+def test__LambdaCheck__error_handling__lambda():  # noqa
     check = LambdaCheck(lambda_str='lambda x: y == 1', metadata={'foo': 'bar'})
     result = check(ResponseData(response=1))
     assert not result.success
