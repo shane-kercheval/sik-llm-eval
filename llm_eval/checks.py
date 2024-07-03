@@ -952,13 +952,13 @@ class ToolCallsCheck(Check):
                 num_arguments = len(self.function_arguments)
                 num_arguments_successful = 0
                 tool_call_function_arguments = deepcopy(tool_dict["arguments"])
-                for key, value in dict(self.function_arguments).items():
+                for key, val in dict(self.function_arguments).items():
                     if key in tool_call_function_arguments:
                         tool_call_value = tool_call_function_arguments.pop(key)
                         if self.allow_regex:
-                            if re.search(value, tool_call_value):
+                            if re.search(val, tool_call_value):
                                 num_arguments_successful += 1
-                        elif tool_call_value == value:
+                        elif tool_call_value == val:
                             num_arguments_successful += 1
                 if self.penalize_extraneous_arguments:
                     num_arguments_successful -= len(tool_call_function_arguments)

@@ -1231,8 +1231,6 @@ def test__LambdaCheck__error_handling__lambda():  # noqa
     assert result.metadata['check_metadata'] == {'foo': 'bar'}
     assert 'lambda_error' in result.metadata
 
-
-
 def test__PythonCodeBlocksPresent__has_check_type():  # noqa
     """
     Test that the check has a check_type upon object creation (without using create_instance from
