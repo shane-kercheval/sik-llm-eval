@@ -1,10 +1,10 @@
 joblib~=1.4
-openai~=1.9
+openai~=1.25
 pydantic~=2.5
 PyYAML~=6.0
 tenacity~=8.2
 transformers~=4.37
 torch~=2.1
-tiktoken~=0.6
+tiktoken~=0.7
 numpy~=1.26
 python-dotenv~=0.21
