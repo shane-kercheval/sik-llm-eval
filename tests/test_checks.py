@@ -156,7 +156,7 @@ def test__register_check__duplicate__str__():  # noqa
 
     with pytest.raises(AssertionError):
         @Check.register(CheckType.MATCH.name.lower())
-        class FakeCheck(Check):  # noqa: F811
+        class FakeCheck(Check):
             """Mock test for testing."""
 
             def __call__(self, data: ResponseData) -> CheckResult:
