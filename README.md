@@ -12,7 +12,7 @@ Get started with examples found in the [examples](https://github.com/anaconda/ll
 
 In this framework, there are two fundamental concepts:
 
-- **Eval**: An Eval represents a single test scenario, which can consist of one or more prompts. Each Eval is associated with "checks" which evaluate the response of the LLM against the criteria specified in the check. Examples of checks include verifying if the response matches an exact value, contains specific content, includes code blocks, determining if those code blocks successfully, and validating the variables/functions created by those code blocks. Users can also create and register custom checks.
+- **Eval**: An Eval represents a single test scenario, which can consist of one or more prompts. Each Eval is associated with "checks" which evaluate the response of the LLM against the criteria specified in the check. Examples of checks include verifying if the response matches an exact value, contains specific content, includes code blocks, determining if those code blocks successfully run, and validating the variables/functions created by those code blocks. Users can also create and register custom checks.
 - **Candidate**: A Candidate encapsulates an underlying LLM, model parameters, and its corresponding client. Candidates can be the same LLM model running on different hardware (or using different model parameters such as temperature), potentially differing in either response quality or performance. For instance, a Candidate can represent:
     - ChatGPT 4.0 (the LLM & client/API are synonymous)
     - Llama-2-7b-Chat (LLM) running on Hugging Face Endpoints with Nvidia 10G (client)
@@ -80,7 +80,7 @@ results = eval_harness()
 print(results[0][0])
 ```
 
-`results` contains a list of lists of EvalResults. Each item in the outer list corresponds to a single Candidate and contains a list of EvalResults for all Evals ran against the Candidate. In our example, `results` is [[EvalResult, EvalResult], [EvalResult, EvalResult]] where the first list corresponds to results of the Evals associated with the first Candidate (ChatGPT 3.5) and the second list corresponds to results of the Evals associated with the second Candidate (ChatGPT 4.0).
+`results` contains a list of lists of EvalResults. Each item in the outer list corresponds to a single Candidate and contains a list of EvalResults for all Evals run against the Candidate. In our example, `results` is [[EvalResult, EvalResult], [EvalResult, EvalResult]] where the first list corresponds to results of the Evals associated with the first Candidate (ChatGPT 3.5) and the second list corresponds to results of the Evals associated with the second Candidate (ChatGPT 4.0).
 
 `print(results[0][0])` will give:
 
@@ -158,11 +158,11 @@ pip install -e .
 ### Environment Variables
 
 - `OPENAI_API_KEY`: This environment variable and API key are required for using OpenAIChat and OpenAICandidate.
-- `HUGGING_FACE_API_KEY`: This environment variable and API key are required for using HuggingFaceEndpointChata and HuggingFaceEndpointCandidate.
+- `HUGGING_FACE_API_KEY`: This environment variable and API key are required for using HuggingFaceEndpointChat and HuggingFaceEndpointCandidate.
 
 ## Development Environment Setup
 
-The easiest way to setup the development environment is by creating a docker container and then connecting VS Code to the container.
+The easiest way to set up the development environment is by creating a docker container and then connecting VS Code to the container.
 
 You can create and start the docker container by running `make docker_run`. 
 
@@ -219,8 +219,8 @@ make gen_build_files
 
 For dependencies with different names in `pip` and `conda`:
 
-- Use the `pip` name in the when adding to either the `dev_requirements.txt` or the `run_requirements.txt` files.
-- Modify the `generate_build_files.py` script to replace the `pip` name with the corresponding `conda` name in necessary areas.
+- When adding a new package to either the `dev_requirements.txt` or the `run_requirements.txt` files, be sure to use the package name used when installing with `pip`. 
+- If the package name is different when installing with `conda`, be sure to update the `generate_build_files.py` script to ensure the proper package name is used for `conda` related files.
 
 ### Packaging
 
