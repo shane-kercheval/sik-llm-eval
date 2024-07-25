@@ -3,6 +3,7 @@ faker~=18.9
 markdown~=3.4
 markdownify~=0.11
 pandas~=2.2
+pydantic~=2.8
 pygments~=2.15
 pytest~=7.4
 ruff~=0.5
