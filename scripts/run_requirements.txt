@@ -1,6 +1,6 @@
 joblib~=1.4
 openai~=1.25
-pydantic~=2.5
+pydantic~=2.8
 PyYAML~=6.0
 tenacity~=8.2
 transformers~=4.37

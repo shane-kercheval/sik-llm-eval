@@ -19,7 +19,7 @@ requirements:
     - joblib=1.4
     - numpy=1.26
     - openai=1.25
-    - pydantic=2.5
+    - pydantic=2.8
     - python
     - python-dotenv=0.21
     - pytorch=2.1
