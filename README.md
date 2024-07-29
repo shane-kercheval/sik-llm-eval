@@ -14,9 +14,9 @@ In this framework, there are two fundamental concepts:
 
 - **Eval**: An Eval represents a single test scenario, which can consist of one or more prompts. Each Eval is associated with "checks" which evaluate the response of the LLM against the criteria specified in the check. Examples of checks include verifying if the response matches an exact value, contains specific content, includes code blocks, determining if those code blocks successfully run, and validating the variables/functions created by those code blocks. Users can also create and register custom checks.
 - **Candidate**: A Candidate encapsulates an underlying LLM, model parameters, and its corresponding client. Candidates can be the same LLM model running on different hardware (or using different model parameters such as temperature), potentially differing in either response quality or performance. For instance, a Candidate can represent:
-    - ChatGPT 4.0 (the LLM & client/API are synonymous)
-    - Llama-2-7b-Chat (LLM) running on Hugging Face Endpoints with Nvidia 10G (client)
-    - Llama-2-7b-Chat Q6_K.gguf (LLM) running locally on LM Studio (client).
+  - ChatGPT 4.0 (the LLM & client/API are synonymous)
+  - Llama-2-7b-Chat (LLM) running on Hugging Face Endpoints with Nvidia 10G (client)
+  - Llama-2-7b-Chat Q6_K.gguf (LLM) running locally on LM Studio (client).
 
 ### Examples
 
@@ -146,6 +146,8 @@ This minimal example does not give much insight into the quality of the response
 
 ## Installing
 
+### Local
+
 The easiest way to install the llm-eval package during this beta period is by cloning the repo and installing locally.
 
 ```shell
@@ -153,6 +155,41 @@ cd <to the directory you want to clone the repo>
 git clone https://github.com/anaconda/llm-eval.git
 <activate conda or virtual environment if necessary>
 pip install -e .
+```
+
+### Internal Public Security Manager (PSM)
+
+> [!IMPORTANT]  
+> You must have WARP enabled to access the internal PSM.
+
+To install the llm-eval package using Anaconda's internal PSM you must do the following:
+
+- Ensure you have setup your CLI to access the internal PSM repo. Use the following link for up to date instruction: [Setup Instructions](https://anaconda.atlassian.net/wiki/spaces/CBR/pages/3593043970/How+do+I+use+it)
+  
+  ```shell
+  conda install conda-repo-cli
+  conda repo config --set-site pkgs.as.anacondaconnect.com
+  conda repo config --set oauth2 true
+  conda repo login  # this opens a browser window to complete the OAuth login process
+  ```
+
+- Run:
+  
+  ```shell
+  conda install -c https://pkgs.as.anacondaconnect.com/api/repo/ai-aug llm-eval
+  ```
+
+### Dependency
+
+If you wish to include the package as a dependency in an `environment.yml` file, you must add the complete channel URL.
+
+```yml
+channels:
+  - https://pkgs.as.anacondaconnect.com/api/repo/ai-aug
+  - defaults
+  - conda-forge
+dependencies:
+  - llm-eval
 ```
 
 ### Environment Variables
@@ -164,7 +201,7 @@ pip install -e .
 
 The easiest way to set up the development environment is by creating a docker container and then connecting VS Code to the container.
 
-You can create and start the docker container by running `make docker_run`. 
+You can create and start the docker container by running `make docker_run`.
 
 Once docker is running select the `Attach to Running Container` option within VS Code and select the appropriate container.
 
@@ -219,7 +256,7 @@ make gen_build_files
 
 For dependencies with different names in `pip` and `conda`:
 
-- When adding a new package to either the `dev_requirements.txt` or the `run_requirements.txt` files, be sure to use the package name used when installing with `pip`. 
+- When adding a new package to either the `dev_requirements.txt` or the `run_requirements.txt` files, be sure to use the package name used when installing with `pip`.
 - If the package name is different when installing with `conda`, be sure to update the `generate_build_files.py` script to ensure the proper package name is used for `conda` related files.
 
 ### Packaging
