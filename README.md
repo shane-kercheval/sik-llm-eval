@@ -188,6 +188,8 @@ channels:
   - https://pkgs.as.anacondaconnect.com/api/repo/ai-aug
   - defaults
   - conda-forge
+dependencies:
+  - llm-eval
 ```
 
 ### Environment Variables
