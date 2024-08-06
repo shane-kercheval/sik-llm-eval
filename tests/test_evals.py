@@ -1691,6 +1691,8 @@ def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values):
     assert isinstance(eval_obj.prompt_sequence[1].prompt, int)
     assert eval_obj.prompt_sequence[1].prompt == eval_config['prompt_sequence'][1]['prompt']
 
+error_list_manager = multiprocessing.Manager()
+test_harness_callback_errors = error_list_manager.list()
 def error_callback(exception: Exception, eval_obj: Eval, candidate_obj: Candidate) -> None:
     """
     This is a callback function that will be called when an error occurs in the EvalHarness. It
@@ -1752,9 +1754,7 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
         assert error.eval_obj == eval_1
         assert error.candidate_obj == candidate_1
 
-    manager = multiprocessing.Manager()
     global test_harness_callback_errors  # noqa
-    test_harness_callback_errors = manager.list()
     harness.error_callback = error_callback
     results = harness()
     assert len(results) == 2
