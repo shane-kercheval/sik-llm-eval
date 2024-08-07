@@ -16,7 +16,6 @@ dependencies:
   - pip=23.3
   - pydantic=2.8
   - pygments=2.15
-  - pytest-asyncio=0.23
   - pytest=7.4
   - python-dotenv=0.21
   - pytorch=2.1
