@@ -8,6 +8,7 @@ from llm_eval.candidates import (
     Candidate,
     CandidateType,
     OpenAICandidate,
+    is_async_candidate,
 )
 from llm_eval.llms.hugging_face import HuggingFaceRequestError
 
@@ -59,6 +60,24 @@ class MockCandidate(Candidate):
 
     def clone(self) -> 'Candidate':  # noqa
         return Candidate.from_dict(deepcopy(self.to_dict()))
+
+
+def test__is_async_candidate():  # noqa
+    async def async_function():  # noqa
+        pass
+    def sync_function():  # noqa
+        pass
+    class AsyncCallable:
+        async def __call__(self):
+            pass
+    class SyncCallable:
+        def __call__(self):
+            pass
+
+    assert is_async_candidate(async_function)
+    assert not is_async_candidate(sync_function)
+    assert is_async_candidate(AsyncCallable())
+    assert not is_async_candidate(SyncCallable())
 
 
 def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa

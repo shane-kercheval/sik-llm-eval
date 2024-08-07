@@ -236,6 +236,8 @@ To set up a local environment with conda, run:
 make setup_env
 ```
 
+To activate the environment, run `conda activate ./env`
+
 ### Managing Dependencies
 
 There are two source files used to automate the management of multiple build files. They are:

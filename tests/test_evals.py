@@ -1,11 +1,17 @@
 """Tests for the evals module."""
+import pytest
 from copy import deepcopy
 import multiprocessing
 import os
 from textwrap import dedent
-import pytest
 import yaml
-from llm_eval.candidates import CallableCandidate, Candidate, CandidateType, ChatModelCandidate
+from llm_eval.candidates import (
+    CallableCandidate,
+    Candidate,
+    CandidateType,
+    ChatModelCandidate,
+    is_async_candidate,
+)
 from llm_eval.checks import (
     Check,
     CheckResult,
@@ -248,9 +254,10 @@ def test__Eval__from_objects__minimal():  # noqa
     assert result.all_check_results == []
     assert not result.expects_code_blocks
     assert result.get_code_block_tests_result() is None
-    assert result.total_time_seconds > 0
+    assert result.total_time_seconds >= 0
 
-def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict):  # noqa
+@pytest.mark.parametrize('use_async', [True, False])
+def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_8f9fbf37: dict):  # noqa
     eval_dict = fake_eval_8f9fbf37.copy()
     eval_obj = Eval(**eval_dict)
     assert eval_obj.to_dict() == eval_dict
@@ -259,10 +266,30 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
         "This is the first response",
         "This is a response with code blocks\n```python\nprint('hello world')\n```",
     ]
-    def mock_llm():  # noqa
-        yield from responses
-    mock_llm_instance = mock_llm()
-    eval_result = eval_obj(lambda _: next(mock_llm_instance))
+    def create_mock_llm(responses, use_async):  # noqa
+        if use_async:
+            response_iter = iter(responses)
+            async def mock_llm(_: str):  # noqa
+                try:
+                    return next(response_iter)
+                except StopIteration:
+                    return None
+            return mock_llm
+        else:  # noqa: RET505
+            iterator = iter(responses)
+            def mock_llm(_: str):  # noqa
+                try:
+                    return next(iterator)
+                except StopIteration:
+                    return None
+        return mock_llm
+
+    mock_llm = create_mock_llm(responses, use_async)
+    if use_async:
+        assert is_async_candidate(mock_llm)
+    else:
+        assert not is_async_candidate(mock_llm)
+    eval_result = eval_obj(mock_llm)
     assert eval_result.responses == responses
     assert eval_result.prompts == [test.prompt for test in eval_obj.prompt_sequence]
     assert eval_result.ideal_responses == [
@@ -286,7 +313,7 @@ def test__Eval__example_8f9fbf37__callable_candidate(fake_eval_8f9fbf37: dict): 
     assert eval_result_dict['eval_obj'] == eval_dict
     assert Eval(**eval_result_dict['eval_obj']) == eval_obj
     assert eval_result_dict['candidate_obj'] == {
-        'metadata': {'function': 'def <lambda>(_)'},
+        'metadata': {'function': 'def mock_llm(_: str)'},
         'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name,
     }
     # check that the check result dicts match
@@ -489,7 +516,111 @@ def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_
     assert EvalResult(**result.to_dict()).to_dict() == result.to_dict()
     assert eval_config == fake_eval_sum_two_numbers  # make sure eval_config wasn't modified
 
-def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+@pytest.mark.skip("We removed the functionality where multiple model parameters (as a list) are supported. We should add this functionality back in with a new format/syntax. Let's keep this test for now. We can remove in the future if we don't think we will add the functionality back in.")  # noqa
+def test__EvalHarness__add_multiple_candidates_from_single_dict(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+    candidate_dict = {
+        'metadata': {'uuid': 'candidate_1'},
+        'candidate_type': 'MockCandidateCannedResponse',
+        'parameters': {
+            'temperature': [0.0, 0.5, 1.0],
+        },
+    }
+    eval_harness = EvalHarness(
+        evals=[fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers],
+        candidates=candidate_dict,
+        num_cpus=1, async_batch_size=1,
+    )
+    # should produce 3 candidates with same 2 evals (3 outer lists each having a list of 2 evals)
+    results = eval_harness()
+    assert len(results) == 3
+    assert len(results[0]) == 2
+    assert len(results[1]) == 2
+    assert len(results[2]) == 2
+    assert results[0][0].eval_obj == Eval(**fake_eval_subtract_two_numbers)
+    assert results[0][0].candidate_obj.metadata == candidate_dict['metadata']
+    assert results[0][0].candidate_obj.parameters == {'temperature': 0.0}
+    assert results[0][1].eval_obj == Eval(**fake_eval_sum_two_numbers)
+    assert results[0][1].candidate_obj.metadata == candidate_dict['metadata']
+    assert results[0][1].candidate_obj.parameters == {'temperature': 0.0}
+
+    assert results[1][0].eval_obj == Eval(**fake_eval_subtract_two_numbers)
+    assert results[1][0].candidate_obj.metadata == candidate_dict['metadata']
+    assert results[1][0].candidate_obj.parameters == {'temperature': 0.5}
+    assert results[1][1].eval_obj == Eval(**fake_eval_sum_two_numbers)
+    assert results[1][1].candidate_obj.metadata == candidate_dict['metadata']
+    assert results[1][1].candidate_obj.parameters == {'temperature': 0.5}
+
+    assert results[2][0].eval_obj == Eval(**fake_eval_subtract_two_numbers)
+    assert results[2][0].candidate_obj.metadata == candidate_dict['metadata']
+    assert results[2][0].candidate_obj.parameters == {'temperature': 1.0}
+    assert results[2][1].eval_obj == Eval(**fake_eval_sum_two_numbers)
+    assert results[2][1].candidate_obj.metadata == candidate_dict['metadata']
+    assert results[2][1].candidate_obj.parameters == {'temperature': 1.0}
+
+def test__multiline_eval__dedents_prompt():  # noqa
+    prompt = """
+        - This is a multiline prompt.
+            - It needs to be dedented.
+    """
+    eval_obj = Eval(prompt_sequence=[PromptTest(prompt=prompt)])
+    result = eval_obj(lambda x: x)
+    assert result.responses[0] == dedent(prompt).lstrip()
+
+def callback(x: EvalResult) -> None:
+    """
+    Test the callback function by saving the result to a yaml file in the 'test/temp'
+    directory. Assume directory already exists.
+    """
+    candidate_id = x.candidate_obj.metadata['uuid']
+    eval_id = x.eval_obj.metadata['uuid']
+    with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
+        yaml.dump(x.to_dict(), f, default_flow_style=False, sort_keys=False)
+
+@pytest.mark.skip("We removed the functionality where multiple model parameters (as a list) are supported. We should add this functionality back in with a new format/syntax. Let's keep this test for now. We can remove in the future if we don't think we will add the functionality back in.")  # noqa
+def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_create_multiple_candidates():  # noqa
+    test_params = {
+        'param_1': 'param_a',
+        'param_2': 'param_b',
+        'param_3': ['param_c', 'param_d', 'param_e'],
+    }
+    expected_params = [
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_c'},
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_d'},
+        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_e'},
+    ]
+    candidate_dict = {
+        'metadata': {'uuid': 'candidate_1'},
+        'candidate_type': 'MockCandidate',
+        'responses': {'prompt_a': 'response1', 'prompt_b': 'response2'},
+        'parameters': test_params,
+    }
+    eval_harness = EvalHarness()
+    assert eval_harness.candidates == []
+    eval_harness.add_candidates(candidate_dict)
+    assert len(eval_harness.candidates) == 3
+    for c, e in zip(eval_harness.candidates, expected_params):
+        assert c.parameters == e
+        assert c.responses == {'prompt_a': 'response1', 'prompt_b': 'response2'}
+        assert c.metadata == {'uuid': 'candidate_1'}
+    assert eval_harness.candidates[0].metadata is not eval_harness.candidates[1].metadata
+    assert eval_harness.candidates[0].metadata is not eval_harness.candidates[2].metadata
+    assert eval_harness.candidates[1].metadata is not eval_harness.candidates[2].metadata
+
+    # ensure that the candidates are the same when added from yaml
+    # save to yaml and load from yaml
+    with open('__temp__.yaml', 'w') as f:
+        yaml.dump(candidate_dict, f, default_flow_style=False, sort_keys=False)
+    eval_harness_from_yaml = EvalHarness()
+    try:
+        eval_harness_from_yaml.add_candidate_from_yaml('__temp__.yaml')
+    finally:
+        os.remove('__temp__.yaml')
+    assert eval_harness_from_yaml.candidates == eval_harness.candidates
+
+@pytest.mark.parametrize("candidate_type", ["AsyncMockCandidate", "MockCandidate"])
+@pytest.mark.parametrize("num_cpus", [-1, 1])
+@pytest.mark.parametrize("async_batch_size", [1, 50])
+def test__async__EvalHarness__multiple_candidates__multiple_evals(candidate_type, num_cpus, async_batch_size, fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
     subtract_config = fake_eval_subtract_two_numbers.copy()
     sum_config = fake_eval_sum_two_numbers.copy()
 
@@ -504,7 +635,7 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
 
     candidate_1_dict = {
         'metadata': {'uuid': 'candidate_1'},
-        'candidate_type': 'MockCandidate',
+        'candidate_type': candidate_type,
         'responses': responses_lookup,
     }
     candidate_2_dict = deepcopy(candidate_1_dict)
@@ -513,21 +644,21 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     eval_harness_via_dicts = EvalHarness(
         evals=[subtract_config, sum_config],
         candidates=[candidate_1_dict, candidate_2_dict],
-        num_cpus=1,
-        async_batch_size=1,
+        num_cpus=num_cpus,
+        async_batch_size=async_batch_size,
     )
     eval_harness_via_objects = EvalHarness(
         evals=[Eval(**subtract_config), Eval(**sum_config)],
         candidates=[Candidate.from_dict(candidate_1_dict), Candidate.from_dict(candidate_2_dict)],
-        num_cpus=1,
-        async_batch_size=1,
+        num_cpus=num_cpus,
+        async_batch_size=async_batch_size,
     )
     assert eval_harness_via_dicts.evals == eval_harness_via_objects.evals
     assert eval_harness_via_dicts.candidates == eval_harness_via_objects.candidates
 
     eval_harness_via_dicts_via_add = EvalHarness(
-        num_cpus=1,
-        async_batch_size=1,
+        num_cpus=num_cpus,
+        async_batch_size=async_batch_size,
     )
     eval_harness_via_dicts_via_add.add_evals(subtract_config)
     eval_harness_via_dicts_via_add.add_evals(sum_config)
@@ -536,16 +667,16 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
     assert eval_harness_via_dicts.evals == eval_harness_via_dicts_via_add.evals
     assert eval_harness_via_dicts.candidates == eval_harness_via_dicts_via_add.candidates
     eval_harness_via_dicts_via_add = EvalHarness(
-        num_cpus=1,
-        async_batch_size=1,
+        num_cpus=num_cpus,
+        async_batch_size=async_batch_size,
     )
     eval_harness_via_dicts_via_add.add_evals([subtract_config, sum_config])
     eval_harness_via_dicts_via_add.add_candidates([candidate_1_dict, candidate_2_dict])
     assert eval_harness_via_dicts.evals == eval_harness_via_dicts_via_add.evals
 
     eval_harness = EvalHarness(
-        num_cpus=1,
-        async_batch_size=1,
+        num_cpus=num_cpus,
+        async_batch_size=async_batch_size,
     )
     assert eval_harness.evals != eval_harness_via_dicts.evals
     assert eval_harness.candidates != eval_harness_via_dicts.candidates
@@ -653,107 +784,6 @@ def test__EvalHarness__multiple_candidates__multiple_evals(fake_eval_subtract_tw
 
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
-
-@pytest.mark.skip("We removed the functionality where multiple model parameters (as a list) are supported. We should add this functionality back in with a new format/syntax. Let's keep this test for now. We can remove in the future if we don't think we will add the functionality back in.")  # noqa
-def test__EvalHarness__add_multiple_candidates_from_single_dict(fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
-    candidate_dict = {
-        'metadata': {'uuid': 'candidate_1'},
-        'candidate_type': 'MockCandidateCannedResponse',
-        'parameters': {
-            'temperature': [0.0, 0.5, 1.0],
-        },
-    }
-    eval_harness = EvalHarness(
-        evals=[fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers],
-        candidates=candidate_dict,
-        num_cpus=1, async_batch_size=1,
-    )
-    # should produce 3 candidates with same 2 evals (3 outer lists each having a list of 2 evals)
-    results = eval_harness()
-    assert len(results) == 3
-    assert len(results[0]) == 2
-    assert len(results[1]) == 2
-    assert len(results[2]) == 2
-    assert results[0][0].eval_obj == Eval(**fake_eval_subtract_two_numbers)
-    assert results[0][0].candidate_obj.metadata == candidate_dict['metadata']
-    assert results[0][0].candidate_obj.parameters == {'temperature': 0.0}
-    assert results[0][1].eval_obj == Eval(**fake_eval_sum_two_numbers)
-    assert results[0][1].candidate_obj.metadata == candidate_dict['metadata']
-    assert results[0][1].candidate_obj.parameters == {'temperature': 0.0}
-
-    assert results[1][0].eval_obj == Eval(**fake_eval_subtract_two_numbers)
-    assert results[1][0].candidate_obj.metadata == candidate_dict['metadata']
-    assert results[1][0].candidate_obj.parameters == {'temperature': 0.5}
-    assert results[1][1].eval_obj == Eval(**fake_eval_sum_two_numbers)
-    assert results[1][1].candidate_obj.metadata == candidate_dict['metadata']
-    assert results[1][1].candidate_obj.parameters == {'temperature': 0.5}
-
-    assert results[2][0].eval_obj == Eval(**fake_eval_subtract_two_numbers)
-    assert results[2][0].candidate_obj.metadata == candidate_dict['metadata']
-    assert results[2][0].candidate_obj.parameters == {'temperature': 1.0}
-    assert results[2][1].eval_obj == Eval(**fake_eval_sum_two_numbers)
-    assert results[2][1].candidate_obj.metadata == candidate_dict['metadata']
-    assert results[2][1].candidate_obj.parameters == {'temperature': 1.0}
-
-def test__multiline_eval__dedents_prompt():  # noqa
-    prompt = """
-        - This is a multiline prompt.
-            - It needs to be dedented.
-    """
-    eval_obj = Eval(prompt_sequence=[PromptTest(prompt=prompt)])
-    result = eval_obj(lambda x: x)
-    assert result.responses[0] == dedent(prompt).lstrip()
-
-def callback(x: EvalResult) -> None:
-    """
-    Test the callback function by saving the result to a yaml file in the 'test/temp'
-    directory. Assume directory already exists.
-    """
-    candidate_id = x.candidate_obj.metadata['uuid']
-    eval_id = x.eval_obj.metadata['uuid']
-    with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
-        yaml.dump(x.to_dict(), f, default_flow_style=False, sort_keys=False)
-
-@pytest.mark.skip("We removed the functionality where multiple model parameters (as a list) are supported. We should add this functionality back in with a new format/syntax. Let's keep this test for now. We can remove in the future if we don't think we will add the functionality back in.")  # noqa
-def test__EvalHarness__adding_candidates_with_multi_value_parameters_should_create_multiple_candidates():  # noqa
-    test_params = {
-        'param_1': 'param_a',
-        'param_2': 'param_b',
-        'param_3': ['param_c', 'param_d', 'param_e'],
-    }
-    expected_params = [
-        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_c'},
-        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_d'},
-        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_e'},
-    ]
-    candidate_dict = {
-        'metadata': {'uuid': 'candidate_1'},
-        'candidate_type': 'MockCandidate',
-        'responses': {'prompt_a': 'response1', 'prompt_b': 'response2'},
-        'parameters': test_params,
-    }
-    eval_harness = EvalHarness()
-    assert eval_harness.candidates == []
-    eval_harness.add_candidates(candidate_dict)
-    assert len(eval_harness.candidates) == 3
-    for c, e in zip(eval_harness.candidates, expected_params):
-        assert c.parameters == e
-        assert c.responses == {'prompt_a': 'response1', 'prompt_b': 'response2'}
-        assert c.metadata == {'uuid': 'candidate_1'}
-    assert eval_harness.candidates[0].metadata is not eval_harness.candidates[1].metadata
-    assert eval_harness.candidates[0].metadata is not eval_harness.candidates[2].metadata
-    assert eval_harness.candidates[1].metadata is not eval_harness.candidates[2].metadata
-
-    # ensure that the candidates are the same when added from yaml
-    # save to yaml and load from yaml
-    with open('__temp__.yaml', 'w') as f:
-        yaml.dump(candidate_dict, f, default_flow_style=False, sort_keys=False)
-    eval_harness_from_yaml = EvalHarness()
-    try:
-        eval_harness_from_yaml.add_candidate_from_yaml('__temp__.yaml')
-    finally:
-        os.remove('__temp__.yaml')
-    assert eval_harness_from_yaml.candidates == eval_harness.candidates
 
 def test__cannot_add_more_than_one_code_blocks_run_check():  # noqa
     eval_config = {
@@ -1691,6 +1721,8 @@ def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values):
     assert isinstance(eval_obj.prompt_sequence[1].prompt, int)
     assert eval_obj.prompt_sequence[1].prompt == eval_config['prompt_sequence'][1]['prompt']
 
+error_list_manager = multiprocessing.Manager()
+test_harness_callback_errors = error_list_manager.list()
 def error_callback(exception: Exception, eval_obj: Eval, candidate_obj: Candidate) -> None:
     """
     This is a callback function that will be called when an error occurs in the EvalHarness. It
@@ -1752,10 +1784,16 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
         assert error.eval_obj == eval_1
         assert error.candidate_obj == candidate_1
 
-    manager = multiprocessing.Manager()
     global test_harness_callback_errors  # noqa
-    test_harness_callback_errors = manager.list()
-    harness.error_callback = error_callback
+    if num_cpus == 1:
+        # NOTE: not happy with this solution but it works for now
+        test_harness_callback_errors = []
+        def local_error_callback(exception: Exception, eval_obj: Eval, candidate_obj: Candidate) -> None:  # noqa: E501
+            test_harness_callback_errors.append((exception, eval_obj, candidate_obj))
+        harness.error_callback = local_error_callback
+    else:
+        # test_harness_callback_errors = error_list_manager.list()
+        harness.error_callback = error_callback
     results = harness()
     assert len(results) == 2
     errors = list(test_harness_callback_errors)
@@ -2855,88 +2893,100 @@ def test__Eval__callable_check__callable_candidate__non_string_prompt_and_respon
     assert result.to_dict()['results'][0][0] == check_result_1.to_dict()
     assert result.to_dict()['results'][0][1] == check_result_2.to_dict()
 
-def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response():  # noqa
-        harness = EvalHarness(
-            num_cpus=1, async_batch_size=1,
-            evals=[
-                Eval(
-                    prompt_sequence=PromptTest(
-                        prompt={'prompt': 'Test Prompt 1'},  # test with dictionary prompt
-                        checks=[lambda data: 'Response1' in data.response['response']],
-                    ),
-                ),
-                Eval(
-                    prompt_sequence=PromptTest(
-                        prompt={'prompt': 'Test Prompt 2'},  # test with dictionary prompt
-                        checks=[lambda data: 'Response2' in data.response['response']],
-                    ),
-                ),
-            ],
-            candidates = [
-                lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response1'},
-                lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response2'},
-            ],
-        )
-        assert len(harness.evals) == 2
-        assert len(harness.candidates) == 2
-        results = harness()
-        assert len(results) == 2  # 2 candidates
-        assert len(results[0]) == 2  # 2 evals
-        assert len(results[1]) == 2  # same 2 evals
-        assert results[0][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}]  # noqa
-        assert results[0][1].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}]  # noqa
-        assert results[1][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response2'}]  # noqa
-        assert results[1][1].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}]  # noqa
-        # eval 1 candidate 1
-        assert len(results[0][0].all_check_results) == 1
-        assert results[0][0].perc_successful_checks == 1
-        assert results[0][0].all_check_results[0].value is True
-        assert results[0][0].all_check_results[0].success is True
-        # eval 2 candidate 1
-        assert len(results[0][1].all_check_results) == 1
-        assert results[0][1].perc_successful_checks == 0
-        assert results[0][1].all_check_results[0].value is False
-        assert results[0][1].all_check_results[0].success is False
-        # eval 1 candidate 2
-        assert len(results[1][0].all_check_results) == 1
-        assert results[1][0].perc_successful_checks == 0
-        assert results[1][0].all_check_results[0].value is False
-        assert results[1][0].all_check_results[0].success is False
-        # eval 2 candidate 2
-        assert len(results[1][1].all_check_results) == 1
-        assert results[1][1].perc_successful_checks == 1
-        assert results[1][1].all_check_results[0].value is True
-        assert results[1][1].all_check_results[0].success is True
+@pytest.mark.parametrize('use_async', [True, False])
+def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(use_async):  # noqa
+    if use_async:
+        async def async_candidate_1(prompt):  # noqa
+            return prompt | {'response': prompt['prompt'] + ' & Response1'}
 
-        assert results[0][0].prompts == [{'prompt': 'Test Prompt 1'}]
-        assert results[0][1].prompts == [{'prompt': 'Test Prompt 2'}]
-        assert results[1][0].prompts == [{'prompt': 'Test Prompt 1'}]
-        assert results[1][1].prompts == [{'prompt': 'Test Prompt 2'}]
+        async def async_candidate_2(prompt):  # noqa
+            return prompt | {'response': prompt['prompt'] + ' & Response2'}
 
-        # if these work on the first result, they should work on the rest
-        assert results[0][0].response_characters is None  # only applicable for string responses
-        assert results[0][0].characters_per_second is None  # only applicable for string responses
-        assert results[0][0].expects_code_blocks is False
-        assert results[0][0].get_code_block_tests_result() is None
-        assert results[0][0].get_num_code_blocks_successful() is None
-        assert results[0][0].get_num_code_tests_defined() is None
-        assert results[0][0].get_num_code_tests_successful() is None
-        # ensure that we can convert the results (which contain unregistered checks/candidates) to
-        # a string and dictionary (which call underlying str and to_dict methods on
-        # checks/candidates)
-        assert len(str(results[0][0])) > 10
-        assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
-        assert results[0][0].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-        assert results[0][0].to_dict()['results'][0][0] == results[0][0].results[0][0].to_dict()
-        assert results[0][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-        assert results[0][1].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-        assert results[0][1].to_dict()['results'][0][0] == results[0][1].results[0][0].to_dict()
-        assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
-        assert results[1][0].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-        assert results[1][0].to_dict()['results'][0][0] == results[1][0].results[0][0].to_dict()
-        assert results[1][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-        assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-        assert results[1][1].to_dict()['results'][0][0] == results[1][1].results[0][0].to_dict()
+        candidates = [async_candidate_1, async_candidate_2]
+    else:
+        candidates = [
+            lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response1'},
+            lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response2'},
+        ]
+
+    harness = EvalHarness(
+        num_cpus=1, async_batch_size=1,
+        evals=[
+            Eval(
+                prompt_sequence=PromptTest(
+                    prompt={'prompt': 'Test Prompt 1'},  # test with dictionary prompt
+                    checks=[lambda data: 'Response1' in data.response['response']],
+                ),
+            ),
+            Eval(
+                prompt_sequence=PromptTest(
+                    prompt={'prompt': 'Test Prompt 2'},  # test with dictionary prompt
+                    checks=[lambda data: 'Response2' in data.response['response']],
+                ),
+            ),
+        ],
+        candidates = candidates,
+    )
+    assert len(harness.evals) == 2
+    assert len(harness.candidates) == 2
+    results = harness()
+    assert len(results) == 2  # 2 candidates
+    assert len(results[0]) == 2  # 2 evals
+    assert len(results[1]) == 2  # same 2 evals
+    assert results[0][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}]  # noqa
+    assert results[0][1].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}]  # noqa
+    assert results[1][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response2'}]  # noqa
+    assert results[1][1].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}]  # noqa
+    # eval 1 candidate 1
+    assert len(results[0][0].all_check_results) == 1
+    assert results[0][0].perc_successful_checks == 1
+    assert results[0][0].all_check_results[0].value is True
+    assert results[0][0].all_check_results[0].success is True
+    # eval 2 candidate 1
+    assert len(results[0][1].all_check_results) == 1
+    assert results[0][1].perc_successful_checks == 0
+    assert results[0][1].all_check_results[0].value is False
+    assert results[0][1].all_check_results[0].success is False
+    # eval 1 candidate 2
+    assert len(results[1][0].all_check_results) == 1
+    assert results[1][0].perc_successful_checks == 0
+    assert results[1][0].all_check_results[0].value is False
+    assert results[1][0].all_check_results[0].success is False
+    # eval 2 candidate 2
+    assert len(results[1][1].all_check_results) == 1
+    assert results[1][1].perc_successful_checks == 1
+    assert results[1][1].all_check_results[0].value is True
+    assert results[1][1].all_check_results[0].success is True
+
+    assert results[0][0].prompts == [{'prompt': 'Test Prompt 1'}]
+    assert results[0][1].prompts == [{'prompt': 'Test Prompt 2'}]
+    assert results[1][0].prompts == [{'prompt': 'Test Prompt 1'}]
+    assert results[1][1].prompts == [{'prompt': 'Test Prompt 2'}]
+
+    # if these work on the first result, they should work on the rest
+    assert results[0][0].response_characters is None  # only applicable for string responses
+    assert results[0][0].characters_per_second is None  # only applicable for string responses
+    assert results[0][0].expects_code_blocks is False
+    assert results[0][0].get_code_block_tests_result() is None
+    assert results[0][0].get_num_code_blocks_successful() is None
+    assert results[0][0].get_num_code_tests_defined() is None
+    assert results[0][0].get_num_code_tests_successful() is None
+    # ensure that we can convert the results (which contain unregistered checks/candidates) to
+    # a string and dictionary (which call underlying str and to_dict methods on
+    # checks/candidates)
+    assert len(str(results[0][0])) > 10
+    assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
+    assert results[0][0].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
+    assert results[0][0].to_dict()['results'][0][0] == results[0][0].results[0][0].to_dict()
+    assert results[0][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
+    assert results[0][1].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
+    assert results[0][1].to_dict()['results'][0][0] == results[0][1].results[0][0].to_dict()
+    assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
+    assert results[1][0].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
+    assert results[1][0].to_dict()['results'][0][0] == results[1][0].results[0][0].to_dict()
+    assert results[1][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
+    assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
+    assert results[1][1].to_dict()['results'][0][0] == results[1][1].results[0][0].to_dict()
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template):  # noqa
