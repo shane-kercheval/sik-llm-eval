@@ -1785,7 +1785,15 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
         assert error.candidate_obj == candidate_1
 
     global test_harness_callback_errors  # noqa
-    harness.error_callback = error_callback
+    if num_cpus == 1:
+        # NOTE: not happy with this solution but it works for now
+        test_harness_callback_errors = []
+        def local_error_callback(exception: Exception, eval_obj: Eval, candidate_obj: Candidate) -> None:  # noqa: E501
+            test_harness_callback_errors.append((exception, eval_obj, candidate_obj))
+        harness.error_callback = local_error_callback
+    else:
+        # test_harness_callback_errors = error_list_manager.list()
+        harness.error_callback = error_callback
     results = harness()
     assert len(results) == 2
     errors = list(test_harness_callback_errors)
