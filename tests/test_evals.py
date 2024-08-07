@@ -776,14 +776,6 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(candidate_type
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
 
-
-
-
-
-
-
-
-
 def test__cannot_add_more_than_one_code_blocks_run_check():  # noqa
     eval_config = {
         'metadata': {'uuid': 'eval_1'},
