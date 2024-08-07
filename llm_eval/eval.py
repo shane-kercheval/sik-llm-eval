@@ -2,6 +2,7 @@
 
 import asyncio
 import glob
+from inspect import iscoroutinefunction
 import os
 import time
 import yaml
@@ -333,6 +334,19 @@ class Eval(DictionaryEqualsMixin):
             # generated before the error occurred)
             for p in self.prompt_sequence:
                 self._responses.append(self._candidate(p.prompt))
+        finally:
+            end = time.time()
+            self._duration = end - start
+
+    async def _async_generate_responses(self, candidate: Candidate | Callable | dict) -> None:
+        """Async version of _generate_responses. See function for details."""
+        self._candidate = self._to_candidate(candidate)
+        start = time.time()
+        self._responses = []
+        try:
+            for p in self.prompt_sequence:
+                response = await self._candidate(p.prompt)
+                self._responses.append(response)
         finally:
             end = time.time()
             self._duration = end - start
@@ -1198,7 +1212,7 @@ class EvalHarness:
             self.add_candidate_from_yaml(file_path)
 
     @staticmethod
-    def _generate_response(candidate: Candidate, eval_obj: Eval) -> tuple[Eval, Exception]:
+    def _generate_eval_responses(candidate: Candidate, eval_obj: Eval) -> tuple[Eval, Exception]:
         """
         Generates the response(s) from the Candidate/LLM for a particular Eval. Ensure that the
         Candidate and Eval objects are cloned before calling this method. This is especially
@@ -1215,17 +1229,43 @@ class EvalHarness:
         return eval_obj, exception
 
     @staticmethod
-    def _async_generate_responses(
+    async def _async_generate_eval_responses(candidate: Candidate, eval_obj: Eval) -> tuple[Eval, Exception]:  # noqa: E501
+        """
+        Generates the response(s) from the Candidate/LLM for a particular Eval where the Candidate
+        is an async function. See additional notes from non-async function
+        `_generate_eval_responses`.
+        """
+        eval_obj = eval_obj.clone()
+        exception = None
+        try:
+            await eval_obj._async_generate_responses(candidate.clone())
+        except Exception as e:
+            exception = e
+        return eval_obj, exception
+
+    @staticmethod
+    def _run_async_evals_batch(candidate: Candidate, evals: list[Eval]) -> list[tuple[Eval, Exception]]:  # noqa: E501
+        """Generates responses asynchronously for candidates with async functions."""
+        async def gather_tasks():  # noqa: ANN202
+            tasks = [
+                EvalHarness._async_generate_eval_responses(candidate, eval_obj)
+                for eval_obj in evals
+            ]
+            return await asyncio.gather(*tasks)
+        return asyncio.run(gather_tasks())
+
+    @staticmethod
+    def _run_eval_batch_asynchronously(
             candidate: Candidate,
             evals: list[Eval],
             ) -> list[tuple[Eval, Exception]]:
-        """Generates responses asynchronously for a list of evaluations."""
+        """Generates responses asynchronously for candidates with non-async functions."""
         from asyncio import new_event_loop, set_event_loop
         loop = new_event_loop()  # Create a new event loop for the child process
         set_event_loop(loop)     # Set the new event loop as the current event loop
         try:
             tasks = [
-                loop.run_in_executor(None, EvalHarness._generate_response, candidate, eval_obj)
+                loop.run_in_executor(None, EvalHarness._generate_eval_responses, candidate, eval_obj)  # noqa: E501
                 for eval_obj in evals
             ]
             return loop.run_until_complete(asyncio.gather(*tasks))
@@ -1233,58 +1273,83 @@ class EvalHarness:
             loop.close()
 
     @staticmethod
+    def _is_async_candidate(candidate: Callable | Candidate) -> bool:
+        if iscoroutinefunction(candidate):
+            return True
+        if hasattr(candidate, '__call__'):
+            return iscoroutinefunction(candidate.__call__)
+        return False
+
+    @staticmethod
+    def _process_response(
+            response_eval: Eval,
+            candidate: Candidate,
+            exception: Exception | None,
+            callback: Callable | None,
+            error_callback: Callable | None,
+            ) -> EvalResult:
+        """
+        When we get an exception when generating a response, we either need to send the error via
+        error callback, or we need to raise an exception and stop the harness.
+
+        If no error occurs, we execute the checks and send the results via regular callback.
+        """
+        if exception:
+            # if there is an error and a callback, then we will call the callback and
+            # return still continue running evals; otherwise, we will raise an exception
+            if error_callback:
+                error_callback(exception, response_eval, candidate)
+                # we still need to generate a result object, set the exception, and have
+                # the CheckResults have a `False` value for the `success` property
+                # We can set the responses to empty strings and run the checks to
+                # accomplish this.
+                # Each eval can have multiple prompts, and there could have been responses
+                # that were generated before the exception was raised. We want to keep the
+                # responses that were generated before the exception was raised and add
+                # empty strings for the remaining responses.
+                missing_responses = len(response_eval.prompt_sequence) - len(response_eval._responses)  # noqa: E501
+                response_eval._responses.extend(['' for _ in range(missing_responses)])
+                eval_result = response_eval._execute_checks()
+                eval_result.harness_exception = exception
+            else:
+                raise ResponseError(exception, response_eval, candidate)
+        else:
+            eval_result = response_eval._execute_checks()
+        if callback:
+            callback(eval_result)
+        return eval_result
+
+
+    @staticmethod
     def _run_evals(
-        candidate: Candidate,
-        evals: list[Eval],
-        async_batch_size: int | None,
-        callback: Callable | None,
-        error_callback: Callable | None,
+            candidate: Candidate,
+            evals: list[Eval],
+            async_batch_size: int | None,
+            callback: Callable | None,
+            error_callback: Callable | None,
         ) -> list[EvalResult]:
-        """
-        Evaluates the Evals against a Candidate. This method is responsible creating the batches
-        of Evals and running them asynchronously. It is also responsible for executing the checks
-        and returning the EvalResults.
-        """
         eval_batch_size = len(evals) if async_batch_size is None else async_batch_size
         assert eval_batch_size >= 1
         results = []
         for i in range(0, len(evals), eval_batch_size):
             eval_batch = evals[i:i + eval_batch_size]
-            if eval_batch_size > 1:
-                responses = EvalHarness._async_generate_responses(candidate, eval_batch)
+            if EvalHarness._is_async_candidate(candidate):
+                # regardless of batch size, if the candidate is async, run asynchronously
+                batch_results = EvalHarness._run_async_evals_batch(candidate, eval_batch)
+            elif eval_batch_size > 1:
+                # if we are running non-async functions in batches, then run asynchronously
+                batch_results = EvalHarness._run_eval_batch_asynchronously(candidate, eval_batch)
             else:
-                responses = [
-                    EvalHarness._generate_response(candidate, eval_obj)
+                # run synchronously
+                batch_results = [
+                    EvalHarness._generate_eval_responses(candidate, eval_obj)
                     for eval_obj in eval_batch
                 ]
-
-            # Run tasks that are heavier on the CPU and shouldn't be async
-            for response_eval, exception in responses:
-                if exception:
-                    # if there is an error and a callback, then we will call the callback and
-                    # return still continue running evals; otherwise, we will raise an exception
-                    if error_callback:
-                        error_callback(exception, response_eval, candidate)
-                        # we still need to generate a result object, set the exception, and have
-                        # the CheckResults have a `False` value for the `success` property
-                        # We can set the responses to empty strings and run the checks to
-                        # accomplish this.
-                        # Each eval can have multiple prompts, and there could have been responses
-                        # that were generated before the exception was raised. We want to keep the
-                        # responses that were generated before the exception was raised and add
-                        # empty strings for the remaining responses.
-                        missing_responses = len(response_eval.prompt_sequence) \
-                            - len(response_eval._responses)
-                        response_eval._responses.extend(['' for _ in range(missing_responses)])
-                        eval_result = response_eval._execute_checks()
-                        eval_result.harness_exception = exception
-                    else:
-                        raise ResponseError(exception, response_eval, candidate)
-                else:
-                    eval_result = response_eval._execute_checks()
+            for response_eval, exception in batch_results:
+                eval_result = EvalHarness._process_response(
+                    response_eval, candidate, exception, callback, error_callback,
+                )
                 results.append(eval_result)
-                if callback:
-                    callback(eval_result)
         return results
 
     def __call__(self, num_samples: int | None = None) -> list[list[EvalResult]]:
@@ -1345,6 +1410,7 @@ class EvalHarness:
         if num_cpus is None or num_cpus < 1:
             num_cpus = os.cpu_count()
         results = []
+        # run each candidate in a separate process/CPU
         for i in range(0, len(self.candidates), num_cpus):
             candidate_batch = self.candidates[i:i + num_cpus]
             with ProcessPoolExecutor(max_workers=num_cpus) as executor:
