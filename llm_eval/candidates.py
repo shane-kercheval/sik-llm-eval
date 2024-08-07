@@ -33,6 +33,7 @@ from llm_eval.utilities.internal_utilities import (
 
 @staticmethod
 def is_async_candidate(candidate: Callable | 'Candidate') -> bool:
+    """Tests if the Candidate object or callable is an async function."""
     if iscoroutinefunction(candidate):
         return True
     if hasattr(candidate, '__call__'):

@@ -5,7 +5,13 @@ import multiprocessing
 import os
 from textwrap import dedent
 import yaml
-from llm_eval.candidates import CallableCandidate, Candidate, CandidateType, ChatModelCandidate, is_async_candidate
+from llm_eval.candidates import (
+    CallableCandidate,
+    Candidate,
+    CandidateType,
+    ChatModelCandidate,
+    is_async_candidate,
+)
 from llm_eval.checks import (
     Check,
     CheckResult,
@@ -263,7 +269,7 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
     def create_mock_llm(responses, use_async):  # noqa
         if use_async:
             response_iter = iter(responses)
-            async def mock_llm(_: str):
+            async def mock_llm(_: str):  # noqa
                 try:
                     return next(response_iter)
                 except StopIteration:
@@ -279,6 +285,10 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
         return mock_llm
 
     mock_llm = create_mock_llm(responses, use_async)
+    if use_async:
+        assert is_async_candidate(mock_llm)
+    else:
+        assert not is_async_candidate(mock_llm)
     eval_result = eval_obj(mock_llm)
     assert eval_result.responses == responses
     assert eval_result.prompts == [test.prompt for test in eval_obj.prompt_sequence]
