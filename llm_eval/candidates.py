@@ -13,7 +13,9 @@ performance (e.g. characters per second).
 Registry systems are used to allow the user to save and load candidates from a dictionary (e.g.
 from an underlying yaml file).
 """
+import asyncio
 import yaml
+from inspect import iscoroutinefunction
 from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
@@ -29,6 +31,13 @@ from llm_eval.utilities.internal_utilities import (
     Registry,
 )
 
+@staticmethod
+def is_async_candidate(candidate: Callable | 'Candidate') -> bool:
+    if iscoroutinefunction(candidate):
+        return True
+    if hasattr(candidate, '__call__'):
+        return iscoroutinefunction(candidate.__call__)
+    return False
 
 class CandidateType(EnumMixin, Enum):
     """Provides a typesafe representation of the built-in types of Candidates."""
@@ -210,6 +219,8 @@ class CallableCandidate(Candidate):
 
     def __call__(self, prompt: str) -> str:
         """Invokes the underlying model with the prompt and returns the response."""
+        if is_async_candidate(self.model):
+            return asyncio.run(self.model(prompt))
         return self.model(prompt)
 
     def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa

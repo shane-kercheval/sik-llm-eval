@@ -2,7 +2,6 @@
 
 import asyncio
 import glob
-from inspect import iscoroutinefunction
 import os
 import time
 import yaml
@@ -12,7 +11,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from textwrap import dedent, indent
 from typing import Any, Callable
-from llm_eval.candidates import CallableCandidate, Candidate
+from llm_eval.candidates import CallableCandidate, Candidate, is_async_candidate
 from llm_eval.checks import (
     Check,
     CheckResult,
@@ -1273,14 +1272,6 @@ class EvalHarness:
             loop.close()
 
     @staticmethod
-    def _is_async_candidate(candidate: Callable | Candidate) -> bool:
-        if iscoroutinefunction(candidate):
-            return True
-        if hasattr(candidate, '__call__'):
-            return iscoroutinefunction(candidate.__call__)
-        return False
-
-    @staticmethod
     def _process_response(
             response_eval: Eval,
             candidate: Candidate,
@@ -1333,7 +1324,7 @@ class EvalHarness:
         results = []
         for i in range(0, len(evals), eval_batch_size):
             eval_batch = evals[i:i + eval_batch_size]
-            if EvalHarness._is_async_candidate(candidate):
+            if is_async_candidate(candidate):
                 # regardless of batch size, if the candidate is async, run asynchronously
                 batch_results = EvalHarness._run_async_evals_batch(candidate, eval_batch)
             elif eval_batch_size > 1:
