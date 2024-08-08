@@ -1228,7 +1228,9 @@ class EvalHarness:
         return eval_obj, exception
 
     @staticmethod
-    async def _async_generate_eval_responses(candidate: Candidate, eval_obj: Eval) -> tuple[Eval, Exception]:  # noqa: E501
+    async def _async_generate_eval_responses(
+        candidate: Candidate,
+        eval_obj: Eval) -> tuple[Eval, Exception]:
         """
         Generates the response(s) from the Candidate/LLM for a particular Eval where the Candidate
         is an async function. See additional notes from non-async function
@@ -1243,7 +1245,9 @@ class EvalHarness:
         return eval_obj, exception
 
     @staticmethod
-    async def _run_async_evals_batch(candidate: Candidate, evals: list[Eval]) -> list[tuple[Eval, Exception]]:
+    async def _run_async_evals_batch(
+        candidate: Candidate,
+        evals: list[Eval]) -> list[tuple[Eval, Exception]]:
         """Generates responses asynchronously for candidates with async functions."""
         tasks = [
             EvalHarness._async_generate_eval_responses(candidate, eval_obj)
@@ -1252,13 +1256,17 @@ class EvalHarness:
         return await asyncio.gather(*tasks)
 
     @staticmethod
-    def _run_eval_batch_asynchronously(candidate: Candidate, evals: list[Eval]) -> list[tuple[Eval, Exception]]:
+    def _run_eval_batch_asynchronously(
+        candidate: Candidate,
+        evals: list[Eval]) -> list[tuple[Eval, Exception]]:
         """Generates responses asynchronously for candidates with non-async functions."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             tasks = [
-                loop.run_in_executor(None, EvalHarness._generate_eval_responses, candidate, eval_obj)
+                loop.run_in_executor(
+                    None,EvalHarness._generate_eval_responses,candidate,eval_obj,
+                )
                 for eval_obj in evals
             ]
             return loop.run_until_complete(asyncio.gather(*tasks))
@@ -1327,7 +1335,8 @@ class EvalHarness:
             eval_batch = evals[i:i + eval_batch_size]
             if is_async_candidate(candidate):
                 # regardless of batch size, if the candidate is async, run asynchronously
-                batch_results = loop.run_until_complete(EvalHarness._run_async_evals_batch(candidate, eval_batch))
+                batch_results = loop.\
+                    run_until_complete(EvalHarness._run_async_evals_batch(candidate, eval_batch))
             elif eval_batch_size > 1:
                 # if we are running non-async functions in batches, then run asynchronously
                 batch_results = EvalHarness._run_eval_batch_asynchronously(candidate, eval_batch)
