@@ -2,16 +2,25 @@
 Defines classes for different types of built-in Candidates and a corresponding registry system for
 custom Candidates.
 
-A Candidate encapsulates the underlying LLM and corresponding client the user is interested in
-evaluating the prompts (Evals) against. Examples of candidates are ChatGPT 4.0 (LLM & client/API
-are synonymous), Llama-2-7b-Chat (LLM) running on Hugging Face Endpoints with Nvidia 10G (client),
-Llama-2-7b-Chat Q6_K.gguf (LLM) running locally on LM Studio (client). The latter two are examples
-of the same underlying model running on different hardware. They are likely to have very similar
-quality of responses (but this is also determined by the quantization) but may have very different
-performance (e.g. characters per second).
+The purpose of a Candidate is to provide a standard interface for the the underlying LLM and client
+(e.g. ChatpGPT via OpenAI() client, Lamma3 via LM Studio, etc.) so that the user can define evals
+for any type of LLM/agent/etc and client.
 
-Registry systems are used to allow the user to save and load candidates from a dictionary (e.g.
-from an underlying yaml file).
+A Candidate is a callable object that takes a prompt and returns a response. The prompt and
+response can be any type of object that can be serialized/de-serialized (e.g. string, dictionary,
+list, etc.).
+
+Candidates can be created from a dictionary using the `Candidate.from_dict(...)` method. The
+dictionary must have a `candidate_type` field that matches the type name of the registered
+Candidate class. This allows the user to, for example, have a directory of yaml files that define
+different Candidates and load them in bulk to use in the EvalHarness (evals.py). The EvalHarness
+will instantiate the correct (registered) Candidate class based on the `candidate_type` field in
+the yaml file.
+
+Candidates can also be passed to the EvalHarness (or Eval object) directory as an Candidate
+(subclass) object or simply as a function. The benefit of using a Candidate object is that it can
+can be serialized into a dictionary and the information can be saved in the EvalResult object
+(evals.py).
 """
 import asyncio
 import yaml

@@ -940,16 +940,10 @@ class EvalHarness:
     An EvalHarness provides a interface for evaluating multiple Evals against multiple
     Candidates/LLMs.
 
-    Candidates must implement the clone() function if they contain state.
-    TODO add more detail and cleanup.
-    This is necessary because we need a consistant way of cloning the Candidate for each Eval so
-    that we can run multiple Evals against the same Candidate without affecting the state of the
-    Candidate.
-    TODO.
-
-    clone the Candidate for each Eval so that we can run each Eval against a unique Candidate in
-    memory (i.e. if the Candidate maintains state/history between prompts, we don't want to reuse
-    the same candidate for each eval).
+    Candidates must implement the clone() function if they contain state. This is necessary because
+    we need a consistant way of cloning the Candidate for each Eval so that we can run multiple
+    Evals against the same Candidate without affecting the state of the Candidate. Stateless
+    candidates do not need to implement the clone() function.
 
     Candidates must be registered via Candidate.register if they are passed in as dictionaries.
 
@@ -994,9 +988,10 @@ class EvalHarness:
             candidates: list[Candidate | Callable | dict] | Candidate | dict | None = None,
             num_cpus: int | None = None,
             async_batch_size: int | None = 50,
-            callback: Callable | None = None,
-            error_callback: Callable | None = None,
-            num_samples: int = 1) -> None:
+            num_samples: int = 1,
+            callback: Callable[[EvalResult], None] | None = None,
+            error_callback: Callable[[Exception, Eval, Candidate], None] | None = None,
+            ) -> None:
         """
         Initializes the EvalHarness. The user can either pass in Eval and Candidate objects in the
         constructor or call
@@ -1228,7 +1223,9 @@ class EvalHarness:
         return eval_obj, exception
 
     @staticmethod
-    async def _async_generate_eval_responses(candidate: Candidate, eval_obj: Eval) -> tuple[Eval, Exception]:  # noqa: E501
+    async def _async_generate_eval_responses(
+        candidate: Candidate,
+        eval_obj: Eval) -> tuple[Eval, Exception]:
         """
         Generates the response(s) from the Candidate/LLM for a particular Eval where the Candidate
         is an async function. See additional notes from non-async function
@@ -1243,28 +1240,28 @@ class EvalHarness:
         return eval_obj, exception
 
     @staticmethod
-    def _run_async_evals_batch(candidate: Candidate, evals: list[Eval]) -> list[tuple[Eval, Exception]]:  # noqa: E501
+    async def _run_async_evals_batch(
+        candidate: Candidate,
+        evals: list[Eval]) -> list[tuple[Eval, Exception]]:
         """Generates responses asynchronously for candidates with async functions."""
-        async def gather_tasks():  # noqa: ANN202
-            tasks = [
-                EvalHarness._async_generate_eval_responses(candidate, eval_obj)
-                for eval_obj in evals
-            ]
-            return await asyncio.gather(*tasks)
-        return asyncio.run(gather_tasks())
+        tasks = [
+            EvalHarness._async_generate_eval_responses(candidate, eval_obj)
+            for eval_obj in evals
+        ]
+        return await asyncio.gather(*tasks)
 
     @staticmethod
     def _run_eval_batch_asynchronously(
-            candidate: Candidate,
-            evals: list[Eval],
-            ) -> list[tuple[Eval, Exception]]:
+        candidate: Candidate,
+        evals: list[Eval]) -> list[tuple[Eval, Exception]]:
         """Generates responses asynchronously for candidates with non-async functions."""
-        from asyncio import new_event_loop, set_event_loop
-        loop = new_event_loop()  # Create a new event loop for the child process
-        set_event_loop(loop)     # Set the new event loop as the current event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             tasks = [
-                loop.run_in_executor(None, EvalHarness._generate_eval_responses, candidate, eval_obj)  # noqa: E501
+                loop.run_in_executor(
+                    None,EvalHarness._generate_eval_responses,candidate,eval_obj,
+                )
                 for eval_obj in evals
             ]
             return loop.run_until_complete(asyncio.gather(*tasks))
@@ -1276,8 +1273,8 @@ class EvalHarness:
             response_eval: Eval,
             candidate: Candidate,
             exception: Exception | None,
-            callback: Callable | None,
-            error_callback: Callable | None,
+            callback: Callable[[EvalResult], None] | None,
+            error_callback: Callable[[Exception, Eval, Candidate], None] | None,
             ) -> EvalResult:
         """
         When we get an exception when generating a response, we either need to send the error via
@@ -1316,17 +1313,25 @@ class EvalHarness:
             candidate: Candidate,
             evals: list[Eval],
             async_batch_size: int | None,
-            callback: Callable | None,
-            error_callback: Callable | None,
+            callback: Callable[[EvalResult], None] | None,
+            error_callback: Callable[[Exception, Eval, Candidate], None] | None,
         ) -> list[EvalResult]:
         eval_batch_size = len(evals) if async_batch_size is None else async_batch_size
         assert eval_batch_size >= 1
         results = []
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
         for i in range(0, len(evals), eval_batch_size):
             eval_batch = evals[i:i + eval_batch_size]
             if is_async_candidate(candidate):
                 # regardless of batch size, if the candidate is async, run asynchronously
-                batch_results = EvalHarness._run_async_evals_batch(candidate, eval_batch)
+                batch_results = loop.\
+                    run_until_complete(EvalHarness._run_async_evals_batch(candidate, eval_batch))
             elif eval_batch_size > 1:
                 # if we are running non-async functions in batches, then run asynchronously
                 batch_results = EvalHarness._run_eval_batch_asynchronously(candidate, eval_batch)

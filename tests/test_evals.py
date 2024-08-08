@@ -2927,26 +2927,28 @@ def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and
         ],
         candidates = candidates,
     )
+    num_samples = 100
     assert len(harness.evals) == 2
     assert len(harness.candidates) == 2
-    results = harness()
+    results = harness(num_samples=num_samples)
     assert len(results) == 2  # 2 candidates
-    assert len(results[0]) == 2  # 2 evals
-    assert len(results[1]) == 2  # same 2 evals
+    assert len(results[0]) == 2 * num_samples  # 2 evals
+    assert len(results[1]) == 2 * num_samples # same 2 evals
     assert results[0][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}]  # noqa
-    assert results[0][1].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}]  # noqa
+    assert results[0][num_samples-1].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}]  # noqa
+    assert results[0][num_samples].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}]  # noqa
     assert results[1][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response2'}]  # noqa
-    assert results[1][1].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}]  # noqa
+    assert results[1][num_samples].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}]  # noqa
     # eval 1 candidate 1
     assert len(results[0][0].all_check_results) == 1
     assert results[0][0].perc_successful_checks == 1
     assert results[0][0].all_check_results[0].value is True
     assert results[0][0].all_check_results[0].success is True
     # eval 2 candidate 1
-    assert len(results[0][1].all_check_results) == 1
-    assert results[0][1].perc_successful_checks == 0
-    assert results[0][1].all_check_results[0].value is False
-    assert results[0][1].all_check_results[0].success is False
+    assert len(results[0][num_samples].all_check_results) == 1
+    assert results[0][num_samples].perc_successful_checks == 0
+    assert results[0][num_samples].all_check_results[0].value is False
+    assert results[0][num_samples].all_check_results[0].success is False
     # eval 1 candidate 2
     assert len(results[1][0].all_check_results) == 1
     assert results[1][0].perc_successful_checks == 0
@@ -2954,14 +2956,14 @@ def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and
     assert results[1][0].all_check_results[0].success is False
     # eval 2 candidate 2
     assert len(results[1][1].all_check_results) == 1
-    assert results[1][1].perc_successful_checks == 1
-    assert results[1][1].all_check_results[0].value is True
-    assert results[1][1].all_check_results[0].success is True
+    assert results[1][num_samples].perc_successful_checks == 1
+    assert results[1][num_samples].all_check_results[0].value is True
+    assert results[1][num_samples].all_check_results[0].success is True
 
     assert results[0][0].prompts == [{'prompt': 'Test Prompt 1'}]
-    assert results[0][1].prompts == [{'prompt': 'Test Prompt 2'}]
+    assert results[0][num_samples].prompts == [{'prompt': 'Test Prompt 2'}]
     assert results[1][0].prompts == [{'prompt': 'Test Prompt 1'}]
-    assert results[1][1].prompts == [{'prompt': 'Test Prompt 2'}]
+    assert results[1][num_samples].prompts == [{'prompt': 'Test Prompt 2'}]
 
     # if these work on the first result, they should work on the rest
     assert results[0][0].response_characters is None  # only applicable for string responses
@@ -2978,15 +2980,15 @@ def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and
     assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
     assert results[0][0].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
     assert results[0][0].to_dict()['results'][0][0] == results[0][0].results[0][0].to_dict()
-    assert results[0][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-    assert results[0][1].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-    assert results[0][1].to_dict()['results'][0][0] == results[0][1].results[0][0].to_dict()
+    assert results[0][num_samples].to_dict()['eval_obj'] == harness.evals[1].to_dict()
+    assert results[0][num_samples].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
+    assert results[0][num_samples].to_dict()['results'][0][0] == results[0][num_samples].results[0][0].to_dict()  # noqa: E501
     assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
     assert results[1][0].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
     assert results[1][0].to_dict()['results'][0][0] == results[1][0].results[0][0].to_dict()
-    assert results[1][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-    assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-    assert results[1][1].to_dict()['results'][0][0] == results[1][1].results[0][0].to_dict()
+    assert results[1][num_samples].to_dict()['eval_obj'] == harness.evals[1].to_dict()
+    assert results[1][num_samples].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
+    assert results[1][num_samples].to_dict()['results'][0][0] == results[1][num_samples].results[0][0].to_dict()  # noqa: E501
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template):  # noqa
