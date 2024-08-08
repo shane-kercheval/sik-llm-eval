@@ -940,16 +940,10 @@ class EvalHarness:
     An EvalHarness provides a interface for evaluating multiple Evals against multiple
     Candidates/LLMs.
 
-    Candidates must implement the clone() function if they contain state.
-    TODO add more detail and cleanup.
-    This is necessary because we need a consistant way of cloning the Candidate for each Eval so
-    that we can run multiple Evals against the same Candidate without affecting the state of the
-    Candidate.
-    TODO.
-
-    clone the Candidate for each Eval so that we can run each Eval against a unique Candidate in
-    memory (i.e. if the Candidate maintains state/history between prompts, we don't want to reuse
-    the same candidate for each eval).
+    Candidates must implement the clone() function if they contain state. This is necessary because
+    we need a consistant way of cloning the Candidate for each Eval so that we can run multiple
+    Evals against the same Candidate without affecting the state of the Candidate. Stateless
+    candidates do not need to implement the clone() function.
 
     Candidates must be registered via Candidate.register if they are passed in as dictionaries.
 
@@ -994,9 +988,10 @@ class EvalHarness:
             candidates: list[Candidate | Callable | dict] | Candidate | dict | None = None,
             num_cpus: int | None = None,
             async_batch_size: int | None = 50,
-            callback: Callable | None = None,
-            error_callback: Callable | None = None,
-            num_samples: int = 1) -> None:
+            num_samples: int = 1,
+            callback: Callable[[EvalResult], None] | None = None,
+            error_callback: Callable[[Exception, Eval, Candidate], None] | None = None,
+            ) -> None:
         """
         Initializes the EvalHarness. The user can either pass in Eval and Candidate objects in the
         constructor or call
@@ -1278,8 +1273,8 @@ class EvalHarness:
             response_eval: Eval,
             candidate: Candidate,
             exception: Exception | None,
-            callback: Callable | None,
-            error_callback: Callable | None,
+            callback: Callable[[EvalResult], None] | None,
+            error_callback: Callable[[Exception, Eval, Candidate], None] | None,
             ) -> EvalResult:
         """
         When we get an exception when generating a response, we either need to send the error via
@@ -1318,8 +1313,8 @@ class EvalHarness:
             candidate: Candidate,
             evals: list[Eval],
             async_batch_size: int | None,
-            callback: Callable | None,
-            error_callback: Callable | None,
+            callback: Callable[[EvalResult], None] | None,
+            error_callback: Callable[[Exception, Eval, Candidate], None] | None,
         ) -> list[EvalResult]:
         eval_batch_size = len(evals) if async_batch_size is None else async_batch_size
         assert eval_batch_size >= 1
