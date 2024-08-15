@@ -1,21 +1,11 @@
 metadata:
   name: Fibonacci Sequence
-prompt_sequence:
-  - prompt: Create a python function called `fib` that takes an integer `n` and returns the `n`th number in the Fibonacci sequence. Use type hints and docstrings.
-    checks:
-      - check_type: REGEX
-        pattern: "def fib\\([a-zA-Z_]+\\: int\\) -> int\\:"
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
-  - prompt: Create a set of assertion statements that test the function.
-    checks:
-      - check_type: CONTAINS
-        value: assert fib(
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
-      - check_type: PYTHON_CODE_BLOCK_TESTS
-        code_setup: |
-          import re
-        code_tests:
-          - |
-            def verify_mask_emails_with_no_email_returns_original_string(code_blocks: list[str]) -> bool:
-                value = 'This is a string with no email addresses'
-                return mask_emails(value) == value
+input:
+  - role: system
+    content: You are a helpful assistant.
+  - role: user
+    content: Create a python function called `fib` that takes an integer `n` and returns the `n`th number in the Fibonacci sequence. Use type hints and docstrings.
+checks:
+  - check_type: REGEX
+    pattern: "def fib\\([a-zA-Z_]+\\: int\\) -> int\\:"
+  - check_type: PYTHON_CODE_BLOCKS_PRESENT

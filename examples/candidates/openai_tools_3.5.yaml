@@ -3,7 +3,6 @@ metadata:
 candidate_type: OPENAI_TOOLS
 parameters:
   model_name: gpt-3.5-turbo-0125
-  system_message: You are a helpful AI assistant.
   temperature: 0.8
   max_tokens: 4096
   seed: 42

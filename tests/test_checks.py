@@ -339,11 +339,11 @@ def test__Check__value_extractor__get_value_from_path():  # noqa
     expected_prompt = 'the prompt'
     expected_code_blocks = ['print("hello world")']
     response_data = ResponseData(
-        prompt=expected_prompt,
+        input=expected_prompt,
         response=expected_response,
         code_blocks=expected_code_blocks,
     )
-    value = Check._get_value_from_path(value_path='prompt', data=response_data)
+    value = Check._get_value_from_path(value_path='input', data=response_data)
     assert value == expected_prompt
 
     value = Check._get_value_from_path(value_path='response', data=response_data)
@@ -395,12 +395,12 @@ def test__Check__value_extractor():  # noqa
         assert result.metadata == {}
         # should fail because default is still looking in response but we are using prompt
         # so response will default to None and check will fail
-        result = check(ResponseData(prompt='foo'))
+        result = check(ResponseData(input='foo'))
         assert not result.value
         assert not result.success
         assert result.metadata == {}
 
-        check = FakeCheck(value_extractor='prompt')
+        check = FakeCheck(value_extractor='input')
         # should fail because we are extracting prompt but prompt is None
         result = check(ResponseData(response='foo'))
         assert not result.value
@@ -408,15 +408,15 @@ def test__Check__value_extractor():  # noqa
         # now, because we are using prompt, which is not the default value_extractor,
         # metadata will be populated with the value_extractor and value_extracted
         assert result.metadata == {
-            'value_extractor': 'prompt',
+            'value_extractor': 'input',
             'value_extracted': None,  # None because prompt is None
         }
         # should be successful because we are extracting prompt and 'foo' is not None
-        result = check(ResponseData(prompt='foo'))
+        result = check(ResponseData(input='foo'))
         assert result.value
         assert result.success
         assert result.metadata == {
-            'value_extractor': 'prompt',
+            'value_extractor': 'input',
             'value_extracted': 'foo',  # 'foo' is the value of prompt
         }
     finally:
@@ -435,25 +435,25 @@ def test__Check__value_extractor__override():  # noqa
         def _call(self, data: ResponseData) -> bool:
             assert isinstance(data, ResponseData)
             return PassFailResult(
-                value=data.response is not None and data.prompt is not None,
+                value=data.response is not None and data.input is not None,
                 metadata=self.metadata,
             )
     try:
         check = FakeCheck()
-        result = check(ResponseData(prompt='foo', response='bar'))
+        result = check(ResponseData(input='foo', response='bar'))
         assert result.value
         assert result.success
         assert result.metadata == {
             'value_extractor': '',
-            'value_extracted': ResponseData(prompt='foo', response='bar'),
+            'value_extracted': ResponseData(input='foo', response='bar'),
         }
 
-        result = check(ResponseData(prompt='foo'))
+        result = check(ResponseData(input='foo'))
         assert not result.value
         assert not result.success
         assert result.metadata == {
             'value_extractor': '',
-            'value_extracted': ResponseData(prompt='foo'),
+            'value_extracted': ResponseData(input='foo'),
         }
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
@@ -2407,7 +2407,7 @@ def test__LLMCheck__openai(openai_candidate_template):  # noqa
         evaluator=candidate,
     )
     result = check(ResponseData(
-        prompt="What is the secret number?",
+        input="What is the secret number?",
         response="The secret number is 42.",
     ))
     assert isinstance(result, CheckResult)
@@ -2423,7 +2423,7 @@ def test__LLMCheck__openai(openai_candidate_template):  # noqa
         success=lambda x: '42' in x,
     )
     result = check(ResponseData(
-        prompt="What is the secret number?",
+        input="What is the secret number?",
         response="The secret number is 42.",
     ))
     assert isinstance(result, CheckResult)

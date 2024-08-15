@@ -5,6 +5,7 @@ from collections.abc import Callable
 import re
 from time import sleep
 from typing import Any
+from pydantic import BaseModel
 import pytest
 import requests
 import random
@@ -14,170 +15,165 @@ import numpy as np
 from dotenv import load_dotenv
 from unittest.mock import MagicMock
 from llm_eval.candidates import Candidate
-from llm_eval.llms.message_formatters import LlamaMessageFormatter
-from llm_eval.llms.base import (
-    ChatModel,
-    Document,
-    EmbeddingModel,
-    EmbeddingRecord,
-    ExchangeRecord,
-    MemoryManager,
-    PromptModel,
-)
 
 load_dotenv()
 
 
-class MockPromptModel(PromptModel):
-    """Used for unit tests to mock the behavior of an LLM."""
+@pytest.fixture()
+def openai_model_name() -> str:
+    """Returns the name of the OpenAI model."""
+    return "gpt-4o-mini"
 
-    def __init__(
-            self,
-            token_calculator: Callable[[str | list[str] | object], int],
-            cost_calculator: Callable[[int, int], float] | None = None,
-            return_prompt: str | None = None) -> None:
-        """
-        Used to test base classes.
+# class MockPromptModel(PromptModel):
+#     """Used for unit tests to mock the behavior of an LLM."""
 
-        Args:
-            token_calculator:
-                custom token counter
-            cost_calculator:
-                callable to calculate costs
-            return_prompt:
-                if not None, prepends the string to the prompt and returns it as a response
-        """
-        super().__init__(
-            token_calculator=token_calculator,
-            cost_calculator=cost_calculator,
-        )
-        self.return_prompt = return_prompt
+#     def __init__(
+#             self,
+#             token_calculator: Callable[[str | list[str] | object], int],
+#             cost_calculator: Callable[[int, int], float] | None = None,
+#             return_prompt: str | None = None) -> None:
+#         """
+#         Used to test base classes.
 
-    def _run(self, prompt: str) -> tuple[str | list[str] | object, dict]:
-        if self.return_prompt:
-            response = self.return_prompt + prompt
-        else:
-            fake = Faker()
-            response = ' '.join([fake.word() for _ in range(random.randint(10, 100))])
+#         Args:
+#             token_calculator:
+#                 custom token counter
+#             cost_calculator:
+#                 callable to calculate costs
+#             return_prompt:
+#                 if not None, prepends the string to the prompt and returns it as a response
+#         """
+#         super().__init__(
+#             token_calculator=token_calculator,
+#             cost_calculator=cost_calculator,
+#         )
+#         self.return_prompt = return_prompt
 
-        return response, {'return_prompt': self.return_prompt}
+#     def _run(self, prompt: str) -> tuple[str | list[str] | object, dict]:
+#         if self.return_prompt:
+#             response = self.return_prompt + prompt
+#         else:
+#             fake = Faker()
+#             response = ' '.join([fake.word() for _ in range(random.randint(10, 100))])
 
-
-class MockCostMemoryManager(MemoryManager):
-    """
-    Used to mock the behavior of an MemoryManager that has associated costs e.g. summariziation via
-    LLM.
-    """
-
-    def __init__(self, cost: float | None) -> None:
-        self._history = []
-        self.cost = cost
-
-    def history(self):  # noqa
-        return self._history
-
-    def __call__(
-            self,
-            system_message: str,
-            history: list[ExchangeRecord],
-            prompt: str,
-            **kwargs: dict[str, Any]) -> str | list[str] | list[dict[str, str]]:
-        """Mocks a call to a memory memanager."""
-        message_formatter = kwargs['message_formatter']
-        message = message_formatter(system_message, None, None)
-        for record in history:
-            record = record.model_copy()  # noqa
-            message += message_formatter(None, [record], None)
-        message += message_formatter(None, None, prompt)
-        cost = self.cost
-        if cost:
-            cost *= (len(prompt) + len(message))
-        self._history.append(ExchangeRecord(
-            prompt=prompt,
-            response=message,
-            metadata={'model_name': 'memory'},
-            input_tokens=len(prompt),
-            response_tokens=len(message),
-            total_tokens=len(prompt) + len(message),
-            cost=cost,
-        ))
-        sleep(0.1)
-        return message
+#         return response, {'return_prompt': self.return_prompt}
 
 
-class MockChatModel(ChatModel):
-    """Used for unit tests to mock the behavior of an LLM."""
+# class MockCostMemoryManager(MemoryManager):
+#     """
+#     Used to mock the behavior of an MemoryManager that has associated costs e.g. summariziation via
+#     LLM.
+#     """
 
-    def __init__(  # noqa: D417
-            self,
-            token_calculator: Callable[[str | list[str] | object], int],
-            system_message: str = "This is a system message.",
-            cost_calculator: Callable[[int, int], float] | None = None,
-            return_prompt: str | None = None,
-            message_formatter: Callable[[str, list[ExchangeRecord]], str] | None = None,
-            message_history: list[ExchangeRecord | dict | tuple] | None = None,
-            memory_manager: MemoryManager | None = None) -> None:
-        """
-        Used to test base classes.
+#     def __init__(self, cost: float | None) -> None:
+#         self._history = []
+#         self.cost = cost
 
-        Args:
-            token_calculator:
-                custom token counter to calculate total_tokens
-            cost_calculator:
-                callable to calculate costs
-            return_prompt:
-                if not None, prepends the string to the prompt and returns it as a response
-            message_formatter:
-                custom message formatter to format messages
-            memory_manager:
-                custom memory manager to manage memory
-        """
-        if message_formatter is None:
-            message_formatter = LlamaMessageFormatter()
-        super().__init__(
-            system_message=system_message,
-            message_formatter=message_formatter,
-            token_calculator=token_calculator,
-            cost_calculator=cost_calculator,
-            memory_manager=memory_manager,
-            message_history=message_history,
-        )
-        self.return_prompt = return_prompt
+#     def history(self):  # noqa
+#         return self._history
 
-    def _run(self, prompt: str) -> ExchangeRecord:
-        if self.return_prompt:
-            response = self.return_prompt + prompt
-        else:
-            fake = Faker()
-            response = ' '.join([fake.word() for _ in range(random.randint(10, 100))])
-        return response, {'model_name': 'mock'}
+#     def __call__(
+#             self,
+#             system_message: str,
+#             history: list[ExchangeRecord],
+#             prompt: str,
+#             **kwargs: dict[str, Any]) -> str | list[str] | list[dict[str, str]]:
+#         """Mocks a call to a memory memanager."""
+#         message_formatter = kwargs['message_formatter']
+#         message = message_formatter(system_message, None, None)
+#         for record in history:
+#             record = record.model_copy()  # noqa
+#             message += message_formatter(None, [record], None)
+#         message += message_formatter(None, None, prompt)
+#         cost = self.cost
+#         if cost:
+#             cost *= (len(prompt) + len(message))
+#         self._history.append(ExchangeRecord(
+#             prompt=prompt,
+#             response=message,
+#             metadata={'model_name': 'memory'},
+#             input_tokens=len(prompt),
+#             response_tokens=len(message),
+#             total_tokens=len(prompt) + len(message),
+#             cost=cost,
+#         ))
+#         sleep(0.1)
+#         return message
 
 
-class MockRandomEmbeddings(EmbeddingModel):
-    """Used for unit tests to mock the behavior of an LLM."""
+# class MockChatModel(ChatModel):
+#     """Used for unit tests to mock the behavior of an LLM."""
 
-    def __init__(
-            self,
-            token_counter: Callable[[str], int],
-            cost_per_token: float | None = None) -> None:
-        super().__init__()
-        self.token_counter = token_counter
-        self.cost_per_token = cost_per_token
-        self.lookup = []
+#     def __init__(  # noqa: D417
+#             self,
+#             token_calculator: Callable[[str | list[str] | object], int],
+#             system_message: str = "This is a system message.",
+#             cost_calculator: Callable[[int, int], float] | None = None,
+#             return_prompt: str | None = None,
+#             message_formatter: Callable[[str, list[ExchangeRecord]], str] | None = None,
+#             message_history: list[ExchangeRecord | dict | tuple] | None = None,
+#             memory_manager: MemoryManager | None = None) -> None:
+#         """
+#         Used to test base classes.
 
-    def _run(self, docs: list[Document]) -> tuple[list[Document], EmbeddingRecord]:
-        rng = np.random.default_rng()
-        embeddings = [rng.uniform(low=-2, high=2, size=(50)).tolist() for _ in docs]
-        total_tokens = sum(self.token_counter(x.content) for x in docs) \
-            if self.token_counter else None
-        cost = total_tokens * self.cost_per_token if self.cost_per_token else None
-        self.lookup += embeddings
-        len(self.lookup)
-        len(embeddings)
-        return embeddings, EmbeddingRecord(
-            total_tokens=total_tokens,
-            cost=cost,
-        )
+#         Args:
+#             token_calculator:
+#                 custom token counter to calculate total_tokens
+#             cost_calculator:
+#                 callable to calculate costs
+#             return_prompt:
+#                 if not None, prepends the string to the prompt and returns it as a response
+#             message_formatter:
+#                 custom message formatter to format messages
+#             memory_manager:
+#                 custom memory manager to manage memory
+#         """
+#         if message_formatter is None:
+#             message_formatter = LlamaMessageFormatter()
+#         super().__init__(
+#             system_message=system_message,
+#             message_formatter=message_formatter,
+#             token_calculator=token_calculator,
+#             cost_calculator=cost_calculator,
+#             memory_manager=memory_manager,
+#             message_history=message_history,
+#         )
+#         self.return_prompt = return_prompt
+
+#     def _run(self, prompt: str) -> ExchangeRecord:
+#         if self.return_prompt:
+#             response = self.return_prompt + prompt
+#         else:
+#             fake = Faker()
+#             response = ' '.join([fake.word() for _ in range(random.randint(10, 100))])
+#         return response, {'model_name': 'mock'}
+
+
+# class MockRandomEmbeddings(EmbeddingModel):
+#     """Used for unit tests to mock the behavior of an LLM."""
+
+#     def __init__(
+#             self,
+#             token_counter: Callable[[str], int],
+#             cost_per_token: float | None = None) -> None:
+#         super().__init__()
+#         self.token_counter = token_counter
+#         self.cost_per_token = cost_per_token
+#         self.lookup = []
+
+#     def _run(self, docs: list[Document]) -> tuple[list[Document], EmbeddingRecord]:
+#         rng = np.random.default_rng()
+#         embeddings = [rng.uniform(low=-2, high=2, size=(50)).tolist() for _ in docs]
+#         total_tokens = sum(self.token_counter(x.content) for x in docs) \
+#             if self.token_counter else None
+#         cost = total_tokens * self.cost_per_token if self.cost_per_token else None
+#         self.lookup += embeddings
+#         len(self.lookup)
+#         len(embeddings)
+#         return embeddings, EmbeddingRecord(
+#             total_tokens=total_tokens,
+#             cost=cost,
+#         )
 
 @Candidate.register('MockCandidate')
 class MockCandidate(Candidate):
@@ -312,47 +308,47 @@ class MockCandidateCannedResponse(Candidate):  # noqa
         return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
-@pytest.fixture()
-def fake_docs_abcd() -> list[Document]:
-    """Meant to be used MockABCDEmbeddings model."""
-    return [
-        Document(content="Doc A", metadata={'id': 0}),
-        Document(content="Doc B", metadata={'id': 1}),
-        Document(content="Doc C", metadata={'id': 3}),
-        Document(content="Doc D", metadata={'id': 4}),
-    ]
+# @pytest.fixture()
+# def fake_docs_abcd() -> list[Document]:
+#     """Meant to be used MockABCDEmbeddings model."""
+#     return [
+#         Document(content="Doc A", metadata={'id': 0}),
+#         Document(content="Doc B", metadata={'id': 1}),
+#         Document(content="Doc C", metadata={'id': 3}),
+#         Document(content="Doc D", metadata={'id': 4}),
+#     ]
 
 
-class MockABCDEmbeddings(EmbeddingModel):
-    """
-    Used for unit tests to mock the behavior of an LLM.
+# class MockABCDEmbeddings(EmbeddingModel):
+#     """
+#     Used for unit tests to mock the behavior of an LLM.
 
-    Used in conjunction with a specific document list `fake_docs_abcd`.
-    """
+#     Used in conjunction with a specific document list `fake_docs_abcd`.
+#     """
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.cost_per_token = 7
-        self._next_lookup_index = None
-        self.lookup = {
-            0: [0.5, 0.5, 0.5, 0.5, 0.5],
-            1: [1, 1, 1, 1, 1],
-            3: [3, 3, 3, 3, 3],
-            4: [4, 4, 4, 4, 4],
-        }
+#     def __init__(self) -> None:
+#         super().__init__()
+#         self.cost_per_token = 7
+#         self._next_lookup_index = None
+#         self.lookup = {
+#             0: [0.5, 0.5, 0.5, 0.5, 0.5],
+#             1: [1, 1, 1, 1, 1],
+#             3: [3, 3, 3, 3, 3],
+#             4: [4, 4, 4, 4, 4],
+#         }
 
-    def _run(self, docs: list[Document]) -> tuple[list[Document], EmbeddingRecord]:
-        if self._next_lookup_index:
-            embeddings = [self.lookup[self._next_lookup_index]]
-        else:
-            embeddings = [self.lookup[x.metadata['id']] for x in docs]
-        total_tokens = sum(len(x.content) for x in docs)
-        cost = total_tokens * self.cost_per_token
-        return embeddings, EmbeddingRecord(
-            total_tokens=total_tokens,
-            cost=cost,
-            metadata={'content': [x.content for x in docs]},
-        )
+#     def _run(self, docs: list[Document]) -> tuple[list[Document], EmbeddingRecord]:
+#         if self._next_lookup_index:
+#             embeddings = [self.lookup[self._next_lookup_index]]
+#         else:
+#             embeddings = [self.lookup[x.metadata['id']] for x in docs]
+#         total_tokens = sum(len(x.content) for x in docs)
+#         cost = total_tokens * self.cost_per_token
+#         return embeddings, EmbeddingRecord(
+#             total_tokens=total_tokens,
+#             cost=cost,
+#             metadata={'content': [x.content for x in docs]},
+#         )
 
 
 class FakeRetryHandler:
@@ -560,3 +556,194 @@ def tool_stocks() -> dict:
             "required": ["company"],
         },
     }
+
+
+###################################################################################################
+# Mock OpenAI API Client
+# Designed to mimic the response structure of the OpenAI API
+###################################################################################################
+class MockOpenAIDelta(BaseModel):  # noqa: D101
+    content: str
+
+class MockOpenAIChoiceChunk(BaseModel):  # noqa: D101
+    delta: MockOpenAIDelta
+    finish_reason: str
+
+class MockOpenAIChoiceMessage(BaseModel):  # noqa: D101
+    content: str
+    role: str | None = None
+
+class MockOpenAIChoice(BaseModel):  # noqa: D101
+    message: MockOpenAIChoiceMessage
+    finish_reason: str
+    logprobs: list[float] | None = None
+
+class MockOpenAIUsage(BaseModel):  # noqa: D101
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+class MockOpenAIChatCompletionChunkResponse(BaseModel):  # noqa: D101
+    object: str
+    model: str
+    created: int
+    choices: list[MockOpenAIChoiceChunk]
+
+class MockOpenAIChatCompletionResponse(BaseModel):  # noqa: D101
+    object: str
+    model: str
+    created: int
+    choices: list[MockOpenAIChoice]
+    usage: MockOpenAIUsage
+
+class LegacyChoiceDelta(BaseModel):  # noqa: D101
+    content: str
+    function_call: str | None = None
+    role: str | None = None
+    tool_calls: str | None = None
+
+class LegacyChoice(BaseModel):  # noqa: D101
+    delta: LegacyChoiceDelta | None = None
+    message: MockOpenAIChoiceMessage | None = None
+    finish_reason: str | None = None
+    index: int = 0
+    logprobs: list[float] | None = None
+
+class LegacyCompletionUsage(BaseModel):  # noqa: D101
+    completion_tokens: int
+    prompt_tokens: int
+    total_tokens: int
+
+class LegacyChatCompletionChunkResponse(BaseModel):  # noqa: D101
+    choices: list[LegacyChoice]
+    created: int
+    model: str
+    object: str
+
+class LegacyChatCompletionResponse(BaseModel):  # noqa: D101
+    choices: list[LegacyChoice]
+    created: int
+    model: str
+    object: str
+    usage: LegacyCompletionUsage
+
+class AsyncMockOpenAI:
+    """
+    Mock OpenAI API client for testing. Returns a fixed response with the same structure as the
+    OpenAI API response.
+    """
+
+    def __init__(self, fake_responses: list[str], legacy: bool = False):
+        self.fake_responses = fake_responses
+        self.response_index = 0
+        self.legacy = legacy
+        self.chat = self.Chat(fake_responses=fake_responses, legacy=legacy)
+
+    class Chat:  # noqa: D106
+        def __init__(self, fake_responses: list[str], legacy: bool):
+            self.completions = AsyncMockOpenAI.Chat.Completions(
+                fake_responses=fake_responses,
+                legacy=legacy,
+            )
+            self.fake_responses = fake_responses
+            self.response_index = 0
+            self.legacy = legacy
+
+        class Completions:  # noqa: D106
+            def __init__(self, fake_responses: list[str], legacy: bool):
+                self.fake_responses = fake_responses
+                self.response_index = 0
+                self.legacy = legacy
+
+            class MockAsyncIterator:  # noqa
+                def __init__(self, chunks):  # noqa: ANN001
+                    self.chunks = chunks
+                    self.index = 0
+
+                def __aiter__(self):
+                    return self
+
+                async def __anext__(self):
+                    if self.index < len(self.chunks):
+                        chunk = self.chunks[self.index]
+                        self.index += 1
+                        return chunk
+                    raise StopAsyncIteration
+
+            async def create(self, *args, stream=False, **kwargs):  # noqa
+                messages = kwargs.get('messages', [])
+                assert isinstance(messages, list), "messages must be provided as a list"
+                for message in messages:
+                    assert isinstance(message, dict), "messages must be provided as a list of dictionaries"  # noqa: E501
+                    assert 'role' in message, "role must be provided for each message"
+                    assert 'content' in message, "content must be provided for each message"
+                assert len(messages) > 0, "messages must be provided to the OpenAI API"
+
+                response = self.fake_responses[self.response_index]
+                self.response_index += 1
+                model = kwargs.get('model', None)
+
+                if stream:
+                    if self.legacy:
+                        chunks = [
+                            LegacyChatCompletionChunkResponse(
+                                choices=[
+                                    LegacyChoice(
+                                        finish_reason='length',
+                                        delta=LegacyChoiceDelta(content=response[i:i + 4]),
+                                    ),
+                                ],
+                                created=1234567890,
+                                model='/repository',
+                                object='text_completion',
+                            )
+                            for i in range(0, len(response), 4)
+                        ]
+                    else:
+                        chunks = [
+                            MockOpenAIChatCompletionChunkResponse(
+                                object="chat.completion.chunk",
+                                model=model,
+                                created=1234567890,
+                                choices=[
+                                    MockOpenAIChoiceChunk(
+                                        finish_reason='length',
+                                        delta=MockOpenAIDelta(content=response[i:i + 4]),
+                                    ),
+                                ],
+                            )
+                            for i in range(0, len(response), 4)
+                        ]
+                    return self.MockAsyncIterator(chunks)
+
+                if self.legacy:
+                    return LegacyChatCompletionResponse(
+                        choices=[
+                            LegacyChoice(
+                                finish_reason='length',
+                                message=MockOpenAIChoiceMessage(
+                                    content=response,
+                                    role="assistant",
+                                ),
+                            )],
+                        created=1234567890,
+                        model='/repository',
+                        object='text_completion',
+                        usage=LegacyCompletionUsage(
+                            completion_tokens=20,
+                            prompt_tokens=10,
+                            total_tokens=30,
+                        ),
+                    )
+
+                return MockOpenAIChatCompletionResponse(
+                    object="chat.completion",
+                    model=model,
+                    created=1234567890,
+                    choices=[
+                        MockOpenAIChoice(
+                            finish_reason='length',
+                            message=MockOpenAIChoiceMessage(content=response, role="assistant"),
+                        )],
+                    usage=MockOpenAIUsage(prompt_tokens=5, completion_tokens=5, total_tokens=10),
+                )

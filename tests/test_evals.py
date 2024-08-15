@@ -6,10 +6,8 @@ import os
 from textwrap import dedent
 import yaml
 from llm_eval.candidates import (
-    CallableCandidate,
     Candidate,
     CandidateType,
-    ChatModelCandidate,
     is_async_candidate,
 )
 from llm_eval.checks import (
@@ -26,14 +24,12 @@ from llm_eval.eval import (
     Eval,
     EvalHarness,
     EvalResult,
-    MultiEval,
-    PromptComparison,
-    PromptTest,
+    # MultiEval,
+    # PromptComparison,
+    # PromptTest,
     ResponseError,
 )
-from llm_eval.llms.base import ChatModel
-from llm_eval.llms.message_formatters import LlamaMessageFormatter, openai_message_formatter
-from llm_eval.utilities.internal_utilities import extract_code_blocks
+from llm_eval.internal_utilities import extract_code_blocks
 from tests.conftest import MockCandidate
 
 

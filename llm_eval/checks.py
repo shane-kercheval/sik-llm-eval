@@ -21,7 +21,7 @@ from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from llm_eval.candidates import Candidate
-from llm_eval.utilities.internal_utilities import (
+from llm_eval.internal_utilities import (
     EnumMixin,
     Registry,
     execute_code_blocks,
@@ -171,7 +171,7 @@ class ResponseData:
     and passed to the Check objects' __call__ function to evaluate the response.
     """
 
-    prompt: str | Any | None = None
+    input: str | Any | None = None
     response: str | dict  | list | Any | None = None
     code_blocks: list[str] | None = None
     ideal_response: str | Any | None = None
