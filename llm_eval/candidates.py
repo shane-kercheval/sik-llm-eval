@@ -22,7 +22,6 @@ Candidates can also be passed to the EvalHarness (or Eval object) directory as a
 can be serialized into a dictionary and the information can be saved in the EvalResult object
 (evals.py).
 """
-from openai import OpenAI
 import yaml
 from inspect import iscoroutinefunction
 from copy import deepcopy
@@ -30,7 +29,9 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
 from typing import Any, Callable, List, Type, Union
-from llm_eval.openai import OpenAIChatResponse, OpenAICompletionWrapper
+from pydantic import BaseModel
+from openai import OpenAI
+from llm_eval.openai import MODEL_COST_PER_TOKEN, OpenAIChatResponse, OpenAICompletionWrapper
 from llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
@@ -53,6 +54,20 @@ class CandidateType(EnumMixin, Enum):
     OPENAI_TOOLS = auto()
     CALLABLE_NO_SERIALIZE = auto()
     OPENAI_SERVER = auto()
+
+
+class CandidateResponse(BaseModel):
+    """
+    Provides a standard response object for Candidates so that the Eval/TestHarness can
+    consistently evaluate the response and store the metadata (e.g. cost, usage, etc.) for the
+    response.
+
+    Content is the text/dict/etc. from the LLM that is meant to be evaluated.
+    Metadata is a dictionary of metadata about the response (e.g. cost, usage, etc.).
+    """
+
+    content: Any
+    metadata: dict | None = None
 
 
 class Candidate(DictionaryEqualsMixin, ABC):
@@ -78,19 +93,8 @@ class Candidate(DictionaryEqualsMixin, ABC):
         self.parameters = deepcopy(parameters)
 
     @abstractmethod
-    def __call__(self, input: Any) -> Any:  # noqa: A002, ANN401
+    def __call__(self, input: Any) -> CandidateResponse:  # noqa: A002, ANN401
         """Invokes the underlying model with the input and returns the response."""
-
-    # @abstractmethod
-    # def clone(self) -> 'Candidate':
-    #     """
-    #     Returns a copy of the Candidate with the same state but with a different instance of the
-    #     underlying model (e.g. same parameters but reset history/context).
-
-    #     This is needed because the same Candidate object should not be reused across multiple Eval
-    #     objects. This method allows the Eval object to create a new Candidate object and ensure
-    #     the original Candidate object is not modified.
-    #     """
 
     @classmethod
     def register(cls, candidate_type: str | Enum):  # noqa: ANN102
@@ -197,9 +201,34 @@ class OpenAICandidate(Candidate):
             **self.parameters or {},
         )
 
-    def __call__(self, input: list[dict[str, str]]) -> str:  # noqa: A002
+    def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
-        return self.client(input).content
+        response: OpenAIChatResponse = self.client(input)
+        prompt_tokens = response.usage.get('prompt_tokens')
+        completion_tokens = response.usage.get('completion_tokens')
+        total_tokens = response.usage.get('total_tokens')
+
+        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model_name)
+        if cost_per_token and prompt_tokens and completion_tokens:
+            prompt_cost = cost_per_token['input'] * prompt_tokens
+            completion_cost = cost_per_token['output'] * completion_tokens
+            total_cost = prompt_cost + completion_cost
+        else:
+            prompt_cost = None
+            completion_cost = None
+            total_cost = None
+
+        return CandidateResponse(
+            content=response.content,
+            metadata={
+                'prompt_tokens': prompt_tokens,
+                'completion_tokens': completion_tokens,
+                'total_tokens': total_tokens,
+                'prompt_cost': prompt_cost,
+                'completion_cost': completion_cost,
+                'total_cost': total_cost,
+            },
+        )
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""

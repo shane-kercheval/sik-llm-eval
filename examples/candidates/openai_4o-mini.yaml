@@ -1,8 +1,7 @@
 metadata:
-  name: OpenAI GPT-3.5-Turbo (0125)
+  name: OpenAI GPT-4o-mini
 candidate_type: OPENAI
-model_name: gpt-3.5-turbo-0125
+model_name: gpt-4o-mini
 parameters:
   temperature: 0.01
   max_tokens: 4096
-  seed: 42
