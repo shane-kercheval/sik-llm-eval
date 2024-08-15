@@ -137,10 +137,13 @@ class Eval(DictionaryEqualsMixin):
         this to support calling _generate_response async and then executing the checks afterwards.
         """
         self._candidate = self._to_candidate(candidate)
-        start = time.time()
         self._response = None
+        start = time.time()
         try:
-            self._response = self._candidate(self.input)
+            if is_async_candidate(self._candidate):
+                self._response = asyncio.run(self._candidate(self.input))
+            else:
+                self._response = self._candidate(self.input)
         finally:
             end = time.time()
             self._duration = end - start
@@ -165,33 +168,29 @@ class Eval(DictionaryEqualsMixin):
         """
         assert self._candidate
         assert self._duration is not None
-        check_results = []
-        # if isinstance(self._response.content, str):
-        #     code_blocks = extract_code_blocks(self._response.content)
-        # else:
-        #     code_blocks = []
-        data = ResponseData(
-            input=self.input,
-            ideal_response=self.ideal_response,
-            response=self._response.content,
-            response_metadata=self._response.metadata,
-        )
-        for check in self.checks:
-            check_results.append(check(data))
-
+        check_results = [
+            check(ResponseData(
+                input=self.input,
+                ideal_response=self.ideal_response,
+                response=self._response.content,
+                response_metadata=self._response.metadata,
+            ))
+            for check in self.checks
+        ]
         return EvalResult(
             eval_obj=self,
             candidate_obj=self._candidate,
-            response=self._response,
+            response=self._response.content,
+            response_metadata=self._response.metadata,
             total_time_seconds=self._duration,
-            num_code_blocks=len(code_blocks),
-            cost = self._candidate.cost if has_property(self._candidate, 'cost') else None,
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             check_results=check_results,
         )
 
     def __call__(
-            self, candidate: Candidate | Callable[[Any], CandidateResponse] | dict) -> 'EvalResult':
+            self,
+            candidate: Candidate | Callable[[Any], CandidateResponse] | dict,
+        ) -> 'EvalResult':
         """
         Evaluates the model against the prompts and tests.
 
@@ -252,11 +251,10 @@ class EvalResult(DictionaryEqualsMixin):
     def __init__(
         self,
         eval_obj: Eval | dict,
-        candidate_obj: Candidate | dict,
+        candidate_obj: Candidate | dict | Callable,
         response: str | object,
+        response_metadata: dict | object,
         total_time_seconds: float,
-        num_code_blocks: int,
-        cost : float | None,
         timestamp: str,
         check_results: list[CheckResult | dict]) -> None:
         """
@@ -293,11 +291,10 @@ class EvalResult(DictionaryEqualsMixin):
             else:
                 self.candidate_obj = Candidate(**deepcopy(candidate_obj))
         else:
-            raise TypeError("candidate_obj must be either a Candidate or a dictionary")
+            self.candidate_obj = str(candidate_obj)
         self.response = response
+        self.response_metadata = response_metadata
         self.total_time_seconds = total_time_seconds
-        self.num_code_blocks = num_code_blocks
-        self.cost = cost
         self.timestamp = timestamp
         results = check_results or []
         results_created = []
@@ -316,21 +313,6 @@ class EvalResult(DictionaryEqualsMixin):
                 raise TypeError("results must be a CheckResult, dictionary, or bool")
         self.check_results = results_created
 
-    # @property
-    # def response_characters(self) -> int | None:
-    #     """Returns the number of characters across all responses."""
-    #     if not self.responses or not isinstance(self.responses[0], str):
-    #         return None
-    #     return sum(len(r) for r in self.responses)
-
-    # @property
-    # def characters_per_second(self) -> float | None:
-    #     """Returns the number of characters per second across all responses."""
-    #     if not self.responses or not isinstance(self.responses[0], str):
-    #         return None
-    #     # Adding a tiny value to prevent divide-by-zero error
-    #     return sum(len(r) for r in self.responses) / (self.total_time_seconds + 1e-6)
-
     @property
     def num_checks(self) -> int:
         """Returns the number of checks."""
@@ -346,115 +328,82 @@ class EvalResult(DictionaryEqualsMixin):
         """Returns the percentage of passing checks. If there are checks, returns None."""
         return self.num_successful_checks / self.num_checks if self.num_checks else None
 
-    @property
-    def expects_code_blocks(self) -> bool:
-        """Returns a list of CheckResults for code block present checks."""
-        return any(
-            r for r in self.check_results
-            if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
-        )
+    # @property
+    # def expects_code_blocks(self) -> bool:
+    #     """Returns a list of CheckResults for code block present checks."""
+    #     return any(
+    #         r for r in self.check_results
+    #         if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
+    #     )
 
-    def get_code_block_tests_result(self) -> CheckResult | None:
-        """
-        Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
+    # def get_code_block_tests_result(self) -> CheckResult | None:
+    #     """
+    #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
 
-        Returns the CheckResult object associated with the PythonCodeBlockTests check, if it
-        exists, otherwise None.
-        """
-        results = [
-            r for r in self.check_results
-            if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCK_TESTS.name
-        ]
-        if results:
-            assert len(results) == 1
-            return results[0]
-        return None
+    #     Returns the CheckResult object associated with the PythonCodeBlockTests check, if it
+    #     exists, otherwise None.
+    #     """
+    #     results = [
+    #         r for r in self.check_results
+    #         if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCK_TESTS.name
+    #     ]
+    #     if results:
+    #         assert len(results) == 1
+    #         return results[0]
+    #     return None
 
-    def get_num_code_blocks_successful(self) -> int | None:
-        """
-        Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
+    # def get_num_code_blocks_successful(self) -> int | None:
+    #     """
+    #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
 
-        Returns the number of code blocks generated that successfully execute across all responses.
-        If there are no code blocks or no PythonCodeBlockTests check, returns None.
-        """
-        result = self.get_code_block_tests_result()
-        if result:
-            return result.metadata.get('num_code_blocks_successful', None)
-        return None
+    #     Returns the number of code blocks generated that successfully execute across all responses.
+    #     If there are no code blocks or no PythonCodeBlockTests check, returns None.
+    #     """
+    #     result = self.get_code_block_tests_result()
+    #     if result:
+    #         return result.metadata.get('num_code_blocks_successful', None)
+    #     return None
 
-    def get_num_code_tests_defined(self) -> int | None:
-        """
-        Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
+    # def get_num_code_tests_defined(self) -> int | None:
+    #     """
+    #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
 
-        Returns the number of code tests defined (i.e. the number of individual tests for the
-        PythonCodeBlockTests check, if it exists). If there are no code blocks or no
-        PythonCodeBlockTests check, returns None.
-        """
-        result = self.get_code_block_tests_result()
-        if result:
-            return result.metadata.get('num_code_tests', None)
-        return None
+    #     Returns the number of code tests defined (i.e. the number of individual tests for the
+    #     PythonCodeBlockTests check, if it exists). If there are no code blocks or no
+    #     PythonCodeBlockTests check, returns None.
+    #     """
+    #     result = self.get_code_block_tests_result()
+    #     if result:
+    #         return result.metadata.get('num_code_tests', None)
+    #     return None
 
-    def get_num_code_tests_successful(self) -> int | None:
-        """
-        Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
+    # def get_num_code_tests_successful(self) -> int | None:
+    #     """
+    #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
 
-        Returns the number of code tests (i.e. the number of individual tests for the
-        PythonCodeBlockTests check, if it exists) that successfully pass. If there
-        are no code blocks or no PythonCodeBlockTests check, returns None.
-        """
-        result = self.get_code_block_tests_result()
-        if result:
-            return result.metadata.get('num_code_tests_successful', None)
-        return None
-
-    def __str__(self) -> str:
-        cost_str = f'\n{" " * 12}Cost:{" " * 22} ${self.cost:.4f}' if self.cost else ''
-        # check if candidate_obj has metadata field
-        candidate_name = self.candidate_obj.metadata.get('name', '')
-        if candidate_name:
-            candidate_name = f"Candidate:{' ' * 18}{candidate_name}\n{' ' * 12}"
-        eval_name = self.eval_obj.metadata.get('name', '')
-        if eval_name:
-            eval_name = f"Eval:{' ' * 24}{eval_name}\n{' ' * 12}"
-        # response_characters and characters_per_second are properties that can return None
-        if self.response_characters is None:
-            response_characters = 'N/A'
-            characters_per_second = 'N/A'
-        else:
-            response_characters = f'{self.response_characters:,}'
-            characters_per_second = f'{self.characters_per_second:,.1f}'
-        result = f"""
-        EvalResult:
-            {candidate_name}{eval_name}# of Prompts Tested:         {len(self.eval_obj.prompt_sequence)}{cost_str}
-            Total Response Time:         {self.total_time_seconds:0.1f} seconds
-            # of Response Characters:    {response_characters}
-            Characters per Second:       {characters_per_second}
-            # of Checks:                 {self.num_checks}
-            # of Successful Checks:      {self.num_successful_checks}
-            % of Successful Checks:      {self.perc_successful_checks or 0:.1%}
-            # of Code Blocks Generated:  {self.num_code_blocks}
-        """  # noqa
-        result = result.rstrip()
-        if self.get_code_block_tests_result():
-            result += f"""
-            # of Successful Code Blocks: {self.get_num_code_blocks_successful()}
-            # of Code Tests Defined:     {self.get_num_code_tests_defined()}
-            # of Successful Code Tests:  {self.get_num_code_tests_successful()}
-            """
-        return dedent(result).strip()
+    #     Returns the number of code tests (i.e. the number of individual tests for the
+    #     PythonCodeBlockTests check, if it exists) that successfully pass. If there
+    #     are no code blocks or no PythonCodeBlockTests check, returns None.
+    #     """
+    #     result = self.get_code_block_tests_result()
+    #     if result:
+    #         return result.metadata.get('num_code_tests_successful', None)
+    #     return None
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the EvalResult."""
+        if isinstance(self.candidate_obj, Candidate):
+            candidate_obj = self.candidate_obj.to_dict()
+        else:
+            candidate_obj = str(self.candidate_obj)
         return {
             'eval_obj': self.eval_obj.to_dict(),
-            'candidate_obj': self.candidate_obj.to_dict(),
-            'responses': self.responses,
+            'candidate_obj': candidate_obj,
+            'response': deepcopy(self.response),
+            'response_metadata': deepcopy(self.response_metadata),
             'total_time_seconds': self.total_time_seconds,
-            'num_code_blocks': self.num_code_blocks,
-            'cost': self.cost,
             'timestamp': self.timestamp,
-            'results': [[r.to_dict() for r in result] for result in self.results],
+            'check_results': [r.to_dict() for r in self.check_results],
         }
 
     def to_yaml(self, file_path: str) -> None:

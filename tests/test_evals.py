@@ -98,43 +98,35 @@ def test__Eval__call__result__to_from_dict():  # noqa
     assert eval_obj.to_dict() == {'input': messages}
     assert Eval(**eval_obj.to_dict()) == eval_obj
     result = eval_obj(lambda x: CandidateResponse(content=f'response: {x}'))
-    assert result.response_characters == len('response: test')
-    assert eval_obj.to_dict() == {'prompt_sequence': [{'prompt': 'test'}]}
+    assert result.eval_obj == eval_obj
+    assert result.response == "response: [{'role': 'user', 'content': 'test'}]"
+    assert result.response_metadata is None
+    assert result.total_time_seconds >= 0
+    assert result.check_results == []
     assert Eval(**eval_obj.to_dict()) == eval_obj
 
     result_dict = result.to_dict()
     assert result_dict['eval_obj'] == eval_obj.to_dict()
-    assert result_dict['candidate_obj'] == {
-        'metadata': {'function': 'def <lambda>(x)'},
-        'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name,
-        }
+    assert result_dict['candidate_obj']
     assert Eval(**result_dict['eval_obj']) == eval_obj
-    assert Candidate.from_dict(result_dict['candidate_obj']) == result.candidate_obj
     assert EvalResult(**result_dict) == result
     assert EvalResult(**result_dict).to_dict() == result.to_dict()
 
 def test__Eval__from_objects__minimal():  # noqa
-    candidate = CallableCandidate(model=lambda x: x)
+    def mock_llm(x):  # noqa
+        return f'response: {x}'
     prompt = "This is a prompt."
-    eval_obj = Eval(prompt_sequence={'prompt': prompt})
-    result = eval_obj(candidate)
-    assert str(result)  # make sure __str__ works
+    messages = [user_message(prompt)]
+    eval_obj = Eval(input=messages)
+    result = eval_obj(lambda x: CandidateResponse(content=mock_llm(x)))
     assert result.eval_obj == eval_obj
-    assert result.candidate_obj == candidate
-    assert result.responses == [prompt]
-    assert result.prompts == [prompt]
-    assert result.ideal_responses == [None]
-    assert result.response_characters == len(prompt)
+    assert result.candidate_obj
+    assert result.response == mock_llm(messages)
     assert result.num_checks == 0
     assert result.num_successful_checks == 0
     assert result.perc_successful_checks is None
-    assert result.results == [[]]
-    assert result.cost is None
+    assert result.check_results == []
     assert result.timestamp
-    assert result.num_code_blocks == 0
-    assert result.all_check_results == []
-    assert not result.expects_code_blocks
-    assert result.get_code_block_tests_result() is None
     assert result.total_time_seconds >= 0
 
 @pytest.mark.parametrize('use_async', [True, False])
@@ -144,15 +136,14 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
     assert eval_obj.to_dict() == eval_dict
 
     responses = [
-        "This is the first response",
-        "This is a response with code blocks\n```python\nprint('hello world')\n```",
+        CandidateResponse(content="This is a response with code blocks\n```python\nprint('hello world')\n```"),  # noqa
     ]
     def create_mock_llm(responses, use_async):  # noqa
         if use_async:
-            response_iter = iter(responses)
+            iterator = iter(responses)
             async def mock_llm(_: str):  # noqa
                 try:
-                    return next(response_iter)
+                    return next(iterator)
                 except StopIteration:
                     return None
             return mock_llm
@@ -171,21 +162,15 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
     else:
         assert not is_async_candidate(mock_llm)
     eval_result = eval_obj(mock_llm)
-    assert eval_result.responses == responses
-    assert eval_result.prompts == [test.prompt for test in eval_obj.prompt_sequence]
-    assert eval_result.ideal_responses == [
-        test.ideal_response for test in eval_obj.prompt_sequence
-    ]
+    assert eval_result.response == responses[0].content
+    assert eval_result.eval_obj.input == eval_obj.input
     assert eval_result.eval_obj.to_dict() == eval_dict
-    assert eval_result.cost is None
-    assert eval_result.num_checks == 4
+    expected_num_checks = 3
+    assert eval_result.num_checks == expected_num_checks
     assert eval_result.num_successful_checks == 2
-    assert eval_result.perc_successful_checks == 2 / 4
-    assert len(eval_result.results) == 2
-    assert len(eval_result.results[0]) == 3
-    assert len(eval_result.results[1]) == 1
-    assert eval_result.response_characters == sum(len(r) for r in responses)
-    assert eval_result.num_code_blocks == 1
+    assert eval_result.perc_successful_checks == 2 / expected_num_checks
+    assert len(eval_result.check_results) == expected_num_checks
+    assert eval_result.check_results[-1].metadata['num_code_blocks'] == 1
 
     eval_result_dict = eval_result.to_dict()
     # we can't check that entire eval_result_dict will recreate the exact eval_result object
@@ -193,28 +178,17 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
     # been converted to a string; we can't serialize the underlying model/llm)
     assert eval_result_dict['eval_obj'] == eval_dict
     assert Eval(**eval_result_dict['eval_obj']) == eval_obj
-    assert eval_result_dict['candidate_obj'] == {
-        'metadata': {'function': 'def mock_llm(_: str)'},
-        'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name,
-    }
+    assert eval_result_dict['candidate_obj']
     # check that the check result dicts match
-    flatted_check_results = [r for tests in eval_result_dict['results'] for r in tests]
-    assert flatted_check_results == [r.to_dict() for r in eval_result.all_check_results]
-    assert eval_result.expects_code_blocks
-    assert eval_result.get_code_block_tests_result() is None
+    assert eval_result_dict['check_results'] == [r.to_dict() for r in eval_result.check_results]
     assert eval_result.total_time_seconds > 0
     # check that the eval_result_dict will recreate the exact eval_result object
     recreated_eval = EvalResult(**eval_result_dict)
     assert recreated_eval == eval_result
     assert recreated_eval.to_dict() == eval_result.to_dict()
     assert recreated_eval.eval_obj == eval_result.eval_obj
-    assert recreated_eval.candidate_obj == eval_result.candidate_obj
-    assert recreated_eval.results == eval_result.results
-    flatted_checks = [r for test in eval_obj.prompt_sequence for r in test.checks]
-    for c, r in zip(flatted_checks, eval_result.all_check_results, strict=True):
-        assert c.check_type == r.metadata['check_type']
-    assert eval_result.expects_code_blocks
-    assert eval_result.get_code_block_tests_result() is None
+    assert recreated_eval.candidate_obj
+    assert recreated_eval.check_results == eval_result.check_results
 
 def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run):  # noqa
     """
@@ -224,10 +198,10 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     config = fake_eval_sum_two_numbers_code_blocks_run.copy()
     eval_obj = Eval(**config)
 
-    assert eval_obj.prompt_sequence[1].checks[-1].code_block_timeout == 5
-    assert eval_obj.prompt_sequence[1].checks[-1].code_test_timeout == 5
+    assert eval_obj.checks[-1].code_block_timeout == 5
+    assert eval_obj.checks[-1].code_test_timeout == 5
 
-    response_1 = dedent("""
+    response = dedent("""
     Certainly! Below is a simple Python function named `sum_two_numbers` that takes two parameters, `a` and `b`, which are intended to be numbers. The function returns the sum of these two numbers.
 
     ```python
@@ -241,127 +215,78 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     result = sum_two_numbers(100, 5)
     print(result)  # This will print 105
     ```
-    """)  # noqa: E501
-    response_2 = dedent("""
-    To test the `sum_two_numbers` function, you can use assertion statements in Python. Assertions are a great way to ensure that your function behaves as expected. Here are some examples:
-
-    ```python
-    assert sum_two_numbers(2, 3) == 5, "Test failed for inputs 2 and 3"
-    assert sum_two_numbers(-1, 1) == 0, "Test failed for inputs -1 and 1"
-    assert sum_two_numbers(0, 0) == 0, "Test failed for inputs 0 and 0"
-    assert sum_two_numbers(-2, -3) == -5, "Test failed for inputs -2 and -3"
-    assert sum_two_numbers(1.5, 2.5) == 4.0, "Test failed for inputs 1.5 and 2.5"
-    my_value = 1  # ensure code block runs
-    ```
-
-    Each assertion checks a specific case:
-
-    1) Adding two positive integers.
-    2) Adding a negative integer and a positive integer.
-    3) Adding two zeros.
-    4) Adding two negative integers.
-    5) Adding two floating-point numbers.
-
-    If the function returns the expected value, the program will continue without any interruption. If any assertion fails, Python raises an `AssertionError` with the specified message, indicating that the test case failed.
-    """)  # noqa: E501
-    responses = [response_1, response_2]
-
-    expected_code_blocks = extract_code_blocks(response_1)
-    expected_code_blocks.extend(extract_code_blocks(response_2))
-
+    """)
+    expected_code_blocks = extract_code_blocks(response)
     expected_num_code_blocks = len(expected_code_blocks)
+    assert expected_num_code_blocks == 2
     expected_successful_code_blocks = len(expected_code_blocks)
 
-    def mock_llm():  # noqa
-        yield from responses
-    mock_llm_instance = mock_llm()
-    eval_result = eval_obj(lambda _: next(mock_llm_instance))
-    # save the eval_result to a file as string str(eval_result) to check formatting
-    print(eval_result)
-    with open('tests/eval/eval_result.txt', 'w') as f:
-        f.write(str(eval_result))
+    def mock_llm(_):  # noqa
+        return CandidateResponse(content=response)
 
+    eval_result = eval_obj(mock_llm)
     # we need to strip the code blocks of leading/trailing whitespace to compare them
     expected_config = deepcopy(config)
-    expected_config['prompt_sequence'][1]['checks'][-1]['code_tests'] = [
+    expected_config['checks'][-1]['code_tests'] = [
         dedent(x.strip()) for x in
-        expected_config['prompt_sequence'][1]['checks'][-1]['code_tests']
+        expected_config['checks'][-1]['code_tests']
     ]
     assert eval_result.eval_obj.to_dict() == expected_config
     assert Eval(**eval_obj.to_dict()) == eval_obj
     # i need to compare strings because underlying error objects (i.e. instances) will not be same
     assert str(EvalResult(**eval_result.to_dict()).to_dict()) == str(eval_result.to_dict())
 
-    assert eval_result.responses == responses
-    assert eval_result.prompts == [test.prompt for test in eval_obj.prompt_sequence]
-    assert eval_result.ideal_responses == [test.ideal_response for test in eval_obj.prompt_sequence]  # noqa
-    assert eval_result.response_characters == sum(len(r) for r in responses)
-    assert eval_result.num_checks == 7
-    assert eval_result.num_successful_checks == 4
-    assert eval_result.perc_successful_checks == 4 / 7
-    assert eval_result.num_code_blocks == expected_num_code_blocks
+    assert eval_result.response == response
+    assert eval_result.num_checks == 5
+    assert eval_result.num_successful_checks == 2
+    assert eval_result.perc_successful_checks == 2 / 5
+    assert eval_result.check_results[-1].metadata['num_code_blocks'] == expected_num_code_blocks
 
-    assert len(eval_result.results) == 2
-    assert len(eval_result.results[0]) == 4
-    assert isinstance(eval_result.results[0][0], PassFailResult)
-    assert isinstance(eval_result.results[0][0], PassFailResult)
-    assert isinstance(eval_result.results[0][1], PassFailResult)
-    assert isinstance(eval_result.results[0][1], PassFailResult)
-    assert len(eval_result.results[1]) == 3
-    assert isinstance(eval_result.results[1][0], PassFailResult)
-    assert isinstance(eval_result.results[1][1], PassFailResult)
-    assert isinstance(eval_result.results[1][2], ScoreResult)
-    assert len(eval_result.all_check_results) == 7
-    assert eval_result.expects_code_blocks
-    assert eval_result.get_code_block_tests_result() is not None
+    assert len(eval_result.check_results) == 5
+    assert isinstance(eval_result.check_results[0], PassFailResult)
+    assert isinstance(eval_result.check_results[1], PassFailResult)
+    assert isinstance(eval_result.check_results[2], PassFailResult)
+    assert isinstance(eval_result.check_results[3], PassFailResult)
+    assert isinstance(eval_result.check_results[4], ScoreResult)
 
-    # Check 0.0
-    assert eval_result.results[0][0].success
-    assert eval_result.results[0][0].metadata['check_type'] == CheckType.CONTAINS.name
-    # Check 0.1
-    assert not eval_result.results[0][1].success
-    assert eval_result.results[0][1].metadata['check_type'] == CheckType.MATCH.name
-    # Check 0.2
-    assert not eval_result.results[0][2].success
-    assert eval_result.results[0][2].metadata['check_type'] == CheckType.CONTAINS.name
-    # Check 0.3
-    assert eval_result.results[0][3].success
-    assert eval_result.results[0][3].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
-    # Check 1.0
-    assert eval_result.results[1][0].success
-    assert eval_result.results[1][0].metadata['check_type'] == CheckType.CONTAINS.name
-    # Check 1.1
-    assert eval_result.results[1][1].success
-    assert eval_result.results[1][1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa
-    # Check 1.2
-    assert not eval_result.results[1][2].success
-    assert eval_result.results[1][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name  # noqa
+    assert eval_result.check_results[0].success
+    assert eval_result.check_results[0].metadata['check_type'] == CheckType.CONTAINS.name
+    assert not eval_result.check_results[1].success
+    assert eval_result.check_results[1].metadata['check_type'] == CheckType.MATCH.name
+    assert not eval_result.check_results[2].success
+    assert eval_result.check_results[2].metadata['check_type'] == CheckType.CONTAINS.name
+    assert eval_result.check_results[3].success
+    assert eval_result.check_results[3].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
+    assert not eval_result.check_results[4].success
+    assert eval_result.check_results[4].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name  # noqa
 
     # function checks
-    expected_code_tests = 6
-    expected_successful_code_tests = 4
+    expected_code_tests = 5
+    expected_successful_code_tests = 3
     expected_total_checks = expected_num_code_blocks + expected_code_tests
     expected_successful_checks = expected_successful_code_blocks + \
         expected_successful_code_tests
 
-    assert eval_result.results[1][2].value == expected_successful_checks / expected_total_checks
-    assert eval_result.results[1][2].success_threshold == 1
-    assert not eval_result.results[1][2].success
-    assert eval_result.results[1][2].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name  # noqa
-    assert eval_result.results[1][2].metadata['num_code_blocks'] == expected_num_code_blocks
-    assert eval_result.results[1][2].metadata['num_code_blocks_successful'] == expected_successful_code_blocks  # noqa
-    assert eval_result.results[1][2].metadata['code_blocks'] == expected_code_blocks
-    assert eval_result.results[1][2].metadata['code_block_errors'] == [None, None, None]
+    assert eval_result.check_results[-1].value == expected_successful_checks / expected_total_checks
+    assert eval_result.check_results[-1].success_threshold == 1
+    assert not eval_result.check_results[-1].success
+    assert eval_result.check_results[-1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name  # noqa
+    assert eval_result.check_results[-1].metadata['num_code_blocks'] == expected_num_code_blocks
+    assert eval_result.check_results[-1].metadata['num_code_blocks_successful'] == expected_successful_code_blocks  # noqa
+    assert eval_result.check_results[-1].metadata['code_blocks'] == expected_code_blocks
+    assert eval_result.check_results[-1].metadata['code_block_errors'] == [None, None]
     # first function check should have run successfully, but second code block should have failed
-    assert eval_result.results[1][2].metadata['code_test_results'] == [True, True, False, True, True, False]  # noqa
-    assert eval_result.results[1][2].metadata['num_code_tests'] == expected_code_tests
-    assert eval_result.results[1][2].metadata['num_code_tests_successful'] == expected_successful_code_tests  # noqa
-    assert eval_result.results[1][2].metadata['code_test_errors'][0] is None
-    assert eval_result.results[1][2].metadata['code_test_errors'][1] is None
-    assert eval_result.results[1][2].metadata['code_test_errors'][2] is None
-    assert eval_result.results[1][2].metadata['code_test_errors'][3] is None
-    assert eval_result.results[1][2].metadata['code_test_errors'][4] is None
-    assert eval_result.results[1][2].metadata['code_test_errors'][5] == {'error': 'NameError', 'message': "name 'variable_does_not_exist' is not defined"}  # noqa
+    assert eval_result.check_results[-1].metadata['code_test_results'] == [True, True, False, True, False]  # noqa
+    assert eval_result.check_results[-1].metadata['num_code_tests'] == expected_code_tests
+    assert eval_result.check_results[-1].metadata['num_code_tests_successful'] == expected_successful_code_tests  # noqa
+    assert eval_result.check_results[-1].metadata['code_test_errors'][0] is None
+    assert eval_result.check_results[-1].metadata['code_test_errors'][1] is None
+    assert eval_result.check_results[-1].metadata['code_test_errors'][2] is None
+    assert eval_result.check_results[-1].metadata['code_test_errors'][3] is None
+    assert eval_result.check_results[-1].metadata['code_test_errors'][4] == {
+        'error': 'NameError',
+        'message': "name 'variable_does_not_exist' is not defined",
+    }
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_template):  # noqa
