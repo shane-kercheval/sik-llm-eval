@@ -7,6 +7,7 @@ from textwrap import dedent
 import yaml
 from llm_eval.candidates import (
     Candidate,
+    CandidateResponse,
     CandidateType,
     is_async_candidate,
 )
@@ -30,129 +31,30 @@ from llm_eval.eval import (
     ResponseError,
 )
 from llm_eval.internal_utilities import extract_code_blocks
+from llm_eval.openai import user_message
 from tests.conftest import MockCandidate
 
 
-def test__PromptTest():  # noqa
-    test = PromptTest(
-        prompt='test',
-        ideal_response = None,
-        checks = None,
-    )
-    assert test.prompt == 'test'
-    assert test.ideal_response is None
-    assert test.checks == []
-    assert str(test)
-    test_dict = test.to_dict()
-    assert PromptTest(**test_dict) == test
-    assert test_dict == {'prompt': 'test'}
-
-    test = PromptTest(
-        prompt='test',
-        ideal_response = None,
-        checks = [],
-    )
-    assert test.prompt == 'test'
-    assert test.ideal_response is None
-    assert test.checks == []
-    assert str(test)
-    test_dict = test.to_dict()
-    assert PromptTest(**test_dict) == test
-    assert test_dict == {'prompt': 'test'}
-
-    test = PromptTest(
-        prompt='test1',
-        ideal_response='test2',
-        checks = [MatchCheck(value='test3')],
-    )
-    assert test.prompt == 'test1'
-    assert test.ideal_response == 'test2'
-    assert test.checks == [MatchCheck(value='test3')]
-    assert str(test)
-    test_dict = test.to_dict()
-    assert PromptTest(**test_dict) == test
-    assert test_dict == {
-        'prompt': 'test1',
-        'ideal_response': 'test2',
-        'checks': [{'check_type': CheckType.MATCH.name, 'value': 'test3'}],
-    }
-
-    test = PromptTest(
-        prompt='test1',
-        ideal_response='test2',
-        checks = [MatchCheck(value='test3'), MatchCheck(value='test4')],
-    )
-    assert test.prompt == 'test1'
-    assert test.ideal_response == 'test2'
-    assert test.checks == [MatchCheck(value='test3'), MatchCheck(value='test4')]
-    assert str(test)
-    test_dict = test.to_dict()
-    assert PromptTest(**test_dict) == test
-    assert test_dict == {
-        'prompt': 'test1',
-        'ideal_response': 'test2',
-        'checks': [
-            {'check_type': CheckType.MATCH.name, 'value': 'test3'},
-            {'check_type': CheckType.MATCH.name, 'value': 'test4'},
-        ],
-    }
-
-def test__PromptTest__none_list_check():  # noqa
-    test = PromptTest(
-        prompt='test',
-        ideal_response = None,
-        checks = None,
-    )
-    assert test.prompt == 'test'
-    assert test.ideal_response is None
-    assert test.checks == []
-    test = PromptTest(
-        prompt='test',
-        ideal_response = None,
-        checks = {'value': 'a', 'check_type': 'MATCH'},
-    )
-    assert test.prompt == 'test'
-    assert test.ideal_response is None
-    assert test.checks[0].value == 'a'
-    test = PromptTest(
-        prompt='test',
-        ideal_response = None,
-        checks = MatchCheck(value='a'),
-    )
-    assert test.prompt == 'test'
-    assert test.ideal_response is None
-    assert test.checks[0].value == 'a'
-
 def test__Eval__creation():  # noqa
-    eval_obj = Eval(prompt_sequence=PromptTest(prompt='test'))
+    messages = [user_message('test')]
+    eval_obj = Eval(input=messages)
     eval_dict = eval_obj.to_dict()
-    assert eval_dict == {'prompt_sequence': [{'prompt': 'test'}]}
+    assert eval_dict == {'input': messages}
     assert Eval(**eval_dict) == eval_obj
     assert str(eval_obj)
 
+    messages = [user_message('test1')]
     eval_obj = Eval(
-        prompt_sequence=[
-            PromptTest(
-                prompt='test1',
-                ideal_response='test2',
-                checks = [MatchCheck(value='test3')],
-            ),
-            PromptTest(
-                prompt='test4',
-                ideal_response='test5',
-                checks = [
-                    MatchCheck(value='test6', metadata={'test': 'test7'}),
-                    ContainsCheck(value='test8'),
-                ],
-            ),
+        input=messages,
+        ideal_response='test2',
+        checks = [
+            MatchCheck(value='test6', metadata={'test': 'test7'}),
+            ContainsCheck(value='test8'),
         ],
     )
-    assert eval_obj.prompt_sequence[0].prompt == 'test1'
-    assert eval_obj.prompt_sequence[0].ideal_response == 'test2'
-    assert eval_obj.prompt_sequence[0].checks == [MatchCheck(value='test3')]
-    assert eval_obj.prompt_sequence[1].prompt == 'test4'
-    assert eval_obj.prompt_sequence[1].ideal_response == 'test5'
-    assert eval_obj.prompt_sequence[1].checks == [
+    assert eval_obj.input == messages
+    assert eval_obj.ideal_response == 'test2'
+    assert eval_obj.checks == [
         MatchCheck(value='test6', metadata={'test': 'test7'}),
         ContainsCheck(value='test8'),
     ]
@@ -160,32 +62,11 @@ def test__Eval__creation():  # noqa
 
     eval_dict = eval_obj.to_dict()
     assert eval_dict == {
-        'prompt_sequence': [
-            {
-                'prompt': 'test1',
-                'ideal_response': 'test2',
-                'checks': [
-                    {
-                        'check_type': CheckType.MATCH.name,
-                        'value': 'test3',
-                    },
-                ],
-            },
-            {
-                'prompt': 'test4',
-                'ideal_response': 'test5',
-                'checks': [
-                    {
-                        'metadata': {'test': 'test7'},
-                        'check_type': CheckType.MATCH.name,
-                        'value': 'test6',
-                    },
-                    {
-                        'check_type': CheckType.CONTAINS.name,
-                        'value': 'test8',
-                    },
-                ],
-            },
+        'input': messages,
+        'ideal_response': 'test2',
+        'checks': [
+            {'check_type': 'MATCH', 'value': 'test6', 'metadata': {'test': 'test7'}},
+            {'check_type': 'CONTAINS', 'value': 'test8'},
         ],
     }
     assert Eval(**eval_dict) == eval_obj
@@ -197,22 +78,26 @@ def test__eval_obj__clone(fake_eval_8f9fbf37):  #noqa
     assert eval_obj == eval_cloned
     assert eval_obj.to_dict() == eval_cloned.to_dict()
     # test-sequence (i.e. PromptTest objects) should be the same prompt tests but different objects
-    assert eval_obj.prompt_sequence == eval_cloned.prompt_sequence
-    assert eval_obj.prompt_sequence[0] == eval_cloned.prompt_sequence[0]
-    assert eval_obj.prompt_sequence[0] is not eval_cloned.prompt_sequence[0]
-    assert eval_obj.prompt_sequence[1] == eval_cloned.prompt_sequence[1]
-    assert eval_obj.prompt_sequence[1] is not eval_cloned.prompt_sequence[1]
+    assert eval_obj.input == eval_cloned.input
+    assert eval_obj.input is not eval_cloned.input
+    assert eval_obj.ideal_response == eval_cloned.ideal_response
+    assert eval_obj.ideal_response is not eval_cloned.ideal_response
+    assert eval_obj.checks == eval_cloned.checks
+    assert all(c1 is not c2 for c1, c2 in zip(eval_obj.checks, eval_cloned.checks))
+    assert eval_obj.metadata == eval_cloned.metadata
+    assert eval_obj.metadata is not eval_cloned.metadata
 
 def test__Eval__call__result__to_from_dict():  # noqa
     """
     Tests the basic case of calling an Eval object and converting it to/from a dict. No checks are
     passed to the eval.
     """
-    eval_obj = Eval(prompt_sequence=PromptTest(prompt='test'))
+    messages = [user_message('test')]
+    eval_obj = Eval(input=messages)
     # dict before call should be the same as after call
-    assert eval_obj.to_dict() == {'prompt_sequence': [{'prompt': 'test'}]}
+    assert eval_obj.to_dict() == {'input': messages}
     assert Eval(**eval_obj.to_dict()) == eval_obj
-    result = eval_obj(lambda x: f'response: {x}')
+    result = eval_obj(lambda x: CandidateResponse(content=f'response: {x}'))
     assert result.response_characters == len('response: test')
     assert eval_obj.to_dict() == {'prompt_sequence': [{'prompt': 'test'}]}
     assert Eval(**eval_obj.to_dict()) == eval_obj

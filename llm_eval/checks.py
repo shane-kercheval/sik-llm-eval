@@ -20,7 +20,7 @@ import re
 from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from llm_eval.candidates import Candidate
+from llm_eval.candidates import Candidate, CandidateResponse
 from llm_eval.internal_utilities import (
     EnumMixin,
     Registry,
@@ -172,8 +172,8 @@ class ResponseData:
     """
 
     input: str | Any | None = None
-    response: str | dict  | list | Any | None = None
-    code_blocks: list[str] | None = None
+    response: Any | None = None
+    response_metadata: dict[str, Any] | None = None
     ideal_response: str | Any | None = None
 
 
@@ -500,8 +500,6 @@ class PythonCodeBlocksPresent(SerializableCheck):
         default=1,
         description="The minimum number of code blocks that must be present in the response.",
     )
-    # the default in value_extractor is 'response' because this check is designed to check
-    # each/specific responses (for multiple responses), whereas code_blocks is cumulative
 
     def _call(self, value: str | list[str] | None) -> PassFailResult:
         """
@@ -513,14 +511,9 @@ class PythonCodeBlocksPresent(SerializableCheck):
         PythonCodeBlockTests check and b) just because the code blocks fail doesn't mean they
         aren't Python code blocks.
         """
-        # note we are passing in the response and manually extracting the code block here instead
-        # of passing in code_blocks directly from the Eval because code_blocks is cumulative (all
-        # code blocks from previous responses are passed in) but we only want to check the code
-        # blocks from the current response
-        if self.value_extractor == 'code_blocks':  # `value` already contains the code blocks
-            code_blocks = value or []
-        else:
-            code_blocks = extract_code_blocks(value)
+        value = value or ''
+        assert isinstance(value, str), f"Expected value to be a string, got {type(value)}"
+        code_blocks = extract_code_blocks(value)
         return PassFailResult(
             value=len(code_blocks) >= self.min_code_blocks,
             metadata={
@@ -551,14 +544,6 @@ class PythonCodeBlockTests(SerializableCheck):
 
     The `success_threshold` is the minimum **percent** of successfully executed code blocks *and*
     custom tests (if `code_tests` is used) required for the check to be considered successful.
-    
-    NOTE: this check will run all code blocks generated across all responses for a given Eval.
-    Therefore, you should not define multiple PythonCodeBlockTests checks within a single Eval (in
-    order to avoid running the same code blocks multiple times). It is recommended to define the
-    PythonCodeBlockTests check at the end of the test sequence for a given Eval. If a
-    PythonCodeBlockTests check is defined in the middle of the test sequence, the code blocks
-    generated from subsequent responses will not have executed yet (and corresponding values, 
-    functions, etc., defined in those code blocks will not be available to the functions/tests).
     """  # noqa
 
     success_threshold: float = Field(
@@ -657,11 +642,6 @@ class PythonCodeBlockTests(SerializableCheck):
         """,
     )
 
-    @property
-    def default_value_extractor(self) -> str:
-        """Default value extractor for the check."""
-        return 'code_blocks'
-
     @model_validator(mode='before')
     def strip_code_tests(cls, values: dict) -> dict:  # noqa: N805
         """Strip whitespace from code_tests."""
@@ -674,17 +654,16 @@ class PythonCodeBlockTests(SerializableCheck):
             values['code_tests'] = stripped_code_tests
         return values
 
-    def _call(self, value: list[str] | str | None) -> ScoreResult:  # noqa: PLR0912, PLR0915
+    def _call(self, value: str) -> ScoreResult:
         """
         Executes the check on the response and returns a ScoreResult containing the success rate of
         the code blocks and function checks (if `functions` is used), along with additional
         metadata (e.g. the code blocks, errors, etc.).
         """
+        value = value or ''
+        assert isinstance(value, str), f"Expected value to be a string, got {type(value)}"
         env_namespace = self.env_namespace or {}
-        if self.value_extractor == 'code_blocks':  # code is already extracted
-            code_blocks = value or []
-        else:
-            code_blocks = extract_code_blocks(value)
+        code_blocks = extract_code_blocks(value)
         code_block_errors = []
         test_results = []
         test_errors = []

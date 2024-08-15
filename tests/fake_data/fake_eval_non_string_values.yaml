@@ -9,20 +9,20 @@ metadata:
     - 2
     - 3
   source: 5
-system_message: 6
-previous_messages:
-  - user: 7
-    assistant: 8
-  - user: 9
-    assistant: 10
-prompt_sequence:
-  - prompt: 11
-    checks:
-      - check_type: CONTAINS
-        value: sum_two_numbers
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
-  - prompt: 12
-    checks:
-      - check_type: CONTAINS
-        value: sum_two_numbers
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+input:
+  - role: system
+    content: 6
+  - role: user
+    content: 7
+  - role: assistant
+    content: 8
+  - role: user
+    content: 9
+  - role: assistant
+    content: 10
+  - role: user
+    content: 11
+  checks:
+    - check_type: CONTAINS
+      value: sum_two_numbers
+    - check_type: PYTHON_CODE_BLOCKS_PRESENT

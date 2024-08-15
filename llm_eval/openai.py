@@ -108,6 +108,17 @@ def num_tokens_from_messages(model_name: str, messages: list[dict]) -> int:
     return num_tokens
 
 
+def user_message(message: str) -> dict:
+    """Returns a user message."""
+    return {'role': 'user', 'content': message}
+
+def assistant_message(message: str) -> dict:
+    """Returns an assistant message."""
+    return {'role': 'assistant', 'content': message}
+
+def system_message(message: str) -> dict:
+    """Returns a system message."""
+    return {'role': 'system', 'content': message}
 
 class OpenAIResponse(BaseModel):
     """Base class for OpenAI responses."""

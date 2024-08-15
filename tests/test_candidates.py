@@ -9,6 +9,7 @@ from llm_eval.candidates import (
     OpenAICandidate,
     is_async_candidate,
 )
+from llm_eval.openai import user_message
 
 class MockLMM:
     """Mock class representing an LLM."""
@@ -61,7 +62,7 @@ def test__is_async_candidate():  # noqa
     assert not is_async_candidate(SyncCallable())
 
 def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa
-    candidate = Candidate.from_yaml('examples/candidates/openai_3.5.yaml')
+    candidate = Candidate.from_yaml('examples/candidates/openai_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.to_dict() == openai_candidate_template
 
@@ -132,24 +133,23 @@ def test__OpenAI__default__no_parameters(openai_model_name):  # noqa
     candidate = OpenAICandidate(model_name=openai_model_name)
     assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
     assert candidate.client.model_parameters == {}
-    messages = [{'role': 'user', 'content': "What is the capital of France?"}]
+    messages = [user_message("What is the capital of France?")]
     response = candidate(messages)
     assert 'Paris' in response.content
-
     assert response.metadata['prompt_tokens'] > 0
     assert response.metadata['completion_tokens'] > 0
     assert response.metadata['total_tokens'] > 0
     assert response.metadata['prompt_cost'] > 0
     assert response.metadata['completion_cost'] > 0
     assert response.metadata['total_cost'] > 0
-
+    assert response.metadata['completion_characters'] > 0
     # test that the model generated from the dict is the same as the original
     # but that they don't share history (i.e. there is a new underlying object for the model)
     recreated_candidate = Candidate.from_dict(candidate.to_dict())
     assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
     assert recreated_candidate.client.model_parameters == {}
     assert candidate == recreated_candidate
-    messages = [{'role': 'user', 'content': "What is the capital of Germany?"}]
+    messages = [user_message("What is the capital of Germany?")]
     response = recreated_candidate(messages)
     assert 'Berlin' in response.content
 
@@ -187,7 +187,7 @@ def test__OpenAI__template__parameters(openai_candidate_template):  # noqa
     assert candidate.client.model == template['model_name']
     assert candidate.to_dict() == template
 
-    messages = [{'role': 'user', 'content': "What is the capital of France?"}]
+    messages = [user_message("What is the capital of France?")]
     response = candidate(messages)
     assert 'Paris' in response.content
 
@@ -197,7 +197,7 @@ def test__OpenAI__invalid_parameters(openai_candidate_template):  # noqa
     template = deepcopy(openai_candidate_template)
     template['parameters']['temperature'] = -10  # invalid value
     candidate = Candidate.from_dict(template)
-    messages = [{'role': 'user', 'content': "What is the capital of France?"}]
+    messages = [user_message("What is the capital of France?")]
     with pytest.raises(BadRequestError):
         _ = candidate(messages)
 

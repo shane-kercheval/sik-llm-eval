@@ -11,7 +11,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from textwrap import dedent, indent
 from typing import Any, Callable
-from llm_eval.candidates import Candidate, is_async_candidate
+from llm_eval.candidates import Candidate, CandidateResponse, is_async_candidate
 from llm_eval.checks import (
     Check,
     CheckResult,
@@ -27,133 +27,12 @@ from llm_eval.internal_utilities import (
 )
 
 
-# class PromptTest(DictionaryEqualsMixin):
-#     """
-#     A PromptTest represents a prompt, an optional ideal response, and a list of checks to run
-#     against the response. There can be one or more PromptTests in an Eval. If more than one
-#     PromptTest is provided, the intent is to evaluate a conversation (multiple sequential
-#     prompts/responses) and, therefore, it's expected that the underlying Candidate (model/client)
-#     will maintain state, if needed, between each PromptTest.
-
-#     Although most PromptTests will contain 'checks', checks are optional because even a test
-#     without checks still collects performance information (e.g. characters per second) as well as
-#     responses (which can be visually/subjectively compared against either the ideal response or the
-#     responses from other LLMs).
-
-#     A PromptTest only contains information (it is not directly callable). An Eval object is
-#     responsible for calling the PromptTest(s), executing the checks, and returning a EvalResult
-#     object.
-#     """
-
-#     def __init__(
-#             self,
-#             prompt: str | dict | list,
-#             ideal_response: str | None = None,
-#             checks: list[Check | dict | Callable[[Any], CheckResult]] | None = None) -> None:
-#         """
-#         Initializes the PromptTest.
-
-#         Note: More than one PythonCodeBlockTests check is not allowed. This is
-#         because the PythonCodeBlockTests check runs all code blocks across all responses and
-#         therefore should only be added once so the code blocks are not re-executed multiple times.
-
-#         Args:
-#             prompt:
-#                 The prompt to send to the LLM.
-#             ideal_response:
-#                 The ideal response to compare against the LLM's response.
-#             checks:
-#                 'A list of checks to run against the response. If a dictionary is provided, the
-#                 Check subclasses need to be registered via `Check.register(...)`.
-#                 The dictionary needs a `check_type` key with the registration value.
-#                 If a callable is provided, it will not be cloned and so should not have any state.
-#                 Additionally it cannot be serialized/deserialized via to_dict()/from_dict() since
-#                 the underlying callable will not have those methods.
-#         """
-#         self.prompt = dedent(prompt).lstrip() if isinstance(prompt, str) else prompt
-#         self.ideal_response = dedent(ideal_response) if ideal_response else None
-#         checks = checks or []
-#         if not isinstance(checks, list):
-#             checks = [checks]
-#         checks_created = []
-#         for check in checks:
-#             if isinstance(check, dict):
-#                 assert 'check_type' in check, "Check dictionary must contain a 'check_type' key"
-#                 checks_created.append(Check.from_dict(check))
-#             elif isinstance(check, (Callable, Check)):
-#                 checks_created.append(check)
-#             else:
-#                 raise TypeError("Checks must be either a Check, dictionary, or callable.")
-#         # Cannot add more than one PythonCodeBlockTests check
-#         if len([c for c in checks_created if isinstance(c, PythonCodeBlockTests)]) > 1:
-#             raise ValueError("Cannot add more than one PythonCodeBlockTests check")
-#         self.checks = checks_created
-
-#     def __str__(self) -> str:
-#         """Returns a string representation of the PromptTest."""
-#         if self.checks:
-#             indent_value = ' ' * 16
-#             checks = '[\n' + indent_value
-#             checks += f',\n{indent_value}'.join([str(c) for c in self.checks]) if self.checks else ''  # noqa: E501
-#             checks += '\n            ]'
-#         else:
-#             checks = '[]'
-#         if self.ideal_response:
-#             ideal_response = self.ideal_response.strip()
-#             if len(ideal_response) > 50:
-#                 ideal_response = ideal_response[0:50] + '...'
-#             ideal_response = f'\n            ideal_response="{ideal_response}",'
-#         else:
-#             ideal_response = ''
-#         return dedent(f"""
-#         {self.__class__.__name__}(
-#             prompt='{self.prompt}',{ideal_response}
-#             checks={checks},
-#         )
-#         """).strip()
-
-#     def to_dict(self) -> dict:
-#         """
-#         Return a dictionary representation of the PromptTest.
-
-#         NOTE: if the underlying checks do not have a to_dict method, (e.g. lambda function) they
-#         will be converted to a string. This means that the check cannot be deserialized via
-#         from_dict.
-#         """
-#         value = {'prompt': self.prompt}
-#         if self.ideal_response:
-#             value['ideal_response'] = self.ideal_response
-#         if self.checks:
-#             value['checks'] = [
-#                 c.to_dict() if hasattr(c, 'to_dict') else str(c) for c in self.checks
-#             ]
-#         return value
-
-#     def clone(self) -> 'PromptTest':
-#         """
-#         Returns a copy of the PromptTest with the same state.
-
-#         NOTE: This method only clones checks that have a clone method. If a check does not have a
-#         clone method (e.g. lambda function), it will not be cloned and it is assumed that the check
-#         is stateless and multiple usage of the check will not cause side effects.
-#         """
-#         return PromptTest(
-#             prompt=deepcopy(self.prompt),
-#             ideal_response=self.ideal_response,
-#             checks=[c.clone() if hasattr(c, 'clone') else c for c in self.checks],
-#         )
-
-
 class Eval(DictionaryEqualsMixin):
     """
-    An Eval is single scenario (i.e. one or more prompts) that the user is interested in
-    evaluating (via one or more checks), which is encapsulated in a PromptTest object.  Multiple
-    prompts can be used to test conversations (i.e. sequential prompt/response exchanges where the
-    assumption is the LLM client maintains conversational history) encapsulated in a list of
-    PromptTests. Additionally, each Eval is associated with custom "checks". Examples of checks
-    include: if the response matches an exact value, if it contain a particular value, if it
-    contain code blocks, if those code blocks run, if the variables/functions/etc created by those
-    code blocks contain the expected values/behavior.
+    TODO: review and update documentation.
+
+    An Eval is single test case/scenario that the user is interested in evaluating (via one or more
+    "checks").
 
     An Eval is a callable object that is executed by calling it with a Candidate object, or a
     dictionary representing a Candidate that has been registered via `Candidate.register(...)`.
@@ -168,10 +47,7 @@ class Eval(DictionaryEqualsMixin):
         """
         Initializes the Eval.
 
-        Note: More than one PythonCodeBlockTests check cannot be added across all tests. This is
-        because the PythonCodeBlockTests check runs all code blocks across all responses and
-        therefore should only be added once so the code blocks are not re-executed multiple times.
-        The PythonCodeBlockTests check should be added to the last PromptTest in the sequence.
+        # TODO: update the documentation
 
         Args:
             metadata:
@@ -179,11 +55,12 @@ class Eval(DictionaryEqualsMixin):
         """
         self._has_executed = False
         self._candidate = None
-        self._responses = None
+        self._response = None
         self._duration = None
-        self.metadata = deepcopy(metadata) or {}
+
         self.input = input
-        self.ideal_response = dedent(ideal_response) if ideal_response else None
+        self.ideal_response = ideal_response
+        self.metadata = deepcopy(metadata) or {}
         checks = checks or []
         if not isinstance(checks, list):
             checks = [checks]
@@ -204,15 +81,15 @@ class Eval(DictionaryEqualsMixin):
     def to_dict(self) -> dict:
         """Return a dictionary representation of the PromptTest."""
         value = {}
-        if self.metadata:
-            value['metadata'] = self.metadata
         value['input'] = self.input
-        if self.ideal_response:
-            value['ideal_response'] = self.ideal_response
         if self.checks:
             value['checks'] = [
                 c.to_dict() if hasattr(c, 'to_dict') else str(c) for c in self.checks
             ]
+        if self.ideal_response:
+            value['ideal_response'] = self.ideal_response
+        if self.metadata:
+            value['metadata'] = self.metadata
         return value
 
     def to_yaml(self, file_path: str) -> None:
@@ -288,18 +165,16 @@ class Eval(DictionaryEqualsMixin):
         """
         assert self._candidate
         assert self._duration is not None
-        code_blocks = []
-        # for test, response in zip(self.prompt_sequence, self._responses):
         check_results = []
-        if isinstance(self.response, str):
-            code_blocks.extend(extract_code_blocks(self.response))
-        else:
-            code_blocks = []
+        # if isinstance(self._response.content, str):
+        #     code_blocks = extract_code_blocks(self._response.content)
+        # else:
+        #     code_blocks = []
         data = ResponseData(
             input=self.input,
             ideal_response=self.ideal_response,
-            response=self.response,
-            code_blocks=code_blocks,
+            response=self._response.content,
+            response_metadata=self._response.metadata,
         )
         for check in self.checks:
             check_results.append(check(data))
@@ -307,7 +182,7 @@ class Eval(DictionaryEqualsMixin):
         return EvalResult(
             eval_obj=self,
             candidate_obj=self._candidate,
-            responses=self._responses,
+            response=self._response,
             total_time_seconds=self._duration,
             num_code_blocks=len(code_blocks),
             cost = self._candidate.cost if has_property(self._candidate, 'cost') else None,
@@ -315,7 +190,8 @@ class Eval(DictionaryEqualsMixin):
             check_results=check_results,
         )
 
-    def __call__(self, candidate: Candidate | Callable[[Any], Any] | dict) -> 'EvalResult':
+    def __call__(
+            self, candidate: Candidate | Callable[[Any], CandidateResponse] | dict) -> 'EvalResult':
         """
         Evaluates the model against the prompts and tests.
 
@@ -325,11 +201,8 @@ class Eval(DictionaryEqualsMixin):
                 subclasses need to be registered via `Candidate.register(...)`.
                 The dictionary needs a `candidate_type` key with the registration value.
 
-                If the Candidate is a callable, it will be wrapped in a CallableCandidate object
-                and the metadata will be populated with the function's signature. The Candidate
-                can be serialized via `to_dict()` and deserialized via `from_dict()` but will
-                not be able to be called when deserialized, since the underlying function will not
-                be serialized.
+                If the Candidate is a callable, it should be a function that takes the `input` as
+                an argument and returns a CandidateResponse object.
         """
         if self._has_executed:
             raise RuntimeError("Eval has already been executed; create a new Eval object")
@@ -350,19 +223,10 @@ class Eval(DictionaryEqualsMixin):
 
     def __str__(self) -> str:
         """Returns a string representation of the Eval."""
-        if self.prompt_sequence:
-            prompt_sequence = '[\n'
-            indent_value = ' ' * 16
-            prompt_sequence += ',\n'.join(
-                [indent(str(s), indent_value) for s in self.prompt_sequence],
-            )
-            prompt_sequence += '\n            ]'
-        else:
-            prompt_sequence = '[]'
         metadata = '' if not self.metadata else f'            metadata={self.metadata},\n{" " * 12}'  # noqa
         return dedent(f"""
         Eval(
-            {metadata}prompt_sequence={prompt_sequence},
+            {metadata}input={self.input},
         )
         """).strip()
 
@@ -371,198 +235,12 @@ class Eval(DictionaryEqualsMixin):
         Returns a copy of the Candidate with the same state but with a different instance of the
         underlying model (e.g. same parameters but reset history/context).
         """
-        # return Eval(**deepcopy(self.to_dict()))
         return Eval(
-            prompt_sequence=[p.clone() for p in self.prompt_sequence],
-            system_message=self.system_message,
-            previous_messages=deepcopy(self.previous_messages),
+            input=deepcopy(self.input),
+            checks=deepcopy(self.checks),
+            ideal_response=deepcopy(self.ideal_response),
             metadata=deepcopy(self.metadata),
         )
-
-
-# class PromptComparison:
-#     """
-#     The intent of this class is to form an interface for defining/creating multiple PromptTest
-#     objects that access different prompts across the same set of checks, which is usedful
-#     for prompt engineering.
-
-#     A PromptTest object is returned for each of the prompts provided. The checks and ideal response
-#     are shared across all PromptTest objects.
-
-#     `prompt_parameters` can be used to share text across prompts. For example, if you are using
-#     few-shot learning, you can use `prompt_parameters` to share the the same few-shot example
-#     across all prompts.
-
-#     This class could (should?) have been implemented as a function, but it is implemented as a
-#     callable class to provide a consistent interface with the other classes in the llm_eval module
-#     when defining evaluations (e.g. PromptTest, MultiEval).
-#     """
-
-#     def __init__(self,
-#         prompts: list[str | dict],
-#         prompt_parameters: dict | None = None,
-#         checks: list[Check | dict] | None = None,
-#         ideal_response: str | None = None) -> None:
-#         """
-#         Args:
-#             prompts:
-#                 A list of prompts that can be either strings or dictionaries. If dictionaries are
-#                 used, the dictionary must contain a 'prompt' key. Future versions may support
-#                 additional keys.
-#             prompt_parameters:
-#                 `prompt_parameters` is a dictionary where the keys correspond to placeholders in
-#                 the prompts (e.g. key is 'value_a' and the prompt is 'Here is my prompts with
-#                 {value_a}') and the values will replace the placeholders (e.g. '{value_a}') in the
-#                 prompts.
-#             checks:
-#                 List of checks to run against the response. All PromptTest objects will share the
-#                 same checks.
-#             ideal_response:
-#                 Optional ideal response for the prompts. Currently not used in llm_eval.
-#         """
-#         self.prompts = [str(p['prompt']) if isinstance(p, dict) else str(p) for p in prompts]
-#         self.prompt_parameters = prompt_parameters or {}
-#         self.checks = [Check.from_dict(c) if isinstance(c, dict) else c for c in checks or []]
-#         self.ideal_response = str(ideal_response) if ideal_response is not None else None
-
-#     def __call__(self) -> list[PromptTest]:
-#         """Creates a list of PromptTest objects from the PromptComparison."""
-#         tests = []
-#         for prompt in self.prompts:
-#             tests.append(PromptTest(
-#                 prompt=prompt.format(**self.prompt_parameters) if self.prompt_parameters else prompt,  # noqa
-#                 ideal_response=self.ideal_response,
-#                 checks=self.checks,
-#             ))
-#         return tests
-
-
-# class MultiEval:
-#     """
-#     A MultiEval object describes and validates the structure required to create one or more evals
-#     from either multiple system messages, multiple sets of previous messages, and/or multiple
-#     prompts.
-
-#     Unlike an Eval object, A MultiEval object does not generate LLM responses or execute checks.
-#     It is simply a mechanism to create multiple Eval objects from a single dictionary. However,
-#     MultiEvals can be passed to the TestHarness in the same way as Eval objects, and the
-#     TestHarness will automatically create multiple Eval objects from the MultiEval object.
-
-#     For example, if the `system_message` is a list of strings, the intent intent is to create two
-#     Eval objects (duplicated for each system_message).
-#     """
-
-#     def __init__(self,
-#             prompts: list[PromptTest | dict] | PromptComparison | PromptTest | dict,
-#             system_message: list[str] | str | None = None,
-#             previous_messages: list[dict | tuple | list] | None = None,
-#             metadata: dict | None = None,
-#         ) -> None:
-#         """
-#         Args:
-#             prompts:
-#                 If a single dictionary is passed in, it is assumed to represent a single PromptTest
-#                 object (and, therefore, a single Eval object) or a single PromptComparison object
-#                 (and, therefore, multiple Eval objects). Please see those classes for the expected
-#                 fields (and corresponding dictionary structure).
-
-#                 If a list of PromptTest objects is passed in, it is assumed to represent a single
-#                 eval with one or more sequential prompts.
-
-#                 If a list of dictionaries is passed in, it is assumed to represent either a single
-#                 PromptTest object or a single PromptComparison object.
-#             system_message:
-#                 Either a single system message or a list of system messages. If multiple system
-#                 messages are passed in, multiple Eval objects will be created (one for each system
-#                 message), which will share the same prompts and previous messages.
-#             previous_messages:
-#                 Previous messages are user/assistant pairs to set the state of the LLM. Each pair
-#                 should either be a dictionary or a tuple. If a dictionary is used then it should
-#                 contain a 'user' key and an 'assistant' key. If a tuple is used, it should contain
-#                 two items: the user message in the first position and the assistant message in the
-#                 second position.
-
-#                 Either a list of previous messages or a list of lists of previous messages can be
-#                 passed in. If a list of lists is passed in, it is assumed that each outer list
-#                 represents a single Eval object and each inner list represents a list of previous
-#                 messages for that Eval object. Therefore a list of lists will create multiple Eval
-#                 objects, one for each inner list of previous messages. Each Eval object will share
-#                 the same prompts and system message.
-#             metadata:
-#                 Metadata shared across all Eval objects.
-#         """
-#         if system_message is None or isinstance(system_message, list):
-#             self.system_message = system_message
-#         else:
-#             self.system_message = [system_message]
-#         assert previous_messages is None or isinstance(previous_messages, list), \
-#             "previous_messages must be a list"
-#         if previous_messages and isinstance(previous_messages[0], (dict, tuple)):
-#             self.previous_messages = [previous_messages]
-#         else:
-#             self.previous_messages = previous_messages
-#         self.metadata = metadata or {}
-
-#         if isinstance(prompts, dict):
-#             # A single dictionary can represent a single PromptTest or a single PromptComparison.
-#             # A dictionary representing a PromptTest will contain a `prompt` key; a dictionary
-#             # representing a PromptComparison will contain a `prompts` key.
-#             if 'prompt' in prompts:
-#                 prompts = [PromptTest(**prompts)]
-#             else:
-#                 assert 'prompts' in prompts, "Invalid dictionary; expected 'prompt' or 'prompts'"
-#                 # type(prompts['checks'][0])
-#                 # PromptComparison(prompts=prompts['prompts'], checks=prompts.get('checks'))
-#                 prompts = PromptComparison(**prompts)()
-#         elif isinstance(prompts, PromptComparison):
-#             prompts = prompts()
-#         elif isinstance(prompts, PromptTest):
-#             prompts = [prompts]
-#         else:
-#             # either a list of PromptTest objects or a list of dictionaries representing a
-#             # PromptTest object; either way, there are multiple objects but only for a single eval
-#             # so we need to wrap it in another list
-#             assert isinstance(prompts, list)
-#             assert all(isinstance(p, (PromptTest, dict)) for p in prompts)
-#             prompts = [
-#                 PromptTest(**p) if isinstance(p, dict) else p for p in prompts
-#             ]
-#             prompts = [prompts]
-
-#         assert isinstance(prompts, list), "prompts must be a list"
-#         self.prompts = prompts
-
-#     def __call__(self) -> list[Eval]:
-#         """Creates a list of Eval objects from the MultiEval object."""
-#         evals = []
-#         for system_message in self.system_message or [None]:
-#             for previous_messages in self.previous_messages or [None]:
-#                 for prompt_sequence in self.prompts:
-#                     evals.append(Eval(
-#                         prompt_sequence=prompt_sequence,
-#                         system_message=system_message,
-#                         previous_messages=previous_messages,
-#                         metadata=self.metadata,
-#                     ))
-#         return evals
-
-#     @classmethod
-#     def from_dict(cls, config: dict) -> list[Eval]:  # noqa: ANN102
-        # """
-        # Parse a dictionary into a MultiEval object.
-
-        # A dictionary can either have `prompt_comparison` key which represents a single
-        # PromptComparison object (which in turn represents multiple PromptTest objects), or a
-        # `prompt_sequence` key which represents a list of PromptTest objects.
-        # """
-        # config = deepcopy(config)
-        # prompts = config.get('prompt_comparison') or config.get('prompt_sequence')
-        # return cls(
-        #     prompts=prompts,
-        #     system_message=config.get('system_message'),
-        #     previous_messages=config.get('previous_messages'),
-        #     metadata=config.get('metadata'),
-        # )
 
 
 class EvalResult(DictionaryEqualsMixin):

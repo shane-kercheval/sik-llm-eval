@@ -62,7 +62,7 @@ class CandidateResponse(BaseModel):
     consistently evaluate the response and store the metadata (e.g. cost, usage, etc.) for the
     response.
 
-    Content is the text/dict/etc. from the LLM that is meant to be evaluated.
+    Content is the text/dict/etc. from the LLM that is meant to be evaluated (via Check objects).
     Metadata is a dictionary of metadata about the response (e.g. cost, usage, etc.).
     """
 
@@ -227,6 +227,8 @@ class OpenAICandidate(Candidate):
                 'prompt_cost': prompt_cost,
                 'completion_cost': completion_cost,
                 'total_cost': total_cost,
+                'completion_characters': len(response.content),
+
             },
         )
 

@@ -9,16 +9,12 @@ metadata:
     - test
     - subtract_two_numbers
   source: Test
-prompt_sequence:
-  - prompt: Write a function that called `subtract_two_numbers` that takes two numbers and returns the second subtracted from the first.
-    checks:
-      - check_type: CONTAINS
-        value: subtract_two_numbers
-      - check_type: MATCH
-        value: does not match
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
-  - prompt: Write some assertion statements to check the function.
-    checks:
-      - check_type: CONTAINS
-        value: assert subtract_two_numbers
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+input:
+  - role: user
+    content: Write a function that called `subtract_two_numbers` that takes two numbers and returns the second subtracted from the first.
+checks:
+  - check_type: CONTAINS
+    value: subtract_two_numbers
+  - check_type: MATCH
+    value: does not match
+  - check_type: PYTHON_CODE_BLOCKS_PRESENT
