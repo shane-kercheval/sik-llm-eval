@@ -1,17 +1,13 @@
 """Configures the pytests."""
 from copy import deepcopy
 import os
-from collections.abc import Callable
 import re
 from time import sleep
-from typing import Any
 from pydantic import BaseModel
 import pytest
 import requests
-import random
 import yaml
 from faker import Faker
-import numpy as np
 from dotenv import load_dotenv
 from unittest.mock import MagicMock
 from llm_eval.candidates import Candidate, CandidateResponse
@@ -44,7 +40,7 @@ class MockCandidate(Candidate):
         super().__init__(metadata=metadata, parameters=parameters)
         self.responses = responses.copy()
 
-    def __call__(self, input: str) -> str:
+    def __call__(self, input: str) -> str:  # noqa: A002
         """Returns the response for the given prompt."""
         response = self.responses[input[0]['content']]
         if isinstance(response, Exception):
@@ -77,14 +73,14 @@ class AsyncMockCandidate(Candidate):
         super().__init__(metadata=metadata, parameters=parameters)
         self.responses = responses.copy()
 
-    async def _get_response(self, input) -> str:
+    async def _get_response(self, input) -> str:  # noqa
         """Returns the response for the given prompt."""
         response = self.responses[input[0]['content']]
         if isinstance(response, Exception):
             raise response
         return CandidateResponse(content=response)
 
-    async def __call__(self, input) -> str:
+    async def __call__(self, input) -> str:  # noqa
         """Returns the response for the given prompt."""
         return await self._get_response(input)
 

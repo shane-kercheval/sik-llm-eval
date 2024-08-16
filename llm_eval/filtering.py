@@ -32,7 +32,8 @@ from llm_eval.eval import Eval, EvalResult
     #     """
     #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
 
-    #     Returns the number of code blocks generated that successfully execute across all responses.
+    #     Returns the number of code blocks generated that successfully execute across all
+    #     responses.
     #     If there are no code blocks or no PythonCodeBlockTests check, returns None.
     #     """
     #     result = self.get_code_block_tests_result()

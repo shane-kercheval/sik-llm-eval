@@ -255,14 +255,15 @@ class OpenAICandidate(Candidate):
 # class OpenAIToolsCandidate(ChatModelCandidate):
 #     """
 #     Wrapper around the OpenAI API that allows the user to create an OpenAI candidate with tools
-#     from a dictionary. The client is a callable object that takes a prompt and returns a response.
+#     from a dictionary. The client is a callable object that takes a prompt and returns a
+#     response.
 #     It will also track the history/messages, supporting stateful conversations, which is needed
 #     to evaluate multiple prompts in a single Eval object.
 
 #     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
 #     """
 
-#     def __init__(  # noqa: D417
+#     def __init__(
 #             self,
 #             metadata: dict | None = None,
 #             parameters: dict | None = None) -> None:
@@ -277,7 +278,7 @@ class OpenAICandidate(Candidate):
 #                 'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
 #                 such as `model_name` and model-specific parameters (e.g. `temperature`) can be
 #                 passed.
-#         """  # noqa
+#         """
 #         if parameters is None:
 #             parameters = {}
 #         super().__init__(

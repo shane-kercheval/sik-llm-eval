@@ -20,7 +20,7 @@ import re
 from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from llm_eval.candidates import Candidate, CandidateResponse
+from llm_eval.candidates import Candidate
 from llm_eval.internal_utilities import (
     EnumMixin,
     Registry,
@@ -654,7 +654,7 @@ class PythonCodeBlockTests(SerializableCheck):
             values['code_tests'] = stripped_code_tests
         return values
 
-    def _call(self, value: str) -> ScoreResult:
+    def _call(self, value: str) -> ScoreResult:  # noqa: PLR0915
         """
         Executes the check on the response and returns a ScoreResult containing the success rate of
         the code blocks and function checks (if `functions` is used), along with additional

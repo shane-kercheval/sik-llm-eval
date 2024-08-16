@@ -32,7 +32,7 @@ class Eval(DictionaryEqualsMixin):
     dictionary representing a Candidate that has been registered via `Candidate.register(...)`.
     """
 
-    def __init__(
+    def __init__(  # noqa: D417
             self,
             input: str | dict | list | Any,  # noqa: A002, ANN401
             checks: list[Check | dict | Callable[[Any], CheckResult]] | None = None,
@@ -239,7 +239,7 @@ class EvalResult(DictionaryEqualsMixin):
     Eval.
     """
 
-    def __init__(
+    def __init__(  # noqa: D417
         self,
         eval_obj: Eval | dict,
         candidate_obj: Candidate | dict | Callable,

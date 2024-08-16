@@ -18,7 +18,6 @@ from llm_eval.checks import (
     MatchCheck,
     PassFailResult,
     ScoreResult,
-    ToolCallsCheck,
 )
 from llm_eval.eval import (
     Eval,
@@ -211,7 +210,7 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     result = sum_two_numbers(100, 5)
     print(result)  # This will print 105
     ```
-    """)
+    """)  # noqa: E501
     expected_code_blocks = extract_code_blocks(response)
     expected_num_code_blocks = len(expected_code_blocks)
     assert expected_num_code_blocks == 2
@@ -263,7 +262,7 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     expected_successful_checks = expected_successful_code_blocks + \
         expected_successful_code_tests
 
-    assert eval_result.check_results[-1].value == expected_successful_checks / expected_total_checks
+    assert eval_result.check_results[-1].value == expected_successful_checks / expected_total_checks  # noqa: E501
     assert eval_result.check_results[-1].success_threshold == 1
     assert not eval_result.check_results[-1].success
     assert eval_result.check_results[-1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name  # noqa
@@ -792,7 +791,10 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
 
     results = harness()
     assert len(results) == 2
-    errors = test_harness_callback_errors if num_cpus == 1 else list(multi_processing_error_handler.shared_list)
+    if num_cpus == 1:
+        errors = test_harness_callback_errors
+    else:
+        errors = list(multi_processing_error_handler.shared_list)
     # both evals for candidate 1 should have an error
     assert len(errors) == 2
     # candidate 1 will raise an error for both evals
@@ -840,7 +842,7 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
         # code block were generated
         assert results[1][i].check_results[-1].metadata['num_code_blocks'] == 1
         assert results[1][i].check_results[-1].metadata['num_code_blocks_successful'] == 1
-        assert results[1][i].check_results[-1].metadata['num_code_tests'] == expected_num_code_tests
+        assert results[1][i].check_results[-1].metadata['num_code_tests'] == expected_num_code_tests  # noqa: E501
         assert results[1][i].check_results[-1].metadata['num_code_tests_successful'] > 0
 
 
@@ -1091,29 +1093,29 @@ def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and
     assert results[1][num_samples].to_dict()['candidate_obj']
     assert results[1][num_samples].to_dict()['check_results'][0] == results[1][num_samples].check_results[0].to_dict()  # noqa: E501
 
-@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template):  # noqa
-    """Integration test that tests Evaling a real OpenAITool API call against the ToolsCheck."""
-    candidate = Candidate.from_dict(openai_tools_candidate_template)
-    candidate
-    eval_ = Eval(
-        prompt_sequence=PromptTest(
-            prompt="What's the weather like in Boston today in degrees F?",
-            checks=[
-                ToolCallsCheck(
-                    function_name='get_current_weather',
-                    function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
-                ),
-            ],
-        ),
-    )
-    result = eval_(candidate)
-    tool_response = result.responses[0][0]
-    assert tool_response['name'] == 'get_current_weather'
-    assert 'location' in tool_response['arguments']
-    assert tool_response['arguments']['location']
-    assert isinstance(tool_response['arguments']['location'], str)
-    assert 'unit' in tool_response['arguments']
-    assert tool_response['arguments']['unit'] in ['celsius', 'fahrenheit']
-    # check that it gets at least the function name correctly
-    assert result.check_results[0].value >= 0.5
+# @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
+# def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template):
+#     """Integration test that tests Evaling a real OpenAITool API call against the ToolsCheck."""
+#     candidate = Candidate.from_dict(openai_tools_candidate_template)
+#     candidate
+#     eval_ = Eval(
+#         prompt_sequence=PromptTest(
+#             prompt="What's the weather like in Boston today in degrees F?",
+#             checks=[
+#                 ToolCallsCheck(
+#                     function_name='get_current_weather',
+#                     function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
+#                 ),
+#             ],
+#         ),
+#     )
+#     result = eval_(candidate)
+#     tool_response = result.responses[0][0]
+#     assert tool_response['name'] == 'get_current_weather'
+#     assert 'location' in tool_response['arguments']
+#     assert tool_response['arguments']['location']
+#     assert isinstance(tool_response['arguments']['location'], str)
+#     assert 'unit' in tool_response['arguments']
+#     assert tool_response['arguments']['unit'] in ['celsius', 'fahrenheit']
+#     # check that it gets at least the function name correctly
+#     assert result.check_results[0].value >= 0.5
