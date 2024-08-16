@@ -191,10 +191,10 @@ class OpenAICandidate(Candidate):
                 such as `model_name` and model-specific parameters (e.g. `temperature`) can be
                 passed.
         """  # noqa
+        super().__init__(metadata=metadata, parameters=parameters)
         assert model_name or endpoint_url, "model_name or endpoint_url must be provided"
         self.model_name = model_name
         self.endpoint_url = endpoint_url
-        super().__init__(metadata=metadata, parameters=parameters)
         self.client = OpenAICompletionWrapper(
             client=OpenAI(base_url=self.endpoint_url),
             model=self.model_name or self.endpoint_url,

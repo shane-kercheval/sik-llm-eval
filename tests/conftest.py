@@ -14,7 +14,7 @@ from faker import Faker
 import numpy as np
 from dotenv import load_dotenv
 from unittest.mock import MagicMock
-from llm_eval.candidates import Candidate
+from llm_eval.candidates import Candidate, CandidateResponse
 
 load_dotenv()
 
@@ -44,18 +44,12 @@ class MockCandidate(Candidate):
         super().__init__(metadata=metadata, parameters=parameters)
         self.responses = responses.copy()
 
-    def __call__(self, prompt: str) -> str:
+    def __call__(self, input: str) -> str:
         """Returns the response for the given prompt."""
-        response = self.responses[prompt]
+        response = self.responses[input[0]['content']]
         if isinstance(response, Exception):
             raise response
-        return response
-
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
-        return
-
-    def set_system_message(self, system_message: str) -> None:  # noqa
-        return
+        return CandidateResponse(content=response)
 
     def to_dict(self) -> dict:
         """Need to add `responses` to enable proper to_dict values."""
@@ -63,18 +57,9 @@ class MockCandidate(Candidate):
         value['responses'] = self.responses
         return value
 
-    def clone(self) -> 'Candidate':
-        """
-        Returns a copy of the Candidate with the same state but with a different instance of the
-        underlying model (e.g. same parameters but reset history/context).
-
-        Reques
-        """
-        return Candidate.from_dict(deepcopy(self.to_dict()))
-
 
 @Candidate.register('AsyncMockCandidate')
-class AysyncMockCandidate(Candidate):
+class AsyncMockCandidate(Candidate):
     """
     This class needs to be outside of the test function so that we can test multi-processing, which
     requires that the class be picklable, which requires that it be defined at the top level of the
@@ -92,37 +77,23 @@ class AysyncMockCandidate(Candidate):
         super().__init__(metadata=metadata, parameters=parameters)
         self.responses = responses.copy()
 
-    async def _get_response(self, prompt: str) -> str:
+    async def _get_response(self, input) -> str:
         """Returns the response for the given prompt."""
-        response = self.responses[prompt]
+        response = self.responses[input[0]['content']]
         if isinstance(response, Exception):
             raise response
-        return response
+        return CandidateResponse(content=response)
 
-    async def __call__(self, prompt: str) -> str:
+    async def __call__(self, input) -> str:
         """Returns the response for the given prompt."""
-        return await self._get_response(prompt)
+        return await self._get_response(input)
 
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
-        return
-
-    def set_system_message(self, system_message: str) -> None:  # noqa
-        return
 
     def to_dict(self) -> dict:
         """Need to add `responses` to enable proper to_dict values."""
         value = super().to_dict()
         value['responses'] = self.responses
         return value
-
-    def clone(self) -> 'Candidate':
-        """
-        Returns a copy of the Candidate with the same state but with a different instance of the
-        underlying model (e.g. same parameters but reset history/context).
-
-        Reques
-        """
-        return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
 @Candidate.register('MockCandidateCannedResponse')

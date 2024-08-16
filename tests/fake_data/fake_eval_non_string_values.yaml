@@ -22,7 +22,7 @@ input:
     content: 10
   - role: user
     content: 11
-  checks:
-    - check_type: CONTAINS
-      value: sum_two_numbers
-    - check_type: PYTHON_CODE_BLOCKS_PRESENT
+checks:
+  - check_type: CONTAINS
+    value: sum_two_numbers
+  - check_type: PYTHON_CODE_BLOCKS_PRESENT

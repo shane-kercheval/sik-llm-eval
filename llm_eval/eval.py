@@ -9,22 +9,16 @@ import json
 from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
-from textwrap import dedent, indent
+from textwrap import dedent
 from typing import Any, Callable
 from llm_eval.candidates import Candidate, CandidateResponse, is_async_candidate
 from llm_eval.checks import (
     Check,
     CheckResult,
-    CheckType,
     PassFailResult,
-    PythonCodeBlockTests,
     ResponseData,
 )
-from llm_eval.internal_utilities import (
-    DictionaryEqualsMixin,
-    extract_code_blocks,
-    has_property,
-)
+from llm_eval.internal_utilities import DictionaryEqualsMixin
 
 
 class Eval(DictionaryEqualsMixin):
@@ -73,9 +67,6 @@ class Eval(DictionaryEqualsMixin):
                 checks_created.append(check)
             else:
                 raise TypeError("Checks must be either a Check, dictionary, or callable.")
-        # Cannot add more than one PythonCodeBlockTests check
-        if len([c for c in checks_created if isinstance(c, PythonCodeBlockTests)]) > 1:
-            raise ValueError("Cannot add more than one PythonCodeBlockTests check")
         self.checks = checks_created
 
     def to_dict(self) -> dict:
@@ -132,7 +123,7 @@ class Eval(DictionaryEqualsMixin):
         separate function from _execute_checks so that we can async the generation of responses
         and then execute the checks (which are heavier on the CPU and shouldn't be async).
 
-        This method has side effects of setting self._responses, self._duration, and
+        This method has side effects of setting self._response, self._duration, and
         self._candidate, which are used by _execute_checks. This is bad practice but we need to do
         this to support calling _generate_response async and then executing the checks afterwards.
         """
@@ -207,7 +198,7 @@ class Eval(DictionaryEqualsMixin):
             raise RuntimeError("Eval has already been executed; create a new Eval object")
         self._has_executed = True
         self._generate_response(candidate)
-        # _generate_response has side effects of setting self._responses, self._duration, and
+        # _generate_response has side effects of setting self._response, self._duration, and
         # self._candidate that _execute_check relies on;
         # this is bad practice but we need to do this to support calling _generate_response async
         # and then executing the checks afterwards
@@ -216,7 +207,7 @@ class Eval(DictionaryEqualsMixin):
         # accessed directly; they are only used to store information between running
         # _generate_response and _execute_checks
         self._candidate = None
-        self._responses = None
+        self._response = None
         self._duration = None
         return results
 
@@ -253,7 +244,7 @@ class EvalResult(DictionaryEqualsMixin):
         eval_obj: Eval | dict,
         candidate_obj: Candidate | dict | Callable,
         response: str | object,
-        response_metadata: dict | object,
+        response_metadata: dict,
         total_time_seconds: float,
         timestamp: str,
         check_results: list[CheckResult | dict]) -> None:
@@ -518,7 +509,6 @@ class EvalHarness:
 
     def __init__(
             self,
-            # evals: list[Eval | dict | MultiEval] | Eval | MultiEval | dict | None = None,
             evals: list[Eval | dict ] | Eval | dict | None = None,
             candidates: list[Candidate | Callable | dict] | Candidate | dict | None = None,
             num_cpus: int | None = None,
@@ -593,8 +583,8 @@ class EvalHarness:
                 will not raise an exception for any errors that occur when generating responses by
                 the Candidate. Instead, the user can check the results to see if there were any
                 errors. The error will be stored in the corresponding EvalResult object in a
-                `harness_exception` property and the checks should have a `False` value for the
-                `success` property.
+                `harness_exception` key in the response_metadata dictionary and the checks should
+                have a `False` value for the `success` property.
             num_samples:
                 The number of samples to run for each Eval. This is useful for running multiple
                 samples for each Eval to get a better estimate of the performance metrics. Running
@@ -625,14 +615,9 @@ class EvalHarness:
                 be registered via `Check.register(...)`.
                 The checks needs a `check_type` key with the registration value.
         """
-        # if isinstance(eval_obj, dict):
-        #     # a dict could be in the format of a single Eval or a MultiEval (prompt_sequence or
-        #     # prompt_comparison) with single or multiple system_messages and previous_messages
-        #     # MutliEval will create the necessary Eval objects
-        #     self.evals.extend(MultiEval.from_dict(eval_obj)())
-        # elif isinstance(eval_obj, MultiEval):
-        #     self.evals.extend(eval_obj())
-        if isinstance(eval_obj, Eval):
+        if isinstance(eval_obj, dict):
+            self.evals.append(Eval(**eval_obj))
+        elif isinstance(eval_obj, Eval):
             self.evals.append(eval_obj)
         elif isinstance(eval_obj, list):
             for obj in eval_obj:
@@ -742,15 +727,12 @@ class EvalHarness:
     def _generate_eval_responses(candidate: Candidate, eval_obj: Eval) -> tuple[Eval, Exception]:
         """
         Generates the response(s) from the Candidate/LLM for a particular Eval. Ensure that the
-        Candidate and Eval objects are cloned before calling this method. This is especially
-        important for the Candidate object to ensure that each Eval is run against a unique
-        Candidate in memory (i.e. if the Candidate maintains state/history between prompts, we
-        don't want to reuse the same candidate for each eval).
+        Eval objects are cloned before calling this method.
         """
         eval_obj = eval_obj.clone()
         exception = None
         try:
-            eval_obj._generate_response(candidate.clone())
+            eval_obj._generate_response(candidate)
         except Exception as e:
             exception = e
         return eval_obj, exception
@@ -767,7 +749,7 @@ class EvalHarness:
         eval_obj = eval_obj.clone()
         exception = None
         try:
-            await eval_obj._async_generate_response(candidate.clone())
+            await eval_obj._async_generate_response(candidate)
         except Exception as e:
             exception = e
         return eval_obj, exception
@@ -822,16 +804,13 @@ class EvalHarness:
                 error_callback(exception, response_eval, candidate)
                 # we still need to generate a result object, set the exception, and have
                 # the CheckResults have a `False` value for the `success` property
-                # We can set the responses to empty strings and run the checks to
+                # We can set the response to empty strings and run the checks to
                 # accomplish this.
-                # Each eval can have multiple prompts, and there could have been responses
-                # that were generated before the exception was raised. We want to keep the
-                # responses that were generated before the exception was raised and add
-                # empty strings for the remaining responses.
-                missing_responses = len(response_eval.prompt_sequence) - len(response_eval._responses)  # noqa: E501
-                response_eval._responses.extend(['' for _ in range(missing_responses)])
+                response_eval._response = CandidateResponse(content='', metadata={})
                 eval_result = response_eval._execute_checks()
-                eval_result.harness_exception = exception
+                if eval_result.response_metadata is None:
+                    eval_result.response_metadata = {}
+                eval_result.response_metadata['harness_exception'] = exception
             else:
                 raise ResponseError(exception, response_eval, candidate)
         else:
@@ -839,7 +818,6 @@ class EvalHarness:
         if callback:
             callback(eval_result)
         return eval_result
-
 
     @staticmethod
     def _run_evals(
