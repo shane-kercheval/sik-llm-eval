@@ -8,10 +8,12 @@ import pytest
 import requests
 import yaml
 from faker import Faker
-from dotenv import load_dotenv
 from unittest.mock import MagicMock
 from llm_eval.candidates import Candidate, CandidateResponse
 
+from dotenv import load_dotenv
+
+from llm_eval.openai import Function, FunctionParameter
 load_dotenv()
 
 
@@ -337,42 +339,44 @@ def hugging_face_candidate_template() -> dict:
 
 
 @pytest.fixture()
-def tool_weather() -> dict:
-    """Returns a dictionary defining a weather tool."""
-    return {
-        "name": "get_current_weather",
-        "description": "Get the current weather in a given location",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "The city and state, e.g. San Francisco, CA",
-                },
-                "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
-            },
-            "required": ["location"],
-        },
-    }
+def function_weather() -> Function:
+    """Returns a dictionary defining a weather function."""
+    return Function(
+        name="get_current_weather",
+        description="Get the current weather in a given location",
+        parameters=[
+            FunctionParameter(
+                name="location",
+                type="string",
+                description="The city and state, e.g. San Francisco, CA",
+                required=True,
+            ),
+            FunctionParameter(
+                name="unit",
+                type="string",
+                valid_values=["celsius", "fahrenheit"],  # Using enum to constrain possible values
+                # description="The unit of temperature",
+            ),
+        ],
+    )
 
 
 @pytest.fixture()
-def tool_stocks() -> dict:
-    """Returns a dictionary defining a stock tool."""
-    return {
-        "name": "get_current_stocks",
-        "description": "Get the current stock price of a given company",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "company": {
-                    "type": "string",
-                    "description": "The name of the company, e.g. Apple",
-                },
-            },
-            "required": ["company"],
-        },
-    }
+def function_stocks() -> Function:
+    """Returns a dictionary defining a stock function."""
+    return Function(
+        name="get_current_stocks",
+        description="Get the current stock price of a given company",
+        parameters=[
+            FunctionParameter(
+                name="company",
+                type="string",
+                description="The name of the company, e.g. Apple",
+                required=True,
+            ),
+        ],
+    )
+
 
 
 ###################################################################################################

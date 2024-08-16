@@ -1,8 +1,10 @@
 """Contains helper functions for interacting with OpenAI models."""
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import time
-from typing import Callable
+from typing import Callable, Literal
 from functools import cache
+import json
 from openai import OpenAI
 from pydantic import BaseModel, SerializeAsAny
 import tiktoken
@@ -137,13 +139,21 @@ class OpenAIResponse(BaseModel):
     finish_reason: str | None = None
 
 
-class OpenAIChunkResponse(OpenAIResponse):
+class OpenAICompletionResponse(OpenAIResponse):
     """Stores the result of an OpenAI chat completion chunk."""
 
     content: str
 
+class OpenAIToolsResponse(OpenAIResponse):
+    """Stores the result of an OpenAI tool completion."""
 
-class OpenAIChatResponse(OpenAIChunkResponse):
+    tools: list[dict]
+    role: str | None = None
+    usage: dict | None = None
+    duration_seconds: float | None = None
+
+
+class OpenAIChatResponse(OpenAICompletionResponse):
     """Stores the result of an OpenAI chat completion."""
 
     content: str
@@ -176,12 +186,44 @@ class OpenAICompletionWrapperBase(ABC):
         self.model_parameters = model_kwargs or {}
 
     @staticmethod
-    def _parse_response(response) -> OpenAIChatResponse | OpenAIChunkResponse:  # noqa: ANN001
+    def _parse_response(response) -> OpenAIChatResponse | OpenAICompletionResponse:  # noqa: ANN001
         # chat.completion is the latest response type
         # 'chat.completion.chunk' indicates streaming
         if len(response.choices) != 1:
             raise ValueError(f"Currently only handling one choice, received {len(response.choices)}")  # noqa: E501
 
+        is_function_call = (
+            response.object == 'chat.completion'
+            and hasattr(response.choices[0], 'message')
+            and hasattr(response.choices[0].message, 'tool_calls')
+            and response.choices[0].message.tool_calls
+        )
+        def _try_parse(value):  # noqa
+            if not value:
+                return None
+            try:
+                return json.loads(value)
+            except:  # noqa: E722
+                return value
+
+        if is_function_call:
+            tools = [
+                {
+                    "type": tool.type,
+                    "name": tool.function.name,
+                    "arguments": _try_parse(tool.function.arguments),
+                }
+                for tool in response.choices[0].message.tool_calls
+            ]
+            return OpenAIToolsResponse(
+                object_name='tools',
+                model=response.model,
+                created=response.created,
+                tools=tools,
+                finish_reason=response.choices[0].finish_reason,
+                role=response.choices[0].message.role,
+                usage=dict(response.usage) if response.usage else None,
+            )
         is_streaming = response.object == 'chat.completion.chunk'
         is_legacy_streaming = (response.object == 'text_completion') \
             and hasattr(response.choices[0], 'delta') \
@@ -194,7 +236,7 @@ class OpenAICompletionWrapperBase(ABC):
         assert is_streaming or is_legacy_streaming or is_non_streaming or is_legacy_non_streaming, f"Unexpected response object: {response.object}"  # noqa: E501
 
         if is_streaming or is_legacy_streaming:
-            return OpenAIChunkResponse(
+            return OpenAICompletionResponse(
                 object_name=response.object,
                 model=response.model,
                 created=response.created,
@@ -228,7 +270,7 @@ class OpenAICompletionWrapperBase(ABC):
             model: str | None = None,
             stream_callback: Callable | None = None,
             **model_kwargs: dict,
-            ) -> OpenAIChatResponse | OpenAIChunkResponse:
+            ) -> OpenAIChatResponse | OpenAICompletionResponse:
         """
         Calls the client's chat.completions.create method. Returns the parsed response. If any
         of the parameters are specified when calling the object, they will override the parameters
@@ -236,7 +278,7 @@ class OpenAICompletionWrapperBase(ABC):
         """
 
 
-class OpenAICompletionWrapper(OpenAICompletionWrapperBase):
+class OpenAICompletion(OpenAICompletionWrapperBase):
     """Non-Async wrapper for OpenAI API."""
 
     def __call__(
@@ -245,7 +287,7 @@ class OpenAICompletionWrapper(OpenAICompletionWrapperBase):
             model: str | None = None,
             stream_callback: Callable | None = None,
             **model_kwargs: dict,
-        ) -> OpenAIChatResponse | OpenAIChunkResponse:
+        ) -> OpenAIChatResponse | OpenAICompletionResponse:
         """Non-Async __call__."""
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
@@ -261,11 +303,11 @@ class OpenAICompletionWrapper(OpenAICompletionWrapperBase):
             )
             for chunk in response:
                 if chunk.choices[0].delta.content:
-                    chunk_parsed = OpenAICompletionWrapper._parse_response(chunk)
+                    chunk_parsed = OpenAICompletion._parse_response(chunk)
                     stream_callback(chunk_parsed)
                     chunks.append(chunk_parsed)
             # send a final chunk with no content to indicate the end of the stream
-            stream_callback(OpenAIChunkResponse(
+            stream_callback(OpenAICompletionResponse(
                 object_name=chunk.object,
                 model=chunk.model,
                 created=chunk.created,
@@ -290,12 +332,12 @@ class OpenAICompletionWrapper(OpenAICompletionWrapperBase):
             **model_parameters,
         )
         end_time = time.time()
-        response = OpenAICompletionWrapper._parse_response(response)
+        response = OpenAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response
 
 
-class AsyncOpenAICompletionWrapper(OpenAICompletionWrapperBase):
+class AsyncOpenAICompletion(OpenAICompletionWrapperBase):
     """Async wrapper for OpenAI API."""
 
     async def __call__(
@@ -304,7 +346,7 @@ class AsyncOpenAICompletionWrapper(OpenAICompletionWrapperBase):
             model: str | None = None,
             stream_callback: Callable | None = None,
             **model_kwargs: dict,
-            ) -> OpenAIChatResponse | OpenAIChunkResponse:
+            ) -> OpenAIChatResponse | OpenAICompletionResponse:
         """Async __call__."""
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
@@ -320,11 +362,11 @@ class AsyncOpenAICompletionWrapper(OpenAICompletionWrapperBase):
             )
             async for chunk in response:
                 if chunk.choices[0].delta.content:
-                    chunk_parsed = OpenAICompletionWrapper._parse_response(chunk)
+                    chunk_parsed = OpenAICompletion._parse_response(chunk)
                     await stream_callback(chunk_parsed)
                     chunks.append(chunk_parsed)
             # send a final chunk with no content to indicate the end of the stream
-            await stream_callback(OpenAIChunkResponse(
+            await stream_callback(OpenAICompletionResponse(
                 object_name=chunk.object,
                 model=chunk.model,
                 created=chunk.created,
@@ -349,6 +391,104 @@ class AsyncOpenAICompletionWrapper(OpenAICompletionWrapperBase):
             **model_parameters,
         )
         end_time = time.time()
-        response = OpenAICompletionWrapper._parse_response(response)
+        response = OpenAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response
+
+
+_VALID_PARAM_TYPES = {"string", "number", "integer", "object", "array", "boolean", "null"}
+
+@dataclass
+class FunctionParameter:
+    """TODO."""
+
+    name: str
+    type: Literal["string", "number", "integer", "object", "array", "boolean", "null"]
+    description: str | None = None
+    valid_values: list[str] | None = None
+    required: bool = False
+
+    def __post_init__(self):
+        if self.type not in _VALID_PARAM_TYPES:
+            raise ValueError(f"Invalid type '{self.type}'. Must be one of {_VALID_PARAM_TYPES}.")
+
+    def to_dict(self) -> dict:  # noqa: D102
+        param_dict = {"type": self.type}
+        if self.description:
+            param_dict["description"] = self.description
+        if self.valid_values:
+            param_dict["enum"] = self.valid_values
+        return param_dict
+
+
+@dataclass
+class Function:
+    """
+    https://platform.openai.com/docs/api-reference/chat/create
+    strict:
+        boolean or null
+        Optional
+        Defaults to false
+        Whether to enable strict schema adherence when generating the function call. If set to
+        true, the model will follow the exact schema defined in the parameters field. Only a
+        subset of JSON Schema is supported when strict is true. Learn more about Structured
+        Outputs in the function calling guide.
+    """
+
+    name: str
+    parameters: list[FunctionParameter]
+    description: str | None = None
+    strict: bool = False
+
+    def to_dict(self) -> dict:  # noqa: D102
+        properties = {}
+        required = []
+        for param in self.parameters:
+            properties[param.name] = param.to_dict()
+            if param.required:
+                required.append(param.name)
+
+        tool_dict = {"name": self.name}
+        if self.description:
+            tool_dict["description"] = self.description
+        tool_dict["parameters"] = {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+        }
+        if self.strict:
+            tool_dict["strict"] = self.strict
+        return {"type": "function", "function": tool_dict}
+
+
+class OpenAITools(OpenAICompletionWrapperBase):
+    """Wrapper for OpenAI API tools."""
+
+    def __call__(
+            self,
+            messages: list[str],
+            tools: list[dict],
+            tool_choice: Literal['none', 'auto', 'required'] | dict[str] = 'required',
+            model: str | None = None,
+            **model_kwargs: dict,
+        ) -> OpenAIToolsResponse | OpenAICompletionResponse:
+        """
+        TODO.
+        For example, OpenAICompletionResponse can be returned if `auto` and unrelated question.
+        """
+        model = model or self.model
+        model_parameters = model_kwargs or self.model_parameters
+        start_time = time.time()
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            **model_parameters,
+        )
+        end_time = time.time()
+        response = OpenAICompletion._parse_response(response)
+        response.duration_seconds = end_time - start_time
+        return response
+
+

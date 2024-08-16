@@ -31,7 +31,7 @@ from textwrap import dedent
 from typing import Any, Callable, List, Type, Union
 from pydantic import BaseModel
 from openai import OpenAI
-from llm_eval.openai import MODEL_COST_PER_TOKEN, OpenAIChatResponse, OpenAICompletionWrapper
+from llm_eval.openai import MODEL_COST_PER_TOKEN, OpenAIChatResponse, OpenAICompletion
 from llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
@@ -195,7 +195,7 @@ class OpenAICandidate(Candidate):
         assert model_name or endpoint_url, "model_name or endpoint_url must be provided"
         self.model_name = model_name
         self.endpoint_url = endpoint_url
-        self.client = OpenAICompletionWrapper(
+        self.client = OpenAICompletion(
             client=OpenAI(base_url=self.endpoint_url),
             model=self.model_name or self.endpoint_url,
             **self.parameters or {},
@@ -241,50 +241,39 @@ class OpenAICandidate(Candidate):
             value['endpoint_url'] = self.endpoint_url
         return value
 
-    # def clone(self) -> 'Candidate':
-    #     """
-    #     Returns a copy of the Candidate with the same state but with a different instance of the
-    #     underlying model (e.g. same parameters but reset history/context).
 
-    #     Reques
-    #     """
-    #     return Candidate.from_dict(deepcopy(self.to_dict()))
+@Candidate.register(CandidateType.OPENAI_TOOLS)
+class OpenAIToolsCandidate(Candidate):
+    """
+    Wrapper around the OpenAI API that allows the user to create an OpenAI candidate with tools
+    from a dictionary.
+    response.
 
+    NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
+    """
 
-# @Candidate.register(CandidateType.OPENAI_TOOLS)
-# class OpenAIToolsCandidate(ChatModelCandidate):
-#     """
-#     Wrapper around the OpenAI API that allows the user to create an OpenAI candidate with tools
-#     from a dictionary. The client is a callable object that takes a prompt and returns a
-#     response.
-#     It will also track the history/messages, supporting stateful conversations, which is needed
-#     to evaluate multiple prompts in a single Eval object.
+    def __init__(
+            self,
+            metadata: dict | None = None,
+            parameters: dict | None = None) -> None:
+        """
+        Initialize a OpenAICandidate object.
 
-#     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
-#     """
-
-#     def __init__(
-#             self,
-#             metadata: dict | None = None,
-#             parameters: dict | None = None) -> None:
-#         """
-#         Initialize a OpenAICandidate object.
-
-#         Args:
-#             metadata:
-#                 A dictionary of metadata about the Candidate.
-#             parameters:
-#                 A dictionary of parameters passed to OpenAI. `model_name` (e.g.
-#                 'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
-#                 such as `model_name` and model-specific parameters (e.g. `temperature`) can be
-#                 passed.
-#         """
-#         if parameters is None:
-#             parameters = {}
-#         super().__init__(
-#             model=OpenAITools(**deepcopy(parameters)),
-#             metadata=metadata,
-#             parameters=parameters,
-#         )
+        Args:
+            metadata:
+                A dictionary of metadata about the Candidate.
+            parameters:
+                A dictionary of parameters passed to OpenAI. `model_name` (e.g.
+                'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
+                such as `model_name` and model-specific parameters (e.g. `temperature`) can be
+                passed.
+        """
+        if parameters is None:
+            parameters = {}
+        super().__init__(
+            model=OpenAITools(**deepcopy(parameters)),
+            metadata=metadata,
+            parameters=parameters,
+        )
 
 

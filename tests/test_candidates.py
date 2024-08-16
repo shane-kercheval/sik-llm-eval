@@ -146,9 +146,9 @@ def test__OpenAI__default__no_parameters(openai_model_name):  # noqa
     # test that the model generated from the dict is the same as the original
     # but that they don't share history (i.e. there is a new underlying object for the model)
     recreated_candidate = Candidate.from_dict(candidate.to_dict())
+    assert candidate == recreated_candidate
     assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
     assert recreated_candidate.client.model_parameters == {}
-    assert candidate == recreated_candidate
     messages = [user_message("What is the capital of Germany?")]
     response = recreated_candidate(messages)
     assert 'Berlin' in response.content
