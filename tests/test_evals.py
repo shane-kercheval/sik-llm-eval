@@ -843,825 +843,6 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
         assert results[1][i].check_results[-1].metadata['num_code_tests'] == expected_num_code_tests
         assert results[1][i].check_results[-1].metadata['num_code_tests_successful'] > 0
 
-@pytest.mark.parametrize('eval_fixture', [
-    'fake_multi_eval',
-    'fake_multi_eval_non_string_values',
-], indirect=True)
-def test__PromptComparison(eval_fixture):  # noqa
-    expected_prompt_parameters = eval_fixture['prompt_comparison']['prompt_parameters']
-    expected_prompts = eval_fixture['prompt_comparison']['prompts']
-    expected_checks = eval_fixture['prompt_comparison']['checks']
-    expected_ideal_response = eval_fixture['prompt_comparison']['ideal_response']
-    config = deepcopy(eval_fixture)
-
-    prompt_parameters = config['prompt_comparison']['prompt_parameters']
-    prompts = config['prompt_comparison']['prompts']
-    checks = config['prompt_comparison']['checks']
-    ideal_response = config['prompt_comparison']['ideal_response']
-
-    # test with prompt as list of dicts and prompt_parameters is None
-    prompt_comparison = PromptComparison(
-        prompts=prompts,
-        prompt_parameters=None,
-        checks=checks,
-        ideal_response=ideal_response,
-    )
-    prompt_tests = prompt_comparison()
-    assert len(prompt_tests) == len(expected_prompts)
-    for i, prompt_test in enumerate(prompt_tests):
-        assert prompt_test.prompt == dedent(str(expected_prompts[i]['prompt']))
-        # all PromptTests should share the same checks and ideal_response
-        assert isinstance(prompt_test.checks, list)
-        assert len(prompt_test.checks) == len(expected_checks)
-        assert isinstance(prompt_test.checks[0], Check)
-        assert prompt_test.to_dict()['checks'] == expected_checks
-        assert prompt_test.ideal_response == str(expected_ideal_response)
-
-    # test with prompt as list of strings and prompt_parameters is None
-    prompt_comparison = PromptComparison(
-        prompts=[x['prompt'] for x in prompts],
-        prompt_parameters=None,
-        checks=checks,
-        ideal_response=ideal_response,
-    )
-    prompt_tests = prompt_comparison()
-    assert len(prompt_tests) == len(expected_prompts)
-    for i, prompt_test in enumerate(prompt_tests):
-        assert prompt_test.prompt == dedent(str(expected_prompts[i]['prompt']))
-        # all PromptTests should share the same checks and ideal_response
-        assert isinstance(prompt_test.checks, list)
-        assert len(prompt_test.checks) == len(expected_checks)
-        assert isinstance(prompt_test.checks[0], Check)
-        assert prompt_test.to_dict()['checks'] == expected_checks
-        assert prompt_test.ideal_response == str(expected_ideal_response)
-
-    # test with prompt as list of dicts and prompt_parameters is not None
-    prompt_comparison = PromptComparison(
-        prompts=prompts,
-        prompt_parameters=prompt_parameters,
-        checks=checks,
-        ideal_response=ideal_response,
-    )
-    prompt_tests = prompt_comparison()
-    assert len(prompt_tests) == len(expected_prompts)
-    for i, prompt_test in enumerate(prompt_tests):
-        assert prompt_test.prompt == dedent(str(expected_prompts[i]['prompt'])).\
-            format(**expected_prompt_parameters)
-        # all PromptTests should share the same checks and ideal_response
-        assert isinstance(prompt_test.checks, list)
-        assert len(prompt_test.checks) == len(expected_checks)
-        assert isinstance(prompt_test.checks[0], Check)
-        assert prompt_test.to_dict()['checks'] == expected_checks
-        assert prompt_test.ideal_response == str(expected_ideal_response)
-
-    # test with prompt as list of strings and prompt_parameters is not None
-    prompt_comparison = PromptComparison(
-        prompts=[x['prompt'] for x in prompts],
-        prompt_parameters=prompt_parameters,
-        checks=checks,
-        ideal_response=ideal_response,
-    )
-    prompt_tests = prompt_comparison()
-    assert len(prompt_tests) == len(expected_prompts)
-    for i, prompt_test in enumerate(prompt_tests):
-        assert prompt_test.prompt == dedent(str(expected_prompts[i]['prompt'])).\
-            format(**expected_prompt_parameters)
-        # all PromptTests should share the same checks and ideal_response
-        assert isinstance(prompt_test.checks, list)
-        assert len(prompt_test.checks) == len(expected_checks)
-        assert isinstance(prompt_test.checks[0], Check)
-        assert prompt_test.to_dict()['checks'] == expected_checks
-        assert prompt_test.ideal_response == str(expected_ideal_response)
-
-    # test with prompt as list of dicts and prompt_parameters is not None
-    prompt_comparison = PromptComparison(
-        prompts=prompts,
-        prompt_parameters=prompt_parameters,
-        checks=None,
-        ideal_response=None,
-    )
-    prompt_tests = prompt_comparison()
-    assert len(prompt_tests) == len(expected_prompts)
-    for i, prompt_test in enumerate(prompt_tests):
-        assert prompt_test.prompt == dedent(str(expected_prompts[i]['prompt'])).\
-            format(**expected_prompt_parameters)
-        # all PromptTests should share the same checks and ideal_response
-        assert isinstance(prompt_test.checks, list)
-        assert len(prompt_test.checks) == 0
-        assert prompt_test.ideal_response is None
-    # ensure we didn't change config
-    assert config == eval_fixture
-
-def test__PromptComparison__prompt_parameters():  # noqa
-    comparison = PromptComparison(
-        prompts=[
-            'Prompt 1: {param1}',
-            'Prompt 2: {param2} | {param1}',
-            'Prompt 2: {param2}',
-            'Prompt 3: No pameters',
-            '{param3}',
-        ],
-        prompt_parameters={
-            'param1': 'Param 1',
-            'param2': 2,
-            'param3': False,
-            'param4': 'not used',
-        },
-    )
-    prompt_tests = comparison()
-    assert len(prompt_tests) == 5
-    assert prompt_tests[0].prompt == 'Prompt 1: Param 1'
-    assert prompt_tests[1].prompt == 'Prompt 2: 2 | Param 1'
-    assert prompt_tests[2].prompt == 'Prompt 2: 2'
-    assert prompt_tests[3].prompt == 'Prompt 3: No pameters'
-    assert prompt_tests[4].prompt == 'False'
-
-@pytest.mark.parametrize('eval_fixture', [
-    'fake_eval_8f9fbf37',
-    'fake_eval_subtract_two_numbers',
-    'fake_eval_sum_two_numbers',
-    'fake_eval_sum_two_numbers_code_blocks_run',
-    'fake_eval_no_code_blocks',
-    'fake_eval_with_previous_messages',
-    'fake_eval_non_string_values',
-], indirect=True)
-def test__MultiEval__with_regular_eval(eval_fixture):  # noqa
-    """
-    Check that an equivalent Eval object is created when using MultiEval with a single Eval
-    congig/yaml.
-    """
-    config = deepcopy(eval_fixture)
-    evals = MultiEval.from_dict(config)()
-    assert len(evals) == 1
-    assert evals[0] == Eval(**config)
-    # evals[0].to_dict() == Eval(**config).to_dict()
-    # ensure we didn't change config
-    assert config == eval_fixture
-
-@pytest.mark.parametrize('eval_fixture', [
-    'fake_multi_eval',
-    'fake_multi_eval_non_string_values',
-], indirect=True)
-def test__MultiEval(eval_fixture):  # noqa
-    expected_metadata = eval_fixture['metadata']
-    expected_system_messages = [str(x) for x in eval_fixture['system_message']]
-    expected_previous_messages = eval_fixture['previous_messages']
-    expected_previous_messages = [
-        [{k:str(v) for k, v in x.items()} for x in prev]
-        for prev in expected_previous_messages
-    ]
-    expected_prompt_parameters = eval_fixture['prompt_comparison']['prompt_parameters']
-    expected_prompts = eval_fixture['prompt_comparison']['prompts']
-    expected_checks = eval_fixture['prompt_comparison']['checks']
-    expected_ideal_response = eval_fixture['prompt_comparison']['ideal_response']
-
-    config = deepcopy(eval_fixture)
-    multi_eval = MultiEval.from_dict(config)
-    evals = multi_eval()
-
-    # all combinations
-    assert len(evals) == len(expected_system_messages) * len(expected_prompts) * len(expected_previous_messages)  # noqa
-    # all evals should have the same metadata, checks, and ideal_response
-    for eval_ in evals:
-        assert eval_.metadata == expected_metadata
-        assert eval_.to_dict()['prompt_sequence'][0]['checks'] == expected_checks
-        assert eval_.prompt_sequence[0].ideal_response == str(expected_ideal_response)
-    # NOTE: this logic depends on the order that the combinations are created which is currently
-    # system_message, then previous_messages, then prompt
-    assert evals[0].system_message == expected_system_messages[0]
-    assert evals[0].previous_messages == expected_previous_messages[0]
-    assert evals[0].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[1].system_message == expected_system_messages[0]
-    assert evals[1].previous_messages == expected_previous_messages[0]
-    assert evals[1].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[2].system_message == expected_system_messages[0]
-    assert evals[2].previous_messages == expected_previous_messages[0]
-    assert evals[2].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[3].system_message == expected_system_messages[0]
-    assert evals[3].previous_messages == expected_previous_messages[1]
-    assert evals[3].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[4].system_message == expected_system_messages[0]
-    assert evals[4].previous_messages == expected_previous_messages[1]
-    assert evals[4].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[5].system_message == expected_system_messages[0]
-    assert evals[5].previous_messages == expected_previous_messages[1]
-    assert evals[5].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[6].system_message == expected_system_messages[1]
-    assert evals[6].previous_messages == expected_previous_messages[0]
-    assert evals[6].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[7].system_message == expected_system_messages[1]
-    assert evals[7].previous_messages == expected_previous_messages[0]
-    assert evals[7].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[8].system_message == expected_system_messages[1]
-    assert evals[8].previous_messages == expected_previous_messages[0]
-    assert evals[8].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[9].system_message == expected_system_messages[1]
-    assert evals[9].previous_messages == expected_previous_messages[1]
-    assert evals[9].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[10].system_message == expected_system_messages[1]
-    assert evals[10].previous_messages == expected_previous_messages[1]
-    assert evals[10].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[11].system_message == expected_system_messages[1]
-    assert evals[11].previous_messages == expected_previous_messages[1]
-    assert evals[11].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    # ensure we didn't change config
-    assert config == eval_fixture
-
-def test_MultiEval_with_prompt_sequence(fake_multi_eval_with_prompt_sequence):  # noqa
-    """
-    Rather than a prompt_comparison key, the MultiEval object has a prompt_sequence key, which
-    indicates we are testing a list of PromptTests rather than comparing prompts.
-    """
-    expected_metadata = fake_multi_eval_with_prompt_sequence['metadata']
-    expected_system_messages = [str(x) for x in fake_multi_eval_with_prompt_sequence['system_message']]  # noqa
-    expected_previous_messages = fake_multi_eval_with_prompt_sequence['previous_messages']
-    expected_previous_messages = [
-        [{k:str(v) for k, v in x.items()} for x in prev]
-        for prev in expected_previous_messages
-    ]
-    expected_prompt_sequence = fake_multi_eval_with_prompt_sequence['prompt_sequence']
-
-    config = deepcopy(fake_multi_eval_with_prompt_sequence)
-    multi_eval = MultiEval.from_dict(config)
-    evals = multi_eval()
-
-    # all combinations
-    assert len(evals) == len(expected_system_messages) * len(expected_previous_messages)
-    # all evals should have the same metadata
-    for eval_ in evals:
-        eval_.metadata == expected_metadata
-
-    # NOTE: this logic depends on the order that the combinations are created which is currently
-    # system_message, then previous_messages, then prompt
-    assert evals[0].system_message == expected_system_messages[0]
-    assert evals[0].previous_messages == expected_previous_messages[0]
-    assert evals[0].prompt_sequence[0] == PromptTest(**expected_prompt_sequence[0])
-    assert evals[0].prompt_sequence[1] == PromptTest(**expected_prompt_sequence[1])
-
-    assert evals[1].system_message == expected_system_messages[0]
-    assert evals[1].previous_messages == expected_previous_messages[1]
-    assert evals[1].prompt_sequence[0] == PromptTest(**expected_prompt_sequence[0])
-    assert evals[1].prompt_sequence[1] == PromptTest(**expected_prompt_sequence[1])
-
-    assert evals[2].system_message == expected_system_messages[1]
-    assert evals[2].previous_messages == expected_previous_messages[0]
-    assert evals[2].prompt_sequence[0] == PromptTest(**expected_prompt_sequence[0])
-    assert evals[2].prompt_sequence[1] == PromptTest(**expected_prompt_sequence[1])
-
-    assert evals[3].system_message == expected_system_messages[1]
-    assert evals[3].previous_messages == expected_previous_messages[1]
-    assert evals[3].prompt_sequence[0] == PromptTest(**expected_prompt_sequence[0])
-    assert evals[3].prompt_sequence[1] == PromptTest(**expected_prompt_sequence[1])
-    # ensure we didn't change config
-    assert config == fake_multi_eval_with_prompt_sequence
-
-def test__MultiEval__system_message_edge_cases__prompts__list_PromptTest(fake_multi_eval):  # noqa
-    """A list of PromptTest/dict objects assumes a single Eval with multiple sequential prompts."""
-    prompts = [
-        PromptTest(
-            prompt='Prompt 1',
-            checks = [ContainsCheck(value='_')],
-        ),
-        PromptTest(prompt='Prompt 2'),
-    ]
-    expected_metadata = fake_multi_eval['metadata']
-    expected_system_messages = fake_multi_eval['system_message'][0]
-    expected_previous_messages = fake_multi_eval['previous_messages']
-    expected_previous_messages = [
-        [{k:str(v) for k, v in x.items()} for x in prev]
-        for prev in expected_previous_messages
-    ]
-    config = deepcopy(fake_multi_eval)
-    tests = [
-        prompts,
-        [p.to_dict() for p in prompts],
-    ]
-    for test in tests:
-        multi_eval = MultiEval(
-            prompts=test,
-            system_message=config['system_message'][0],
-            previous_messages=config['previous_messages'][0],
-            metadata=config['metadata'],
-        )
-        evals = multi_eval()
-        # all combinations; only 1 Eval object
-        assert len(evals) == 1
-        assert evals[0].metadata == expected_metadata
-        assert evals[0].system_message == expected_system_messages
-        assert evals[0].previous_messages == expected_previous_messages[0]
-        assert evals[0].prompt_sequence[0] == prompts[0]
-        assert evals[0].prompt_sequence[1] == prompts[1]
-        # ensure we didn't change config
-        assert config == fake_multi_eval
-
-def test__MultiEval__system_message_edge_cases__prompts__PromptComparison(fake_multi_eval):  # noqa
-    """
-    A single PromptComparison object assumes multiple Eval objects with the same system_message,
-    etc. but different prompts. Also testing a single dict object representing a PromptComparison.
-    """
-    prompt_comparison_dict = fake_multi_eval['prompt_comparison']
-    prompt_comparison_obj = PromptComparison(**prompt_comparison_dict)
-
-    expected_metadata = fake_multi_eval['metadata']
-    expected_system_messages = [str(x) for x in fake_multi_eval['system_message']]
-    expected_previous_messages = fake_multi_eval['previous_messages']
-    expected_previous_messages = [
-        [{k:str(v) for k, v in x.items()} for x in prev]
-        for prev in expected_previous_messages
-    ]
-    config = deepcopy(fake_multi_eval)
-
-    expected_prompt_1 = prompt_comparison_dict['prompts'][0]['prompt'].\
-            format(**prompt_comparison_dict['prompt_parameters'])
-    expected_prompt_2 = prompt_comparison_dict['prompts'][1]['prompt'].\
-            format(**prompt_comparison_dict['prompt_parameters'])
-    expected_prompt_3 = prompt_comparison_dict['prompts'][2]['prompt'].\
-            format(**prompt_comparison_dict['prompt_parameters'])
-
-    for test in [prompt_comparison_dict, prompt_comparison_obj]:
-        multi_eval = MultiEval(
-            prompts=test,
-            system_message=config['system_message'],
-            previous_messages=config['previous_messages'][0],
-            metadata=config['metadata'],
-        )
-        evals = multi_eval()
-        # all combinations; only 1 Eval object
-        assert len(evals) == len(expected_system_messages) * len(prompt_comparison_dict['prompts'])
-        # all evals should have the same metadata, previous_messages (only 1 set),
-        # ideal_response, and checks
-        for eval_ in evals:
-            assert eval_.metadata == expected_metadata
-            assert eval_.previous_messages == expected_previous_messages[0]
-            assert eval_.to_dict()['prompt_sequence'][0]['checks'] == prompt_comparison_dict['checks']  # noqa
-            assert eval_.prompt_sequence[0].ideal_response == str(prompt_comparison_dict['ideal_response'])  # noqa
-
-        assert evals[0].system_message == expected_system_messages[0]
-        assert evals[0].prompt_sequence[0].prompt == expected_prompt_1
-        assert evals[1].system_message == expected_system_messages[0]
-        assert evals[1].prompt_sequence[0].prompt == expected_prompt_2
-        assert evals[2].system_message == expected_system_messages[0]
-        assert evals[2].prompt_sequence[0].prompt == expected_prompt_3
-        assert evals[3].system_message == expected_system_messages[1]
-        assert evals[3].prompt_sequence[0].prompt == expected_prompt_1
-        assert evals[4].system_message == expected_system_messages[1]
-        assert evals[4].prompt_sequence[0].prompt == expected_prompt_2
-        assert evals[5].system_message == expected_system_messages[1]
-        assert evals[5].prompt_sequence[0].prompt == expected_prompt_3
-        # ensure we didn't change config
-        assert config == fake_multi_eval
-
-def test__MultiEval__system_message_edge_cases__prompts__PromptTest(fake_multi_eval_with_prompt_sequence):  # noqa
-    """
-    A single PromptTest object (or dict representing PromptTest) assumes a single Eval object.
-    Multiple previous_messages should still generate multiple Evals.
-    """
-    prompt_test_dict = fake_multi_eval_with_prompt_sequence['prompt_sequence'][0]
-    prompt_test_obj = PromptTest(**prompt_test_dict)
-
-    expected_metadata = fake_multi_eval_with_prompt_sequence['metadata']
-    expected_system_messages = [str(x) for x in fake_multi_eval_with_prompt_sequence['system_message']]  # noqa
-    expected_previous_messages = fake_multi_eval_with_prompt_sequence['previous_messages']
-    expected_previous_messages = [
-        [{k:str(v) for k, v in x.items()} for x in prev]
-        for prev in expected_previous_messages
-    ]
-    config = deepcopy(fake_multi_eval_with_prompt_sequence)
-
-
-    for test in [prompt_test_dict, prompt_test_obj]:
-        multi_eval = MultiEval(
-            prompts=test,
-            system_message=config['system_message'],
-            previous_messages=config['previous_messages'],
-            metadata=config['metadata'],
-        )
-        evals = multi_eval()
-        # all combinations; only 1 Eval object
-        assert len(evals) == len(expected_system_messages) * len(expected_previous_messages)
-        # all evals should have the same metadata, and PromptTest
-        for eval_ in evals:
-            assert eval_.metadata == expected_metadata
-            assert eval_.prompt_sequence[0].prompt == prompt_test_dict['prompt']
-            assert eval_.to_dict()['prompt_sequence'][0]['checks'] == prompt_test_dict['checks']
-
-        assert evals[0].system_message == expected_system_messages[0]
-        assert evals[0].previous_messages == expected_previous_messages[0]
-        assert evals[1].system_message == expected_system_messages[0]
-        assert evals[1].previous_messages == expected_previous_messages[1]
-        assert evals[2].system_message == expected_system_messages[1]
-        assert evals[2].previous_messages == expected_previous_messages[0]
-        assert evals[3].system_message == expected_system_messages[1]
-        assert evals[3].previous_messages == expected_previous_messages[1]
-        # ensure we didn't change config
-        assert config == fake_multi_eval_with_prompt_sequence
-
-@pytest.mark.parametrize('eval_fixture', [
-    'fake_multi_eval',
-    'fake_multi_eval_non_string_values',
-], indirect=True)
-def test__MultiEval__only_prompt_comparison(eval_fixture):  # noqa
-    expected_prompt_parameters = eval_fixture['prompt_comparison']['prompt_parameters']
-    expected_prompts = eval_fixture['prompt_comparison']['prompts']
-    expected_checks = eval_fixture['prompt_comparison']['checks']
-    expected_ideal_response = eval_fixture['prompt_comparison']['ideal_response']
-    config = deepcopy(eval_fixture)
-
-    multi_eval = MultiEval(
-        prompts=config['prompt_comparison'],
-        system_message=None,
-        previous_messages=None,
-        metadata=None,
-    )
-    evals = multi_eval()
-    # all combinations
-    assert len(evals) == len(expected_prompts)
-    for eval_ in evals:
-        assert not eval_.metadata
-        assert not eval_.system_message
-        assert not eval_.previous_messages
-        assert eval_.to_dict()['prompt_sequence'][0]['checks'] == expected_checks
-        assert eval_.prompt_sequence[0].ideal_response == str(expected_ideal_response)
-
-    expected_prompt_1 = str(expected_prompts[0]['prompt']).format(**expected_prompt_parameters)
-    expected_prompt_2 = str(expected_prompts[1]['prompt']).format(**expected_prompt_parameters)
-    expected_prompt_3 = str(expected_prompts[2]['prompt']).format(**expected_prompt_parameters)
-    assert evals[0].prompt_sequence[0].prompt == expected_prompt_1
-    assert evals[1].prompt_sequence[0].prompt == expected_prompt_2
-    assert evals[2].prompt_sequence[0].prompt == expected_prompt_3
-    # ensure we didn't change config
-    assert config == eval_fixture
-
-@pytest.mark.parametrize('previous_messages', [
-    [
-        {'user': 'Question 1', 'assistant': 'Response 1'},
-        {'user': 'Question 2', 'assistant': 'Response 2'},
-    ],
-    [
-        ('Question 1', 'Response 1'),
-        ('Question 2', 'Response 2'),
-    ],
-])
-def test__MultiEval__previous_messages__list_of_dict_tuple(previous_messages, fake_multi_eval_with_prompt_sequence):  # noqa
-    """Test that previous_messages can be a list of dictionaries or tuples."""
-    prompt_test_dict = fake_multi_eval_with_prompt_sequence['prompt_sequence']
-    expected_metadata = fake_multi_eval_with_prompt_sequence['metadata']
-    expected_system_messages = [str(x) for x in fake_multi_eval_with_prompt_sequence['system_message']]  # noqa
-    config = deepcopy(fake_multi_eval_with_prompt_sequence)
-
-    multi_eval = MultiEval(
-        prompts=prompt_test_dict,
-        system_message=config['system_message'],
-        previous_messages=previous_messages,
-        metadata=config['metadata'],
-    )
-    evals = multi_eval()
-    # all combinations; 2 system messages but only 1 *set* of PromptTests (dict) and
-    # only 1 *set* of previous messages
-    assert len(evals) == len(expected_system_messages)
-    # all evals should have the same metadata, and PromptTest
-    for eval_ in evals:
-        assert eval_.metadata == expected_metadata
-        assert eval_.prompt_sequence[0].prompt == prompt_test_dict[0]['prompt']
-        assert eval_.to_dict()['prompt_sequence'][0]['checks'] == prompt_test_dict[0]['checks']
-        assert eval_.prompt_sequence[1].prompt == prompt_test_dict[1]['prompt']
-        # last check has code_tests and whitespace is stripped so can't directly compare and this
-        # functionality is tested elsewhere so just check the length
-        assert len(eval_.to_dict()['prompt_sequence'][1]['checks']) == len(prompt_test_dict[1]['checks'])  # noqa
-
-    expected_previous_messages = previous_messages
-    if isinstance(previous_messages[0], tuple):
-        expected_previous_messages = [
-            {'user': x[0], 'assistant': x[1]} for x in previous_messages
-        ]
-    assert evals[0].system_message == expected_system_messages[0]
-    assert evals[0].previous_messages == expected_previous_messages
-    assert evals[1].system_message == expected_system_messages[1]
-    assert evals[1].previous_messages == expected_previous_messages
-    # ensure we didn't change config
-    assert config == fake_multi_eval_with_prompt_sequence
-
-@pytest.mark.parametrize('previous_messages', [
-    [
-        [
-            {'user': 'Question 1', 'assistant': 'Response 1'},
-            {'user': 'Question 2', 'assistant': 'Response 2'},
-        ],
-        [
-            {'user': 'Question 3', 'assistant': 'Response 3'},
-            {'user': 'Question 4', 'assistant': 'Response 4'},
-        ],
-    ],
-    [
-        [
-            ('Question 1', 'Response 1'),
-            ('Question 2', 'Response 2'),
-        ],
-        [
-            ('Question 3', 'Response 3'),
-            ('Question 4', 'Response 4'),
-        ],
-    ],
-])
-def test__MultiEval__previous_messages__list_of_list_of_dict_tuple(previous_messages, fake_multi_eval_with_prompt_sequence):  # noqa
-    """
-    Test that previous_messages can be a list of list of dictionaries or tuples, which will create
-    multiple Evals.
-    """
-    prompt_test_dict = fake_multi_eval_with_prompt_sequence['prompt_sequence']
-    expected_metadata = fake_multi_eval_with_prompt_sequence['metadata']
-    expected_system_messages = [str(x) for x in fake_multi_eval_with_prompt_sequence['system_message']]  # noqa
-    config = deepcopy(fake_multi_eval_with_prompt_sequence)
-
-    multi_eval = MultiEval(
-        prompts=prompt_test_dict,
-        system_message=config['system_message'],
-        previous_messages=previous_messages,
-        metadata=config['metadata'],
-    )
-    evals = multi_eval()
-    # all combinations; 2 system messages but only 1 *set* of PromptTests (dict) and
-    # only 1 *set* of previous messages
-    assert len(evals) == len(expected_system_messages) * len(previous_messages)
-    # all evals should have the same metadata, and PromptTest
-    for eval_ in evals:
-        assert eval_.metadata == expected_metadata
-        assert eval_.prompt_sequence[0].prompt == prompt_test_dict[0]['prompt']
-        assert eval_.to_dict()['prompt_sequence'][0]['checks'] == prompt_test_dict[0]['checks']
-        assert eval_.prompt_sequence[1].prompt == prompt_test_dict[1]['prompt']
-        # last check has code_tests and whitespace is stripped so can't directly compare and this
-        # functionality is tested elsewhere so just check the length
-        assert len(eval_.to_dict()['prompt_sequence'][1]['checks']) == len(prompt_test_dict[1]['checks'])  # noqa
-
-    expected_previous_messages = previous_messages
-    if isinstance(previous_messages[0][0], tuple):
-        expected_previous_messages = [
-        [{'user': x[0], 'assistant': x[1]} for x in message_set]
-        for message_set in previous_messages
-        ]
-    assert evals[0].system_message == expected_system_messages[0]
-    assert evals[0].previous_messages == expected_previous_messages[0]
-    assert evals[1].system_message == expected_system_messages[0]
-    assert evals[1].previous_messages == expected_previous_messages[1]
-    assert evals[2].system_message == expected_system_messages[1]
-    assert evals[2].previous_messages == expected_previous_messages[0]
-    assert evals[3].system_message == expected_system_messages[1]
-    assert evals[3].previous_messages == expected_previous_messages[1]
-    # ensure we didn't change config
-    assert config == fake_multi_eval_with_prompt_sequence
-
-@pytest.mark.parametrize('eval_fixture', [
-    'fake_multi_eval',
-    'fake_multi_eval_non_string_values',
-], indirect=True)
-def test__EvalHarness__MultEval_object_and_dict(eval_fixture, fake_eval_with_previous_messages):  # noqa
-    expected_metadata = eval_fixture['metadata']
-    expected_system_messages = [str(x) for x in eval_fixture['system_message']]
-    expected_prompt_parameters = eval_fixture['prompt_comparison']['prompt_parameters']
-    expected_previous_messages = eval_fixture['previous_messages']
-    expected_previous_messages = [
-        [{k:str(v) for k, v in x.items()} for x in prev]
-        for prev in expected_previous_messages
-    ]
-    prompt_comparison = eval_fixture['prompt_comparison']
-    expected_prompts = prompt_comparison['prompts']
-    expected_num_evals_from_prompt_comparison = len(expected_system_messages) \
-        * len(expected_previous_messages) \
-        * len(prompt_comparison['prompts'])
-    config = deepcopy(eval_fixture)
-
-    harness = EvalHarness(num_cpus=1, async_batch_size=1)
-    harness.add_evals(MultiEval.from_dict(config))
-    assert len(harness.evals) == expected_num_evals_from_prompt_comparison
-
-    evals = harness.evals
-    # all evals should have the same metadata, checks, and ideal_response
-    for eval_ in evals:
-        assert eval_.metadata == expected_metadata
-        assert eval_.to_dict()['prompt_sequence'][0]['checks'] == prompt_comparison['checks']
-        assert eval_.prompt_sequence[0].ideal_response == str(prompt_comparison['ideal_response'])
-    # NOTE: this logic depends on the order that the combinations are created which is currently
-    # system_message, then previous_messages, then prompt
-    assert evals[0].system_message == expected_system_messages[0]
-    assert evals[0].previous_messages == expected_previous_messages[0]
-    assert evals[0].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[1].system_message == expected_system_messages[0]
-    assert evals[1].previous_messages == expected_previous_messages[0]
-    assert evals[1].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[2].system_message == expected_system_messages[0]
-    assert evals[2].previous_messages == expected_previous_messages[0]
-    assert evals[2].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[3].system_message == expected_system_messages[0]
-    assert evals[3].previous_messages == expected_previous_messages[1]
-    assert evals[3].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[4].system_message == expected_system_messages[0]
-    assert evals[4].previous_messages == expected_previous_messages[1]
-    assert evals[4].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[5].system_message == expected_system_messages[0]
-    assert evals[5].previous_messages == expected_previous_messages[1]
-    assert evals[5].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[6].system_message == expected_system_messages[1]
-    assert evals[6].previous_messages == expected_previous_messages[0]
-    assert evals[6].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[7].system_message == expected_system_messages[1]
-    assert evals[7].previous_messages == expected_previous_messages[0]
-    assert evals[7].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[8].system_message == expected_system_messages[1]
-    assert evals[8].previous_messages == expected_previous_messages[0]
-    assert evals[8].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[9].system_message == expected_system_messages[1]
-    assert evals[9].previous_messages == expected_previous_messages[1]
-    assert evals[9].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[10].system_message == expected_system_messages[1]
-    assert evals[10].previous_messages == expected_previous_messages[1]
-    assert evals[10].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-        format(**expected_prompt_parameters)
-
-    assert evals[11].system_message == expected_system_messages[1]
-    assert evals[11].previous_messages == expected_previous_messages[1]
-    assert evals[11].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-        format(**expected_prompt_parameters)
-    # ensure we didn't change config
-    assert config == eval_fixture
-
-    harness.add_evals(fake_eval_with_previous_messages)
-    assert len(harness.evals) == expected_num_evals_from_prompt_comparison + 1
-
-    harness.add_evals(config)
-    assert len(harness.evals) == (expected_num_evals_from_prompt_comparison * 2) + 1
-
-    candidate_1_dict = {
-        'metadata': {'uuid': 'candidate_1'},
-        'candidate_type': 'MockCandidateCannedResponse',
-    }
-    candidate_2_dict = deepcopy(candidate_1_dict)
-    candidate_2_dict['metadata']['uuid'] = 'candidate_2'
-    harness.add_candidates([candidate_1_dict, candidate_2_dict])
-    assert len(harness.evals) == (expected_num_evals_from_prompt_comparison * 2) + 1
-    results = harness()
-    assert len(results) == 2
-    assert len(results[0]) == (expected_num_evals_from_prompt_comparison * 2) + 1
-    assert len(results[1]) == (expected_num_evals_from_prompt_comparison * 2) + 1
-
-@pytest.mark.parametrize('eval_fixture', [
-    'fake_multi_eval',
-    'fake_multi_eval_non_string_values',
-], indirect=True)
-def test__EvalHarness__list_MultEval_object_and_dict__from_constructor(eval_fixture, fake_eval_with_previous_messages):  # noqa
-    expected_metadata = eval_fixture['metadata']
-    expected_system_messages = [str(x) for x in eval_fixture['system_message']]
-    expected_prompt_parameters = eval_fixture['prompt_comparison']['prompt_parameters']
-    expected_previous_messages = eval_fixture['previous_messages']
-    expected_previous_messages = [
-        [{k:str(v) for k, v in x.items()} for x in prev]
-        for prev in expected_previous_messages
-    ]
-    prompt_comparison = eval_fixture['prompt_comparison']
-    expected_prompts = prompt_comparison['prompts']
-    expected_num_evals_from_prompt_comparison = len(expected_system_messages) \
-        * len(expected_previous_messages) \
-        * len(prompt_comparison['prompts'])
-    config = deepcopy(eval_fixture)
-
-    harness = EvalHarness(
-        evals=[config, MultiEval.from_dict(config)],
-        num_cpus=1, async_batch_size=1,
-    )
-
-    assert len(harness.evals) == expected_num_evals_from_prompt_comparison * 2
-    evals = harness.evals
-    # all evals should have the same metadata, checks, and ideal_response
-    for eval_ in evals:
-        assert eval_.metadata == expected_metadata
-        assert eval_.to_dict()['prompt_sequence'][0]['checks'] == prompt_comparison['checks']
-        assert eval_.prompt_sequence[0].ideal_response == str(prompt_comparison['ideal_response'])
-    # NOTE: this logic depends on the order that the combinations are created which is currently
-    # system_message, then previous_messages, then prompt
-    for i in range(2):
-        i = i * 12  # add either 0 or 12 to the index  # noqa
-        assert evals[0+i].system_message == expected_system_messages[0]
-        assert evals[0+i].previous_messages == expected_previous_messages[0]
-        assert evals[0+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[1+i].system_message == expected_system_messages[0]
-        assert evals[1+i].previous_messages == expected_previous_messages[0]
-        assert evals[1+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[2+i].system_message == expected_system_messages[0]
-        assert evals[2+i].previous_messages == expected_previous_messages[0]
-        assert evals[2+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[3+i].system_message == expected_system_messages[0]
-        assert evals[3+i].previous_messages == expected_previous_messages[1]
-        assert evals[3+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[4+i].system_message == expected_system_messages[0]
-        assert evals[4+i].previous_messages == expected_previous_messages[1]
-        assert evals[4+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[5+i].system_message == expected_system_messages[0]
-        assert evals[5+i].previous_messages == expected_previous_messages[1]
-        assert evals[5+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[6+i].system_message == expected_system_messages[1]
-        assert evals[6+i].previous_messages == expected_previous_messages[0]
-        assert evals[6+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[7+i].system_message == expected_system_messages[1]
-        assert evals[7+i].previous_messages == expected_previous_messages[0]
-        assert evals[7+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[1]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[8+i].system_message == expected_system_messages[1]
-        assert evals[8+i].previous_messages == expected_previous_messages[0]
-        assert evals[8+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[2]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[9+i].system_message == expected_system_messages[1]
-        assert evals[9+i].previous_messages == expected_previous_messages[1]
-        assert evals[9+i].prompt_sequence[0].prompt == dedent(str(expected_prompts[0]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[10+i].system_message == expected_system_messages[1]
-        assert evals[10+i].previous_messages == expected_previous_messages[1]
-        assert evals[10+i].prompt_sequence[0].prompt == \
-            dedent(str(expected_prompts[1]['prompt'])).\
-            format(**expected_prompt_parameters)
-
-        assert evals[11+i].system_message == expected_system_messages[1]
-        assert evals[11+i].previous_messages == expected_previous_messages[1]
-        assert evals[11+i].prompt_sequence[0].prompt == \
-            dedent(str(expected_prompts[2]['prompt'])).\
-            format(**expected_prompt_parameters)
-    # ensure we didn't change config
-    assert config == eval_fixture
-
-    harness.add_evals(fake_eval_with_previous_messages)
-    assert len(harness.evals) == (expected_num_evals_from_prompt_comparison * 2) + 1
-
-    candidate_1_dict = {
-        'metadata': {'uuid': 'candidate_1'},
-        'candidate_type': 'MockCandidateCannedResponse',
-    }
-    candidate_2_dict = deepcopy(candidate_1_dict)
-    candidate_2_dict['metadata']['uuid'] = 'candidate_2'
-    harness.add_candidates([candidate_1_dict, candidate_2_dict])
-    assert len(harness.evals) == (expected_num_evals_from_prompt_comparison * 2) + 1
-    results = harness()
-    assert len(results) == 2
-    assert len(results[0]) == (expected_num_evals_from_prompt_comparison * 2) + 1
-    assert len(results[1]) == (expected_num_evals_from_prompt_comparison * 2) + 1
 
 class UnregisteredCheckResult(CheckResult):  # noqa
     pass
@@ -1680,25 +861,12 @@ class UnregisteredCheck(Check):  # noqa
 class UnregisteredCandidate(Candidate):  # noqa
     def __init__(self, response: object) -> None:
         super().__init__()
-        self.has_executed = False
         self.response = response
 
     def __call__(self, prompt: dict) -> dict:  # noqa
-        # Candidates should not be reused in the same Eval
-        if self.has_executed:
-            raise Exception('Candidate should not be called more than once')
-        self.has_executed = True
         # returns dictionary instead of string
-        return {'prompt': prompt, 'response': self.response}
+        return CandidateResponse(content={'prompt': prompt, 'response': self.response})
 
-    def set_system_message(self, system_message: str) -> None:  # noqa
-        pass
-
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
-        pass
-
-    def clone(self) -> 'UnregisteredCandidate':  # noqa
-        return UnregisteredCandidate(response=self.response)
 
 def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa
     """
@@ -1707,57 +875,39 @@ def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_an
     use them with EvalHarness, but we should be able to use them individually.
     """
     eval_ = Eval(
-        prompt_sequence=PromptTest(
-            prompt={'prompt': 'Test Prompt'},
-            checks=[UnregisteredCheck()],
-        ),
+        input={'prompt': 'Test Prompt'},
+        checks=[UnregisteredCheck()],
     )
-    assert eval_.to_dict() == {'prompt_sequence': [{'prompt': {'prompt': 'Test Prompt'}, 'checks': [{'check_type': 'UnregisteredCheck'}]}]}  # noqa
+    assert eval_.to_dict() == {'input': {'prompt': 'Test Prompt'}, 'checks': [{'check_type': 'UnregisteredCheck'}]}  # noqa
     assert UnregisteredCandidate(42).to_dict() == {'candidate_type': 'UnregisteredCandidate'}
     result = eval_(UnregisteredCandidate(42))
-    assert len(result.responses) == 1
-    assert result.responses[0] == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}
-    assert len(result.results) == 1
-    assert len(result.results[0]) == 1
-    check_result = result.results[0][0]
+    assert result.response == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}
+    assert len(result.check_results) == 1
+    check_result = result.check_results[0]
     assert check_result.value == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}
     assert check_result.success is True
     assert check_result.to_dict() == {'value': {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}, 'success': True, 'result_type': 'UnregisteredCheckResult'}  # noqa
-    assert len(result.check_results) == 1
+    assert result.num_checks == 1
+    assert result.num_successful_checks == 1
     assert result.perc_successful_checks == 1
-    assert result.check_results[0].value == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}  # noqa
-    assert result.check_results[0].success is True
-    assert result.prompts == [{'prompt': 'Test Prompt'}]
-    assert result.response_characters is None  # only applicable for string responses
-    assert result.characters_per_second is None  # only applicable for string responses
-    assert result.expects_code_blocks is False
-    assert result.get_code_block_tests_result() is None
-    assert result.get_num_code_blocks_successful() is None
-    assert result.get_num_code_tests_defined() is None
-    assert result.get_num_code_tests_successful() is None
     # ensure that we can convert the results (which contain unregistered checks/candidates) to
     # a string and dictionary (which call underlying str and to_dict methods on
     # checks/candidates)
-    assert len(str(result)) > 10
     assert result.to_dict()['eval_obj'] == eval_.to_dict()
     assert result.to_dict()['candidate_obj'] == UnregisteredCandidate(42).to_dict()
-    assert result.to_dict()['results'][0][0] == check_result.to_dict()
+    assert result.to_dict()['check_results'][0] == check_result.to_dict()
 
 def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa
         harness = EvalHarness(
             # num_cpus=1, async_batch_size=1,
             evals=[
                 Eval(
-                    prompt_sequence=PromptTest(
-                        prompt={'prompt': 'Test Prompt 1'},  # test with dictionary prompt
-                        checks=[UnregisteredCheck()],
-                    ),
+                    input={'prompt': 'Test Prompt 1'},  # test with dictionary prompt
+                    checks=[UnregisteredCheck()],
                 ),
                 Eval(
-                    prompt_sequence=PromptTest(
-                        prompt={'prompt': 'Test Prompt 2'},  # test with dictionary prompt
-                        checks=[UnregisteredCheck()],
-                    ),
+                    input={'prompt': 'Test Prompt 2'},  # test with dictionary prompt
+                    checks=[UnregisteredCheck()],
                 ),
             ],
             candidates = [
@@ -1769,10 +919,10 @@ def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_pr
         assert len(results) == 2  # 2 candidates
         assert len(results[0]) == 2  # 2 evals
         assert len(results[1]) == 2  # same 2 evals
-        assert results[0][0].responses == [{'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}]  # noqa
-        assert results[0][1].responses == [{'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 1'}]  # noqa
-        assert results[1][0].responses == [{'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 2'}]  # noqa
-        assert results[1][1].responses == [{'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}]  # noqa
+        assert results[0][0].response == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}  # noqa
+        assert results[0][1].response == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 1'}  # noqa
+        assert results[1][0].response == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 2'}  # noqa
+        assert results[1][1].response == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}  # noqa
         assert len(results[0][0].check_results) == 1
         assert results[0][0].perc_successful_checks == 1
         assert results[0][0].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}  # noqa
@@ -1790,35 +940,22 @@ def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_pr
         assert results[1][1].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}  # noqa
         assert results[1][1].check_results[0].success is True
 
-        assert results[0][0].prompts == [{'prompt': 'Test Prompt 1'}]
-        assert results[0][1].prompts == [{'prompt': 'Test Prompt 2'}]
-        assert results[1][0].prompts == [{'prompt': 'Test Prompt 1'}]
-        assert results[1][1].prompts == [{'prompt': 'Test Prompt 2'}]
-
-        # if these work on the first result, they should work on the rest
-        assert results[0][0].response_characters is None  # only applicable for string responses
-        assert results[0][0].characters_per_second is None  # only applicable for string responses
-        assert results[0][0].expects_code_blocks is False
-        assert results[0][0].get_code_block_tests_result() is None
-        assert results[0][0].get_num_code_blocks_successful() is None
-        assert results[0][0].get_num_code_tests_defined() is None
-        assert results[0][0].get_num_code_tests_successful() is None
         # ensure that we can convert the results (which contain unregistered checks/candidates) to
         # a string and dictionary (which call underlying str and to_dict methods on
         # checks/candidates)
         assert len(str(results[0][0])) > 10
         assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
         assert results[0][0].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-        assert results[0][0].to_dict()['results'][0][0] == results[0][0].results[0][0].to_dict()
+        assert results[0][0].to_dict()['check_results'][0] == results[0][0].check_results[0].to_dict()  # noqa
         assert results[0][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
         assert results[0][1].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-        assert results[0][1].to_dict()['results'][0][0] == results[0][1].results[0][0].to_dict()
+        assert results[0][1].to_dict()['check_results'][0] == results[0][1].check_results[0].to_dict()  # noqa
         assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
         assert results[1][0].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-        assert results[1][0].to_dict()['results'][0][0] == results[1][0].results[0][0].to_dict()
+        assert results[1][0].to_dict()['check_results'][0] == results[1][0].check_results[0].to_dict()  # noqa
         assert results[1][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
         assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-        assert results[1][1].to_dict()['results'][0][0] == results[1][1].results[0][0].to_dict()
+        assert results[1][1].to_dict()['check_results'][0] == results[1][1].check_results[0].to_dict()  # noqa
 
 def test__Eval__callable_check__callable_candidate__non_string_prompt_and_response():  # noqa
     """
@@ -1827,29 +964,25 @@ def test__Eval__callable_check__callable_candidate__non_string_prompt_and_respon
     multi-processing), but we can use them with Evals individually.
     """
     eval_ = Eval(
-        prompt_sequence=PromptTest(
-            prompt={'prompt': 'Test Prompt'},  # non-string prompt
-            checks=[
-                lambda data: 'Response' in data.response['response'],  # should pass
-                lambda data: 'does not exist' in data.response['response'],  # should fail
-            ],
-        ),
+        input={'prompt': 'Test Prompt'},  # non-string prompt
+        checks=[
+            lambda data: 'Response' in data.response['response'],  # should pass
+            lambda data: 'does not exist' in data.response['response'],  # should fail
+        ],
     )
-    assert 'prompt_sequence' in eval_.to_dict()
-    assert eval_.to_dict()['prompt_sequence'][0]['prompt'] == {'prompt': 'Test Prompt'}
-    assert len(eval_.to_dict()['prompt_sequence'][0]['checks']) == 2
+    assert 'input' in eval_.to_dict()
+    assert eval_.to_dict()['input'] == {'prompt': 'Test Prompt'}
+    assert len(eval_.to_dict()['checks']) == 2
 
     # return dictionary instead of string
-    result = eval_(lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response'})
-    assert len(result.responses) == 1
-    assert result.responses[0] == {'prompt': 'Test Prompt', 'response': 'Test Prompt & Response'}
-    assert len(result.results) == 1
-    assert len(result.results[0]) == 2
-    check_result_1 = result.results[0][0]
+    result = eval_(lambda prompt: CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response'}))  # noqa
+    assert result.response == {'prompt': 'Test Prompt', 'response': 'Test Prompt & Response'}
+    assert len(result.check_results) == 2
+    check_result_1 = result.check_results[0]
     assert check_result_1.value is True
     assert check_result_1.success is True
     assert check_result_1.to_dict() == {'value': True, 'success': True, 'result_type': 'PASS_FAIL'}
-    check_result_2 = result.results[0][1]
+    check_result_2 = result.check_results[1]
     assert check_result_2.value is False
     assert check_result_2.success is False
     assert check_result_2.to_dict() == {'value': False, 'success': False, 'result_type': 'PASS_FAIL'}  # noqa
@@ -1861,53 +994,41 @@ def test__Eval__callable_check__callable_candidate__non_string_prompt_and_respon
     assert result.check_results[1].value == check_result_2.value
     assert result.check_results[1].success == check_result_2.success
 
-    assert result.prompts == [{'prompt': 'Test Prompt'}]
-    assert result.response_characters is None  # only applicable for string responses
-    assert result.characters_per_second is None  # only applicable for string responses
-    assert result.expects_code_blocks is False
-    assert result.get_code_block_tests_result() is None
-    assert result.get_num_code_blocks_successful() is None
-    assert result.get_num_code_tests_defined() is None
-    assert result.get_num_code_tests_successful() is None
-    # ensure that we can convert the results (which contain unregistered checks/candidates) to
-    # a string and dictionary (which call underlying str and to_dict methods on
-    # checks/candidates)
-    assert len(str(result)) > 10
+    assert result.num_checks == 2
+    assert result.num_successful_checks == 1
+    assert result.perc_successful_checks == 0.5
+
     assert result.to_dict()['eval_obj'] == eval_.to_dict()
-    assert result.to_dict()['candidate_obj']['candidate_type'] == 'CALLABLE_NO_SERIALIZE'
-    assert result.to_dict()['results'][0][0] == check_result_1.to_dict()
-    assert result.to_dict()['results'][0][1] == check_result_2.to_dict()
+    assert result.to_dict()['candidate_obj']
+    assert result.to_dict()['check_results'][0] == check_result_1.to_dict()
+    assert result.to_dict()['check_results'][1] == check_result_2.to_dict()
 
 @pytest.mark.parametrize('use_async', [True, False])
 def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(use_async):  # noqa
     if use_async:
         async def async_candidate_1(prompt):  # noqa
-            return prompt | {'response': prompt['prompt'] + ' & Response1'}
+            return CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response1'})  # noqa
 
         async def async_candidate_2(prompt):  # noqa
-            return prompt | {'response': prompt['prompt'] + ' & Response2'}
+            return CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response2'})  # noqa
 
         candidates = [async_candidate_1, async_candidate_2]
     else:
         candidates = [
-            lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response1'},
-            lambda prompt: prompt | {'response': prompt['prompt'] + ' & Response2'},
+            lambda prompt: CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response1'}),  # noqa
+            lambda prompt: CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response2'}),  # noqa
         ]
 
     harness = EvalHarness(
         num_cpus=1, async_batch_size=1,
         evals=[
             Eval(
-                prompt_sequence=PromptTest(
-                    prompt={'prompt': 'Test Prompt 1'},  # test with dictionary prompt
-                    checks=[lambda data: 'Response1' in data.response['response']],
-                ),
+                input={'prompt': 'Test Prompt 1'},  # non-string prompt
+                checks=[lambda data: 'Response1' in data.response['response']],
             ),
             Eval(
-                prompt_sequence=PromptTest(
-                    prompt={'prompt': 'Test Prompt 2'},  # test with dictionary prompt
-                    checks=[lambda data: 'Response2' in data.response['response']],
-                ),
+                input={'prompt': 'Test Prompt 2'},  # non-string prompt
+                checks=[lambda data: 'Response2' in data.response['response']],
             ),
         ],
         candidates = candidates,
@@ -1919,61 +1040,56 @@ def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and
     assert len(results) == 2  # 2 candidates
     assert len(results[0]) == 2 * num_samples  # 2 evals
     assert len(results[1]) == 2 * num_samples # same 2 evals
-    assert results[0][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}]  # noqa
-    assert results[0][num_samples-1].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}]  # noqa
-    assert results[0][num_samples].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}]  # noqa
-    assert results[1][0].responses == [{'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response2'}]  # noqa
-    assert results[1][num_samples].responses == [{'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}]  # noqa
+    assert results[0][0].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}  # noqa
+    assert results[0][num_samples-1].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}  # noqa
+    assert results[0][num_samples].response == {'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}  # noqa
+    assert results[1][0].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response2'}  # noqa
+    assert results[1][num_samples].response == {'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}  # noqa
     # eval 1 candidate 1
     assert len(results[0][0].check_results) == 1
+    assert results[0][0].num_checks == 1
+    assert results[0][0].num_successful_checks == 1
     assert results[0][0].perc_successful_checks == 1
     assert results[0][0].check_results[0].value is True
     assert results[0][0].check_results[0].success is True
     # eval 2 candidate 1
     assert len(results[0][num_samples].check_results) == 1
+    assert results[0][num_samples].num_checks == 1
+    assert results[0][num_samples].num_successful_checks == 0
     assert results[0][num_samples].perc_successful_checks == 0
     assert results[0][num_samples].check_results[0].value is False
     assert results[0][num_samples].check_results[0].success is False
     # eval 1 candidate 2
     assert len(results[1][0].check_results) == 1
+    assert results[1][0].num_checks == 1
+    assert results[1][0].num_successful_checks == 0
     assert results[1][0].perc_successful_checks == 0
     assert results[1][0].check_results[0].value is False
     assert results[1][0].check_results[0].success is False
     # eval 2 candidate 2
     assert len(results[1][1].check_results) == 1
+    assert results[1][num_samples].num_checks == 1
+    assert results[1][num_samples].num_successful_checks == 1
     assert results[1][num_samples].perc_successful_checks == 1
     assert results[1][num_samples].check_results[0].value is True
     assert results[1][num_samples].check_results[0].success is True
 
-    assert results[0][0].prompts == [{'prompt': 'Test Prompt 1'}]
-    assert results[0][num_samples].prompts == [{'prompt': 'Test Prompt 2'}]
-    assert results[1][0].prompts == [{'prompt': 'Test Prompt 1'}]
-    assert results[1][num_samples].prompts == [{'prompt': 'Test Prompt 2'}]
-
-    # if these work on the first result, they should work on the rest
-    assert results[0][0].response_characters is None  # only applicable for string responses
-    assert results[0][0].characters_per_second is None  # only applicable for string responses
-    assert results[0][0].expects_code_blocks is False
-    assert results[0][0].get_code_block_tests_result() is None
-    assert results[0][0].get_num_code_blocks_successful() is None
-    assert results[0][0].get_num_code_tests_defined() is None
-    assert results[0][0].get_num_code_tests_successful() is None
     # ensure that we can convert the results (which contain unregistered checks/candidates) to
     # a string and dictionary (which call underlying str and to_dict methods on
     # checks/candidates)
     assert len(str(results[0][0])) > 10
     assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
-    assert results[0][0].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-    assert results[0][0].to_dict()['results'][0][0] == results[0][0].results[0][0].to_dict()
+    assert results[0][0].to_dict()['candidate_obj']
+    assert results[0][0].to_dict()['check_results'][0] == results[0][0].check_results[0].to_dict()
     assert results[0][num_samples].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-    assert results[0][num_samples].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-    assert results[0][num_samples].to_dict()['results'][0][0] == results[0][num_samples].results[0][0].to_dict()  # noqa: E501
+    assert results[0][num_samples].to_dict()['candidate_obj']
+    assert results[0][num_samples].to_dict()['check_results'][0] == results[0][num_samples].check_results[0].to_dict()  # noqa: E501
     assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
-    assert results[1][0].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-    assert results[1][0].to_dict()['results'][0][0] == results[1][0].results[0][0].to_dict()
+    assert results[1][0].to_dict()['candidate_obj']
+    assert results[1][0].to_dict()['check_results'][0] == results[1][0].check_results[0].to_dict()
     assert results[1][num_samples].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-    assert results[1][num_samples].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-    assert results[1][num_samples].to_dict()['results'][0][0] == results[1][num_samples].results[0][0].to_dict()  # noqa: E501
+    assert results[1][num_samples].to_dict()['candidate_obj']
+    assert results[1][num_samples].to_dict()['check_results'][0] == results[1][num_samples].check_results[0].to_dict()  # noqa: E501
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template):  # noqa
