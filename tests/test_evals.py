@@ -449,9 +449,11 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(candidate_type
     # the eval results of candidate 1 should be the same as the eval results of candidate 2,
     # except the seconds it took to run the evals and the uuid of the candidate
     cand_1_results_subtract_dict = deepcopy(cand_1_results_subtract.to_dict())
+    del cand_1_results_subtract_dict['timestamp']
     del cand_1_results_subtract_dict['total_time_seconds']
     del cand_1_results_subtract_dict['candidate_obj']['metadata']['uuid']
     cand_2_results_subtract_dict = deepcopy(cand_2_results_subtract.to_dict())
+    del cand_2_results_subtract_dict['timestamp']
     del cand_2_results_subtract_dict['total_time_seconds']
     del cand_2_results_subtract_dict['candidate_obj']['metadata']['uuid']
     assert cand_1_results_subtract_dict == cand_2_results_subtract_dict
