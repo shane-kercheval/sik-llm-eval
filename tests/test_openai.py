@@ -8,7 +8,6 @@ from llm_eval.openai import (
     OpenAICompletionResponse,
     OpenAIResponse,
     Function,
-    FunctionParameter,
     OpenAITools,
     OpenAIToolsResponse,
     num_tokens,

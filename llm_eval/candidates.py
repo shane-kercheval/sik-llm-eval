@@ -31,7 +31,13 @@ from textwrap import dedent
 from typing import Any, Callable, List, Literal, Type, Union
 from pydantic import BaseModel
 from openai import OpenAI
-from llm_eval.openai import MODEL_COST_PER_TOKEN, OpenAIChatResponse, OpenAICompletion, OpenAICompletionResponse, OpenAITools, OpenAIToolsResponse
+from llm_eval.openai import (
+    MODEL_COST_PER_TOKEN,
+    OpenAIChatResponse,
+    OpenAICompletion,
+    OpenAICompletionResponse,
+    OpenAIToolsResponse,
+)
 from llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,

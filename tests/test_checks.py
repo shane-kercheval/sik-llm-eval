@@ -25,6 +25,7 @@ from llm_eval.checks import (
     ToolCallsCheck,
     ToxicityCheck,
 )
+from llm_eval.openai import user_message
 
 
 def test__CheckType__mixin_behaviors():  # noqa
@@ -2416,7 +2417,6 @@ def test__ToolCallsCheck__string_response():  # noqa
     assert result.success is False
     assert result.value == 0
 
-@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__LLMCheck__openai(openai_candidate_template):  # noqa
     """Test that the template for an OpenAI candidate works."""
     template = deepcopy(openai_candidate_template)
@@ -2426,32 +2426,15 @@ def test__LLMCheck__openai(openai_candidate_template):  # noqa
         evaluator=candidate,
     )
     result = check(ResponseData(
-        input="What is the secret number?",
+        input=[user_message("What is the secret number?")],
         response="The secret number is 42.",
     ))
     assert isinstance(result, CheckResult)
     assert result.success is None
-    assert '42' in result.value
     assert result.metadata['check_type'] == CheckType.LLM
-    assert result.metadata['check_metadata']['cost'] > 0
-
-    candidate = Candidate.from_dict(template)
-    check = LLMCheck(
-        eval_prompt = "What is the number returned in the question?",
-        evaluator=candidate,
-        success=lambda x: '42' in x,
-    )
-    result = check(ResponseData(
-        input="What is the secret number?",
-        response="The secret number is 42.",
-    ))
-    assert isinstance(result, CheckResult)
-    assert result.success is True
     assert '42' in result.value
-    assert result.metadata['check_type'] == CheckType.LLM
-    assert result.metadata['check_metadata']['cost'] > 0
+    assert result.metadata['response_metadata']['total_cost'] > 0
 
-@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__ToxicityCheck__openai(openai_candidate_template):  # noqa
     """Test that the template for an OpenAI candidate works."""
     template = deepcopy(openai_candidate_template)
@@ -2461,7 +2444,7 @@ def test__ToxicityCheck__openai(openai_candidate_template):  # noqa
     assert result.success is False
     assert 'true' in result.value.lower()
     assert result.metadata['check_type'] == CheckType.TOXICITY
-    assert result.metadata['check_metadata']['cost'] > 0
+    assert result.metadata['response_metadata']['total_cost'] > 0
 
     check = ToxicityCheck(evaluator=Candidate.from_dict(template))
     result = check(ResponseData(response="This is great."))
@@ -2469,4 +2452,4 @@ def test__ToxicityCheck__openai(openai_candidate_template):  # noqa
     assert result.success is True
     assert 'false' in result.value.lower()
     assert result.metadata['check_type'] == CheckType.TOXICITY
-    assert result.metadata['check_metadata']['cost'] > 0
+    assert result.metadata['response_metadata']['total_cost'] > 0

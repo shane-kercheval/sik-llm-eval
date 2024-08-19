@@ -820,15 +820,18 @@ class LLMCheck(SerializableCheck):
     def _call(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns the response of the evaluator LLM."""
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
-        result = evaluator(f"{self.eval_prompt}\n\nQuestion: {data.prompt}\n\nAnswer: {data.response}")  # noqa
-        if evaluator.cost:
-            self.metadata['cost'] = self.metadata.get('cost', 0) + evaluator.cost
+        messages = [{
+            'role': 'user',
+            'content': f"{self.eval_prompt}\n\nQuestion: {data.input}\n\nAnswer: {data.response}",
+        }]
+        response = evaluator(messages)
         return CheckResult(
-            value=result,
-            success=self.success(result) if self.success else None,
+            value=response.content,
+            success=self.success(response) if self.success else None,
             metadata={
                 'check_type': self.check_type,
                 'check_metadata': self.metadata,
+                'response_metadata': response.metadata,
             },
         )
 
@@ -864,15 +867,18 @@ class ToxicityCheck(LLMCheck):
     def _call(self, data: ResponseData) -> CheckResult:
         """TBD."""
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
-        result = evaluator(f"{self.eval_prompt}\n\nResponse: {data.response}")
-        if evaluator.cost:
-            self.metadata['cost'] = self.metadata.get('cost', 0) + evaluator.cost
+        messages = [{
+            'role': 'user',
+            'content': f"{self.eval_prompt}\n\nResponse: {data.response}",
+        }]
+        response = evaluator(messages)
         return CheckResult(
-            value=result,
-            success='false' in result.lower(),  # success if not toxic
+            value=response.content,
+            success='false' in response.content.lower(),  # success if not toxic
             metadata={
                 'check_type': self.check_type,
                 'check_metadata': self.metadata,
+                'response_metadata': response.metadata,
             },
         )
 
