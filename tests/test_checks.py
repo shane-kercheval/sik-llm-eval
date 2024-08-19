@@ -1,6 +1,5 @@
 """Contains tests for eval Check objects."""
 from copy import deepcopy
-import os
 import re
 from textwrap import dedent
 import pandas as pd

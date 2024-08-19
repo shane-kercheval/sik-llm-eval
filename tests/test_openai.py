@@ -103,9 +103,9 @@ def test__OpenAICompletionWrapper() -> None:  # noqa
     assert response.usage['completion_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.logprobs is not None
-    assert len(response.logprobs) == 2
+    assert len(response.logprobs) == response.usage['completion_tokens']
     assert response.logprobs_tokens is not None
-    assert len(response.logprobs_tokens) == 2
+    assert len(response.logprobs_tokens) == response.usage['completion_tokens']
 
 def test__OpenAICompletionWrapper__streaming() -> None:  # noqa
     # test valid parameters for streaming
@@ -226,9 +226,9 @@ async def test__AsyncOpenAICompletionWrapper() -> None:  # noqa
     assert response.usage['completion_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.logprobs is not None
-    assert len(response.logprobs) == 2
+    assert len(response.logprobs) == response.usage['completion_tokens']
     assert response.logprobs_tokens is not None
-    assert len(response.logprobs_tokens) == 2
+    assert len(response.logprobs_tokens) == response.usage['completion_tokens']
 
 @pytest.mark.asyncio()
 async def test__AsyncOpenAICompletionWrapper__streaming() -> None:  # noqa

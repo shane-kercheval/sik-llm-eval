@@ -501,7 +501,7 @@ class PythonCodeBlocksPresent(SerializableCheck):
         description="The minimum number of code blocks that must be present in the response.",
     )
 
-    def _call(self, value: str | list[str] | None) -> PassFailResult:
+    def _call(self, value: str) -> PassFailResult:
         """
         Returns a PassFailResult based on the number of code blocks present.
 
@@ -913,7 +913,7 @@ class ToolCallsCheck(Check):
         """,
     )
 
-    def _call(self, value: str) -> CheckResult:
+    def _call(self, value: list[dict]) -> CheckResult:
         """Executes the check on the response/value and returns a ScoreResult."""
         score = 0
         metadata = {

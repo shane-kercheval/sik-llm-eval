@@ -3,75 +3,6 @@ from llm_eval.checks import PythonCodeBlocksPresent, PythonCodeBlockTests
 from llm_eval.eval import Eval, EvalResult
 
 
-
-    # @property
-    # def expects_code_blocks(self) -> bool:
-    #     """Returns a list of CheckResults for code block present checks."""
-    #     return any(
-    #         r for r in self.check_results
-    #         if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
-    #     )
-
-    # def get_code_block_tests_result(self) -> CheckResult | None:
-    #     """
-    #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
-
-    #     Returns the CheckResult object associated with the PythonCodeBlockTests check, if it
-    #     exists, otherwise None.
-    #     """
-    #     results = [
-    #         r for r in self.check_results
-    #         if r.metadata.get('check_type', '') == CheckType.PYTHON_CODE_BLOCK_TESTS.name
-    #     ]
-    #     if results:
-    #         assert len(results) == 1
-    #         return results[0]
-    #     return None
-
-    # def get_num_code_blocks_successful(self) -> int | None:
-    #     """
-    #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
-
-    #     Returns the number of code blocks generated that successfully execute across all
-    #     responses.
-    #     If there are no code blocks or no PythonCodeBlockTests check, returns None.
-    #     """
-    #     result = self.get_code_block_tests_result()
-    #     if result:
-    #         return result.metadata.get('num_code_blocks_successful', None)
-    #     return None
-
-    # def get_num_code_tests_defined(self) -> int | None:
-    #     """
-    #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
-
-    #     Returns the number of code tests defined (i.e. the number of individual tests for the
-    #     PythonCodeBlockTests check, if it exists). If there are no code blocks or no
-    #     PythonCodeBlockTests check, returns None.
-    #     """
-    #     result = self.get_code_block_tests_result()
-    #     if result:
-    #         return result.metadata.get('num_code_tests', None)
-    #     return None
-
-    # def get_num_code_tests_successful(self) -> int | None:
-    #     """
-    #     Only applicable for PythonCodeBlockTests (PYTHON_CODE_BLOCK_TESTS) checks.
-
-    #     Returns the number of code tests (i.e. the number of individual tests for the
-    #     PythonCodeBlockTests check, if it exists) that successfully pass. If there
-    #     are no code blocks or no PythonCodeBlockTests check, returns None.
-    #     """
-    #     result = self.get_code_block_tests_result()
-    #     if result:
-    #         return result.metadata.get('num_code_tests_successful', None)
-    #     return None
-
-
-
-
-
-
 def eval_expects_code_blocks(eval_: Eval) -> bool:
     """
     Return True if the eval object contains a check that tests for the presence of code blocks
@@ -79,8 +10,7 @@ def eval_expects_code_blocks(eval_: Eval) -> bool:
     """
     return any(
         isinstance(check, PythonCodeBlocksPresent)
-        for test in eval_.prompt_sequence
-        for check in test.checks
+        for check in eval_.checks
     )
 
 def eval_contains_code_block_tests(eval_: Eval) -> bool:
@@ -90,8 +20,7 @@ def eval_contains_code_block_tests(eval_: Eval) -> bool:
     """
     return any(
         isinstance(check, PythonCodeBlockTests)
-        for test in eval_.prompt_sequence
-        for check in test.checks
+        for check in eval_.checks
     )
 
 def result_expects_code_blocks(result: EvalResult) -> bool:
@@ -99,14 +28,14 @@ def result_expects_code_blocks(result: EvalResult) -> bool:
     Return True if the underlying Eval object in the EvalResult contains a check that tests for the
     presence of code blocks (i.e. Check objects with `PythonCodeBlocksPresent` check type).
     """
-    return result.expects_code_blocks
+    return eval_expects_code_blocks(result.eval_obj)
 
 def result_contains_code_block_tests(result: EvalResult) -> bool:
     """
     Return True if the underlying Eval object in the EvalResult contains a check that tests code
     blocks (i.e. Check objects with `PythonCodeBlockTests` check type).
     """
-    return result.get_code_block_tests_result() is not None
+    return eval_contains_code_block_tests(result.eval_obj)
 
 def filter_expects_code_blocks(results: list[EvalResult]) -> list[EvalResult]:
     """
