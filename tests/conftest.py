@@ -325,7 +325,7 @@ def openai_candidate_template() -> dict:
 @pytest.fixture()
 def openai_tools_candidate_template() -> dict:
     """Returns the yaml template for an OpenAI Tools."""
-    with open('examples/candidates/openai_tools_3.5.yaml') as f:
+    with open('examples/candidates/openai_tools_4o-mini.yaml') as f:
         return yaml.safe_load(f)
 
 

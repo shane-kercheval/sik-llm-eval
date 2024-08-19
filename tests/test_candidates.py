@@ -5,11 +5,12 @@ from openai import BadRequestError
 import pytest
 from llm_eval.candidates import (
     Candidate,
+    CandidateResponse,
     CandidateType,
     OpenAICandidate,
     is_async_candidate,
 )
-from llm_eval.openai import user_message
+from llm_eval.openai import Function, user_message
 
 class MockLMM:
     """Mock class representing an LLM."""
@@ -201,25 +202,27 @@ def test__OpenAI__invalid_parameters(openai_candidate_template):  # noqa
     with pytest.raises(BadRequestError):
         _ = candidate(messages)
 
-def test__OpenAIToolsCandidate__from_yaml(openai_tools_candidate_template: dict, tool_weather, tool_stocks):  # noqa
-    candidate = Candidate.from_yaml('examples/candidates/openai_tools_3.5.yaml')
+def test__OpenAIToolsCandidate__from_yaml(openai_tools_candidate_template: dict, function_weather: Function, function_stocks: Function):  # noqa
+    candidate = Candidate.from_yaml('examples/candidates/openai_tools_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI_TOOLS.name
     assert candidate.to_dict() == openai_tools_candidate_template
-    assert candidate.model.model_name == candidate.to_dict()['parameters']['model_name']
-    assert isinstance(candidate.model.tools, list)
-    assert len(candidate.model.tools) == 2
-    assert isinstance(candidate.model.tools[0], dict)
-    assert candidate.model.tools[0]['function'] == tool_weather
-    assert isinstance(candidate.model.tools[1], dict)
-    assert candidate.model.tools[1]['function'] == tool_stocks
+    assert candidate.client.model == candidate.to_dict()['model_name']
+    assert isinstance(candidate.tools, list)
+    assert len(candidate.tools) == 2
+    assert isinstance(candidate.tools[0], dict)
+    assert candidate.tools[0] == function_weather.to_dict()
+    assert isinstance(candidate.tools[1], dict)
+    assert candidate.tools[1] == function_stocks.to_dict()
 
-    response = candidate("What's the weather like in Boston today in degrees F?")
-    assert isinstance(response, list)
-    assert len(response) == 1
-    # ensure the response is from the weather tool and contains the correct parameters
-    assert response[0]['name'] == 'get_current_weather'
-    assert 'location' in response[0]['arguments']
-    assert response[0]['arguments']['location']
-    assert isinstance(response[0]['arguments']['location'], str)
-    assert 'unit' in response[0]['arguments']
-    assert response[0]['arguments']['unit'] in ['celsius', 'fahrenheit']
+    response = candidate([user_message("What's the weather like in Boston today in degrees F?")])
+    assert isinstance(response, CandidateResponse)
+    assert isinstance(response.content, list)
+    assert len(response.content) == 1
+    assert response.content[0]['type'] == 'function'
+    assert response.content[0]['name'] == 'get_current_weather'
+    arguments = response.content[0]['arguments']
+    assert 'location' in arguments
+    assert arguments['location']
+    assert isinstance(arguments['location'], str)
+    assert 'unit' in arguments
+    assert arguments['unit'] in ['celsius', 'fahrenheit']

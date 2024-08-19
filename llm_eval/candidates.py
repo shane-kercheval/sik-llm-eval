@@ -28,10 +28,10 @@ from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Any, Callable, List, Type, Union
+from typing import Any, Callable, List, Literal, Type, Union
 from pydantic import BaseModel
 from openai import OpenAI
-from llm_eval.openai import MODEL_COST_PER_TOKEN, OpenAIChatResponse, OpenAICompletion
+from llm_eval.openai import MODEL_COST_PER_TOKEN, OpenAIChatResponse, OpenAICompletion, OpenAICompletionResponse, OpenAITools, OpenAIToolsResponse
 from llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
@@ -53,7 +53,6 @@ class CandidateType(EnumMixin, Enum):
     OPENAI = auto()
     OPENAI_TOOLS = auto()
     CALLABLE_NO_SERIALIZE = auto()
-    OPENAI_SERVER = auto()
 
 
 class CandidateResponse(BaseModel):
@@ -245,15 +244,18 @@ class OpenAICandidate(Candidate):
 @Candidate.register(CandidateType.OPENAI_TOOLS)
 class OpenAIToolsCandidate(Candidate):
     """
-    Wrapper around the OpenAI API that allows the user to create an OpenAI candidate with tools
-    from a dictionary.
-    response.
+    Wrapper around the OpenAI API that allows the user to create an OpenAI candidate from a
+    dictionary.
 
     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
-    def __init__(
+    def __init__(  # noqa: D417
             self,
+            tools: list[dict],
+            tool_choice: Literal['none', 'auto', 'required'] | dict[str] = 'required',
+            model_name: str | None = None,
+            endpoint_url: str | None = None,
             metadata: dict | None = None,
             parameters: dict | None = None) -> None:
         """
@@ -267,13 +269,61 @@ class OpenAIToolsCandidate(Candidate):
                 'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
                 such as `model_name` and model-specific parameters (e.g. `temperature`) can be
                 passed.
-        """
-        if parameters is None:
-            parameters = {}
-        super().__init__(
-            model=OpenAITools(**deepcopy(parameters)),
-            metadata=metadata,
-            parameters=parameters,
+        """  # noqa
+        super().__init__(metadata=metadata, parameters=parameters)
+        assert model_name or endpoint_url, "model_name or endpoint_url must be provided"
+        self.model_name = model_name
+        self.endpoint_url = endpoint_url
+        self.client = OpenAICompletion(
+            client=OpenAI(base_url=self.endpoint_url),
+            model=self.model_name or self.endpoint_url,
+            **self.parameters or {},
+        )
+        self.tools = tools
+        self.tool_choice = tool_choice
+
+    def __call__(self, input: dict) -> CandidateResponse:  # noqa: A002
+        """Invokes the underlying model with the input/tools and returns the response."""
+        response: OpenAIToolsResponse | OpenAICompletionResponse = self.client(
+            messages=input,
+            tools=self.tools,
+            tool_choice=self.tool_choice,
+        )
+        prompt_tokens = response.usage.get('prompt_tokens')
+        completion_tokens = response.usage.get('completion_tokens')
+        total_tokens = response.usage.get('total_tokens')
+
+        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model_name)
+        if cost_per_token and prompt_tokens and completion_tokens:
+            prompt_cost = cost_per_token['input'] * prompt_tokens
+            completion_cost = cost_per_token['output'] * completion_tokens
+            total_cost = prompt_cost + completion_cost
+        else:
+            prompt_cost = None
+            completion_cost = None
+            total_cost = None
+
+        content = response.tools if isinstance(response, OpenAIToolsResponse) else response.content
+        return CandidateResponse(
+            content=content,
+            metadata={
+                'type': 'tools' if isinstance(response, OpenAIToolsResponse) else 'completion',
+                'prompt_tokens': prompt_tokens,
+                'completion_tokens': completion_tokens,
+                'total_tokens': total_tokens,
+                'prompt_cost': prompt_cost,
+                'completion_cost': completion_cost,
+                'total_cost': total_cost,
+            },
         )
 
-
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the Candidate."""
+        value = super().to_dict()
+        if self.model_name:
+            value['model_name'] = self.model_name
+        if self.endpoint_url:
+            value['endpoint_url'] = self.endpoint_url
+        value['tools'] = self.tools
+        value['tool_choice'] = self.tool_choice
+        return value

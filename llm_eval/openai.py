@@ -490,5 +490,3 @@ class OpenAITools(OpenAICompletionWrapperBase):
         response = OpenAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response
-
-
