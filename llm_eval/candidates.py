@@ -206,15 +206,15 @@ class OpenAICandidate(Candidate):
         assert model_name or endpoint_url, "model_name or endpoint_url must be provided"
         self.model_name = model_name
         self.endpoint_url = endpoint_url
-        self.client = OpenAICompletion(
+
+    def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
+        """Invokes the underlying model with the input and returns the response."""
+        client = OpenAICompletion(
             client=OpenAI(base_url=self.endpoint_url),
             model=self.model_name or self.endpoint_url,
             **self.parameters or {},
         )
-
-    def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
-        """Invokes the underlying model with the input and returns the response."""
-        response: OpenAIChatResponse = self.client(input)
+        response: OpenAIChatResponse = client(input)
         prompt_tokens = response.usage.get('prompt_tokens')
         completion_tokens = response.usage.get('completion_tokens')
         total_tokens = response.usage.get('total_tokens')
@@ -295,17 +295,17 @@ class OpenAIToolsCandidate(Candidate):
         assert model_name or endpoint_url, "model_name or endpoint_url must be provided"
         self.model_name = model_name
         self.endpoint_url = endpoint_url
-        self.client = OpenAICompletion(
-            client=OpenAI(base_url=self.endpoint_url),
-            model=self.model_name or self.endpoint_url,
-            **self.parameters or {},
-        )
         self.tools = tools
         self.tool_choice = tool_choice
 
     def __call__(self, input: dict) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input/tools and returns the response."""
-        response: OpenAIToolsResponse | OpenAICompletionResponse = self.client(
+        client = OpenAICompletion(
+            client=OpenAI(base_url=self.endpoint_url),
+            model=self.model_name or self.endpoint_url,
+            **self.parameters or {},
+        )
+        response: OpenAIToolsResponse | OpenAICompletionResponse = client(
             messages=input,
             tools=self.tools,
             tool_choice=self.tool_choice,

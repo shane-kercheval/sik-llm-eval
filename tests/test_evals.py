@@ -690,7 +690,6 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(candidate
     assert cand_2_results_sum.perc_successful_checks == 1
     assert cand_2_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
-
 def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values):  # noqa
     """Test that numeric values are converted to strings when loading an Eval object."""
     eval_config = deepcopy(fake_eval_non_string_values)
@@ -847,6 +846,31 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
         assert results[1][i].check_results[-1].metadata['num_code_blocks_successful'] == 1
         assert results[1][i].check_results[-1].metadata['num_code_tests'] == expected_num_code_tests  # noqa: E501
         assert results[1][i].check_results[-1].metadata['num_code_tests_successful'] > 0
+
+
+def test__MultiProcessing_openai_candidates(openai_candidate_template, fake_eval_sum_two_numbers, fake_eval_subtract_two_numbers):  # noqa
+    """
+    The purpose of this test is mainly to ensure we can pickle the openai candidate object when
+    using multiprocessing. For example, defining the OpenAI class in the __init__ method of the
+    OpenAI Candidate class will cause an error when pickling the object.
+    """
+    candidate_1 = deepcopy(openai_candidate_template)
+    candidate_2 = deepcopy(openai_candidate_template)
+    eval_1 = Eval(**fake_eval_sum_two_numbers)
+    eval_2 = Eval(**fake_eval_subtract_two_numbers)
+    harness = EvalHarness(
+        evals=[eval_1, eval_2],
+        candidates=[candidate_1, candidate_2],
+        num_cpus=2,
+    )
+    results = harness()
+    assert len(results) == 2
+    assert len(results[0]) == 2
+    assert len(results[1]) == 2
+    assert results[0][0].response_metadata['total_tokens'] > 0
+    assert results[0][1].response_metadata['total_tokens'] > 0
+    assert results[1][0].response_metadata['total_tokens'] > 0
+    assert results[1][1].response_metadata['total_tokens'] > 0
 
 
 class UnregisteredCheckResult(CheckResult):  # noqa
