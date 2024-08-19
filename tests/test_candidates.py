@@ -133,7 +133,6 @@ def test__candidate__to_from_dict():  # noqa
 def test__OpenAI__default__no_parameters(openai_model_name):  # noqa
     candidate = OpenAICandidate(model_name=openai_model_name)
     assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
-    assert candidate.client.model_parameters == {}
     messages = [user_message("What is the capital of France?")]
     response = candidate(messages)
     assert 'Paris' in response.content
@@ -149,7 +148,6 @@ def test__OpenAI__default__no_parameters(openai_model_name):  # noqa
     recreated_candidate = Candidate.from_dict(candidate.to_dict())
     assert candidate == recreated_candidate
     assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
-    assert recreated_candidate.client.model_parameters == {}
     messages = [user_message("What is the capital of Germany?")]
     response = recreated_candidate(messages)
     assert 'Berlin' in response.content
@@ -170,7 +168,6 @@ def test__OpenAI__config():  # noqa
     assert candidate.metadata == config['metadata']
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.parameters == config['parameters']
-    assert candidate.client.model_parameters == config['parameters']
     assert candidate.to_dict() == config
     assert candidate.from_dict(candidate.to_dict()) == candidate
 
@@ -184,8 +181,7 @@ def test__OpenAI__template__parameters(openai_candidate_template):  # noqa
         if k in expected_model_param_names
     }
     candidate = Candidate.from_dict(template)
-    assert candidate.client.model_parameters == expected_parameters
-    assert candidate.client.model == template['model_name']
+    candidate.parameters == expected_parameters
     assert candidate.to_dict() == template
 
     messages = [user_message("What is the capital of France?")]
@@ -206,7 +202,6 @@ def test__OpenAIToolsCandidate__from_yaml(openai_tools_candidate_template: dict,
     candidate = Candidate.from_yaml('examples/candidates/openai_tools_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI_TOOLS.name
     assert candidate.to_dict() == openai_tools_candidate_template
-    assert candidate.client.model == candidate.to_dict()['model_name']
     assert isinstance(candidate.tools, list)
     assert len(candidate.tools) == 2
     assert isinstance(candidate.tools[0], dict)
