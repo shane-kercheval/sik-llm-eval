@@ -23,16 +23,16 @@ from llm_eval.internal_utilities import DictionaryEqualsMixin
 
 class Eval(DictionaryEqualsMixin):
     """
-    TODO: review and update documentation.
-
-    An Eval is single test case/scenario that the user is interested in evaluating (via one or more
-    "checks").
+    An Eval is single test-case/scenario that the user is interested in evaluating. It typically
+    consists of sending an input to a Candidate (e.g. 'messages' to ChatGpt) and checking the
+    response against one or more "checks" (e.g. checking if the response mathces/contains a
+    specific phrase, or has generated python code).
 
     An Eval is a callable object that is executed by calling it with a Candidate object, or a
     dictionary representing a Candidate that has been registered via `Candidate.register(...)`.
     """
 
-    def __init__(  # noqa: D417
+    def __init__(
             self,
             input: str | dict | list | Any,  # noqa: A002, ANN401
             checks: list[Check | dict | Callable[[Any], CheckResult]] | None = None,
@@ -41,9 +41,19 @@ class Eval(DictionaryEqualsMixin):
         """
         Initializes the Eval.
 
-        # TODO: update the documentation
-
         Args:
+            input:
+                The input to send to the Candidate/LLM (i.e. the input to the __call__ of the
+                corresponding Candidate object). This can be a string, dictionary, list, or
+                any other type that the Candidate/LLM can accept.
+            checks:
+                A list of Check objects, dictionaries, or callables. If a dictionary is passed in,
+                the Check subclasses need to be registered via `Check.register(...)`, and the
+                dictionary needs a `check_type` key with the registration value.
+            ideal_response:
+                The ideal response that the Candidate/LLM should return. This is optional and not
+                currently used in the evaluation process, but it can be used in user-defined checks
+                and candidates.
             metadata:
                 Metadata associated with the Eval.
         """
@@ -188,8 +198,8 @@ class Eval(DictionaryEqualsMixin):
         Args:
             candidate:
                 The Candidate object to evaluate. If the Candidate is a dictionary, the Candidate
-                subclasses need to be registered via `Candidate.register(...)`.
-                The dictionary needs a `candidate_type` key with the registration value.
+                subclasses need to be registered via `Candidate.register(...)`, and the dictionary
+                needs a `candidate_type` key with the registration value.
 
                 If the Candidate is a callable, it should be a function that takes the `input` as
                 an argument and returns a CandidateResponse object.
@@ -239,7 +249,7 @@ class EvalResult(DictionaryEqualsMixin):
     Eval.
     """
 
-    def __init__(  # noqa: D417
+    def __init__(
         self,
         eval_obj: Eval | dict,
         candidate_obj: Candidate | dict | Callable,
@@ -260,13 +270,11 @@ class EvalResult(DictionaryEqualsMixin):
                 The dictionary needs a `candidate_type` key with the registration value.
             response:
                 The response from the Candidate (e.g. LLM/agent).
+            response_metadata:
+                Metadata associated with the response (e.g. the response.metadata from the
+                CandidateResponse object).
             total_time_seconds:
                 The total time (in seconds) it took to run the Eval.
-            num_code_blocks:
-                The total number of code blocks generated across all responses.
-            cost:
-                The cost associated with the candidate. This is optional and only applicable to
-                candidates that have a `cost` property.
             timestamp:
                 The timestamp when the Eval was completed.
             check_results:
@@ -402,11 +410,6 @@ class EvalHarness:
     """
     An EvalHarness provides a interface for evaluating multiple Evals against multiple
     Candidates/LLMs.
-
-    Candidates must implement the clone() function if they contain state. This is necessary because
-    we need a consistant way of cloning the Candidate for each Eval so that we can run multiple
-    Evals against the same Candidate without affecting the state of the Candidate. Stateless
-    candidates do not need to implement the clone() function.
 
     Candidates must be registered via Candidate.register if they are passed in as dictionaries.
 
