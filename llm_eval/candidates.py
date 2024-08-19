@@ -2,13 +2,15 @@
 Defines classes for different types of built-in Candidates and a corresponding registry system for
 custom Candidates.
 
-The purpose of a Candidate is to provide a standard interface for the the underlying LLM and client
-(e.g. ChatpGPT via OpenAI() client, Lamma3 via LM Studio, etc.) so that the user can define evals
-for any type of LLM/agent/etc and client.
-
 A Candidate is a callable object that takes input (e.g. OpenAI-style messages) and returns a
 response. The input and response can be any type of object that can be serialized/de-serialized
 (e.g. string, dictionary, list, etc.).
+
+The purpose of a Candidate is to provide a standard interface that A) allows the user to define
+evals in a consistent manner and B) allows the results of the evals to be evaluated (checked) in a
+consistent manner. A Candidate is essentially an adapter that takes the input from the Eval and
+converts it to the input format that the underlying LLM (e.g. OpenAI) expects, and then converts
+the response from the LLM to the response format that the Eval/Checks expects.
 
 Candidates can be created from a dictionary using the `Candidate.from_dict(...)` method. The
 dictionary must have a `candidate_type` field that matches the type name of the registered
@@ -53,12 +55,12 @@ def is_async_candidate(candidate: Callable | 'Candidate') -> bool:
         return iscoroutinefunction(candidate.__call__)
     return False
 
+
 class CandidateType(EnumMixin, Enum):
     """Provides a typesafe representation of the built-in types of Candidates."""
 
     OPENAI = auto()
     OPENAI_TOOLS = auto()
-    CALLABLE_NO_SERIALIZE = auto()
 
 
 class CandidateResponse(BaseModel):
@@ -81,19 +83,22 @@ class Candidate(DictionaryEqualsMixin, ABC):
     implementation of an LLM interface (e.g. history/context management)) along with optional
     model parameters.
 
-    A Candidate is a callable object that takes an input and returns a response.
+    A Candidate is a callable object that takes an input and returns a CandidateResponse.
     """
 
     registry = Registry()
 
-    def __init__(self, metadata: dict | None = None, parameters: dict | None = None) -> None:
+    def __init__(self, metadata: dict | None = None, parameters: dict | None = None) -> None:  # noqa: D417
         """
         Initialize a Candidate object.
 
         Args:
-            metadata: A dictionary of metadata about the Candidate.
-            parameters: A dictionary of parameters for the Candidate.
-        """
+            metadata:
+                A dictionary of metadata about the Candidate.
+            parameters:
+                A dictionary of parameters for the Candidate (most likely, the model parameters
+                passed to the LLM).
+        """  # noqa
         self.metadata = deepcopy(metadata) or {}
         self.parameters = deepcopy(parameters)
 
@@ -188,13 +193,14 @@ class OpenAICandidate(Candidate):
         Initialize a OpenAICandidate object.
 
         Args:
+            model_name:
+                The name of the OpenAI model to use (e.g. 'gpt-4o-mini').
+            endpoint_url:
+                This parameter is used when running against a local OpenAI-compatible API endpoint.
             metadata:
                 A dictionary of metadata about the Candidate.
             parameters:
-                A dictionary of parameters passed to OpenAI. `model_name` (e.g.
-                'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
-                such as `model_name` and model-specific parameters (e.g. `temperature`) can be
-                passed.
+                A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
         super().__init__(metadata=metadata, parameters=parameters)
         assert model_name or endpoint_url, "model_name or endpoint_url must be provided"
@@ -265,16 +271,25 @@ class OpenAIToolsCandidate(Candidate):
             metadata: dict | None = None,
             parameters: dict | None = None) -> None:
         """
-        Initialize a OpenAICandidate object.
+        Initialize a OpenAIToolsCandidate object.
 
         Args:
+            tools:
+                A list of tools to use with the OpenAI model. See https://platform.openai.com/docs/api-reference/chat/create
+                for more information.
+
+                The Function and FunctionParameter classes in `openai.py` can be used to create the
+                tools list. See `openai.py` for more information.
+            tool_choice:
+                See https://platform.openai.com/docs/guides/function-calling/configuring-function-calling-behavior-using-the-tool_choice-parameter
+            model_name:
+                The name of the OpenAI model to use (e.g. 'gpt-4o-mini').
+            endpoint_url:
+                This parameter is used when running against a local OpenAI-compatible API endpoint.
             metadata:
                 A dictionary of metadata about the Candidate.
             parameters:
-                A dictionary of parameters passed to OpenAI. `model_name` (e.g.
-                'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
-                such as `model_name` and model-specific parameters (e.g. `temperature`) can be
-                passed.
+                A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
         super().__init__(metadata=metadata, parameters=parameters)
         assert model_name or endpoint_url, "model_name or endpoint_url must be provided"

@@ -1,13 +1,12 @@
 """
 Defines classes for different types of checks and corresponding registry systems.
 
-A "check" is a single test defined within an Eval corresponding to a specific prompt. The goal of a
-check is to test various aspects of the LLMs response to the prompt. (An Eval can have multiple
-prompts; each prompt can have multiple checks.) The intent of the check can range from simple
-matching (i.e. does the LLM response exactly match the expected value provided) to using an
-LLM to evaluate the response.
+A "check" is a single test defined within an Eval which corresponding to a specific prompt/input.
+The goal of a check is to test various aspects of the LLMs response. The intent of the check can
+range from simple matching (i.e. does the LLM response exactly match the expected value provided?)
+to using an LLM to evaluate the response.
 
-Registry systems are used to allow the user to save and load checks and check results from a
+A registry system is used to allow the user to save and load checks and check results from a
 dictionary (e.g. from an underlying yaml file). This is useful for defining/storing/running large
 amounts of checks/results.
 """
@@ -167,8 +166,9 @@ class ScoreResult(CheckResult):
 @dataclass
 class ResponseData:
     """
-    Store the data associated with a request/response. This data is created by the Eval/EvalHarness
-    and passed to the Check objects' __call__ function to evaluate the response.
+    Stores the data associated with a request/response. This object is created by the
+    Eval/EvalHarness and passed to the Check objects' __call__ function to evaluate the response,
+    potentially using additional information like input, response_metadata, or ideal_response.
     """
 
     input: str | Any | None = None
@@ -179,16 +179,14 @@ class ResponseData:
 
 class Check(BaseModel, ABC):
     """
-    Represents a single check in an Eval. Each Eval can test multiple/sequential prompts, and
-    each prompt can have multiple checks. The check is responsible for evaluating the response to
-    the prompt. The intent of the check can range from simple matching (i.e. does the LLM response
-    exactly match the expected value provided) to using custom logic (e.g. using an LLM to evaluate
-    the response).
+    Represents a single check in an Eval. A check is responsible for evaluating the response of an
+    LLM or agent. The intent of the check can range from simple matching (i.e. does the LLM
+    response exactly match the expected value provided) to using custom logic (e.g. using an LLM to
+    evaluate the response).
 
     A Check can be saved to and loaded from a dictionary (e.g. from an underlying yaml file). If
-    the user wants to load the Check into memory and into the original subclass (either directly or
-    by saving/loading an Eval or EvalResult which contains all checks associated with an Eval) the
-    Check subclass must be registered with the `register` decorator. This allows the Check to be
+    the user wants to load the Check into memory as a Check object the, then corresponding Check
+    subclass must be registered with the `register` decorator. This allows the Check to be
     created from a dictionary by calling `from_dict` with the name of the check in the dictionary
     with key `check_type` (registered with the decorator) and any parameters for the Check.
     """
@@ -494,6 +492,10 @@ class PythonCodeBlocksPresent(SerializableCheck):
     """
     Checks that the response contains code blocks. The code blocks do not necessary need to run
     successfully (this check does not run the code blocks), but they must be present.
+
+    The full response from the LLM is passed to the __call__ method of the Check, and the code
+    blocks are extracted from the response and executed in the order they are found in the
+    response.
     """
 
     min_code_blocks: int = Field(
@@ -534,7 +536,9 @@ class PythonCodeBlockTests(SerializableCheck):
     """
     This Check tests that the code blocks contained within the response run successfully, and
     allows users to define custom tests that can be used to test the code blocks and the
-    environment that the code blocks are executed in. 
+    environment that the code blocks are executed in. The full response from the LLM is passed to
+    the __call__ method of the Check, and the code blocks are extracted from the response and
+    executed in the order they are found in the response.
 
     Unlike other checks, this check aggregates several metrics into a single result.
 

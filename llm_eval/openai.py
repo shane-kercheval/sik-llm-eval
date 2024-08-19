@@ -140,12 +140,12 @@ class OpenAIResponse(BaseModel):
 
 
 class OpenAICompletionResponse(OpenAIResponse):
-    """Stores the result of an OpenAI chat completion chunk."""
+    """Stores the parsed response/content of an OpenAI chat completion chunk."""
 
     content: str
 
 class OpenAIToolsResponse(OpenAIResponse):
-    """Stores the result of an OpenAI tool completion."""
+    """Stores the parsed response/content of an OpenAI tool rseult."""
 
     tools: list[dict]
     role: str | None = None
@@ -154,7 +154,7 @@ class OpenAIToolsResponse(OpenAIResponse):
 
 
 class OpenAIChatResponse(OpenAICompletionResponse):
-    """Stores the result of an OpenAI chat completion."""
+    """Stores the parsed response/content of an OpenAI chat completion chunk."""
 
     content: str
     role: str | None = None
@@ -166,7 +166,8 @@ class OpenAIChatResponse(OpenAICompletionResponse):
 
 class OpenAICompletionWrapperBase(ABC):
     """
-    Wrapper for OpenAI API.
+    Wrapper for OpenAI API which provides a simple interface for calling the
+    chat.completions.create method and parsing the response.
 
     The user can specify the model name, timeout, stream, and other parameters for the API call
     either in the constructor or when calling the object. If the latter, the parameters specified
@@ -279,7 +280,10 @@ class OpenAICompletionWrapperBase(ABC):
 
 
 class OpenAICompletion(OpenAICompletionWrapperBase):
-    """Non-Async wrapper for OpenAI API."""
+    """
+    Non-Async wrapper for OpenAI API which provides a simple interface for calling the
+    chat.completions.create method and parsing the response.
+    """
 
     def __call__(
             self,
@@ -338,7 +342,10 @@ class OpenAICompletion(OpenAICompletionWrapperBase):
 
 
 class AsyncOpenAICompletion(OpenAICompletionWrapperBase):
-    """Async wrapper for OpenAI API."""
+    """
+    Async wrapper for OpenAI API which provides a simple interface for calling the
+    chat.completions.create method and parsing the response.
+    """
 
     async def __call__(
             self,
@@ -400,7 +407,20 @@ _VALID_PARAM_TYPES = {"string", "number", "integer", "object", "array", "boolean
 
 @dataclass
 class FunctionParameter:
-    """TODO."""
+    """
+    The Function and FunctionParameter classes are used to generate "functions" in the OpenAI
+    "tools" API. These classes can be used to to convienently define build a list of tools without
+    having to manually construct the JSON schema for each tool. Note that the `tools` parameter in
+    the OpenAITools class takes a list of dictionaries (not Function/FunctionParameter objects).
+    Using these classes are optional, but can be helpful for defining tools with many parameters.
+    To use these classes, you can call the `to_dict` method on a Function object to get the
+    dictionary representation of the tool.
+
+    https://platform.openai.com/docs/api-reference/chat/create
+    https://platform.openai.com/docs/guides/function-calling
+
+    The FunctionParameter class represents a single parameter for a function in the OpenAI API.
+    """
 
     name: str
     type: Literal["string", "number", "integer", "object", "array", "boolean", "null"]
@@ -424,15 +444,18 @@ class FunctionParameter:
 @dataclass
 class Function:
     """
+    The Function and FunctionParameter classes are used to generate "functions" in the OpenAI
+    "tools" API. These classes can be used to to convienently define build a list of tools without
+    having to manually construct the JSON schema for each tool. Note that the `tools` parameter in
+    the OpenAITools class takes a list of dictionaries (not Function/FunctionParameter objects).
+    Using these classes are optional, but can be helpful for defining tools with many parameters.
+    To use these classes, you can call the `to_dict` method on a Function object to get the
+    dictionary representation of the tool.
+
     https://platform.openai.com/docs/api-reference/chat/create
-    strict:
-        boolean or null
-        Optional
-        Defaults to false
-        Whether to enable strict schema adherence when generating the function call. If set to
-        true, the model will follow the exact schema defined in the parameters field. Only a
-        subset of JSON Schema is supported when strict is true. Learn more about Structured
-        Outputs in the function calling guide.
+    https://platform.openai.com/docs/guides/function-calling
+
+    The FunctionParameter class represents a single parameter for a function in the OpenAI API.
     """
 
     name: str
@@ -462,7 +485,10 @@ class Function:
 
 
 class OpenAITools(OpenAICompletionWrapperBase):
-    """Wrapper for OpenAI API tools."""
+    """
+    Wrapper for OpenAI Tools API which provides a simple interface for calling the
+    chat.completions.create method and parsing the response.
+    """
 
     def __call__(
             self,
