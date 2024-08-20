@@ -63,11 +63,9 @@ def _get_encoding_for_model(model_name: str) -> Encoding:
     """Gets the encoding for a given model so that we can calculate the number of tokens."""
     return tiktoken.encoding_for_model(model_name)
 
-
 def num_tokens(model_name: str, value: str) -> int:
     """For a given model, returns the number of tokens based on the str `value`."""
     return len(_get_encoding_for_model(model_name=model_name).encode(value))
-
 
 def num_tokens_from_messages(model_name: str, messages: list[dict]) -> int:
     """
@@ -109,7 +107,6 @@ def num_tokens_from_messages(model_name: str, messages: list[dict]) -> int:
     num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
     return num_tokens
 
-
 def user_message(message: str) -> dict:
     """Returns a user message."""
     return {'role': 'user', 'content': message}
@@ -121,6 +118,7 @@ def assistant_message(message: str) -> dict:
 def system_message(message: str) -> dict:
     """Returns a system message."""
     return {'role': 'system', 'content': message}
+
 
 class OpenAIResponse(BaseModel):
     """Base class for OpenAI responses."""
@@ -143,6 +141,7 @@ class OpenAICompletionResponse(OpenAIResponse):
     """Stores the parsed response/content of an OpenAI chat completion chunk."""
 
     content: str
+
 
 class OpenAIToolsResponse(OpenAIResponse):
     """Stores the parsed response/content of an OpenAI tool rseult."""
