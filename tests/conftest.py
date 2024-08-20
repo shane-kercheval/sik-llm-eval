@@ -47,7 +47,7 @@ class MockCandidate(Candidate):
         response = self.responses[input[0]['content']]
         if isinstance(response, Exception):
             raise response
-        return CandidateResponse(content=response)
+        return CandidateResponse(response=response)
 
     def to_dict(self) -> dict:
         """Need to add `responses` to enable proper to_dict values."""
@@ -80,7 +80,7 @@ class AsyncMockCandidate(Candidate):
         response = self.responses[input[0]['content']]
         if isinstance(response, Exception):
             raise response
-        return CandidateResponse(content=response)
+        return CandidateResponse(response=response)
 
     async def __call__(self, input) -> str:  # noqa
         """Returns the response for the given prompt."""

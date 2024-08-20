@@ -173,7 +173,7 @@ class Eval(DictionaryEqualsMixin):
             check(ResponseData(
                 input=self.input,
                 ideal_response=self.ideal_response,
-                response=self._response.content,
+                response=self._response.response,
                 response_metadata=self._response.metadata,
             ))
             for check in self.checks
@@ -181,7 +181,7 @@ class Eval(DictionaryEqualsMixin):
         return EvalResult(
             eval_obj=self,
             candidate_obj=self._candidate,
-            response=self._response.content,
+            response=self._response.response,
             response_metadata=self._response.metadata,
             total_time_seconds=self._duration,
             timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -747,7 +747,7 @@ class EvalHarness:
                 # the CheckResults have a `False` value for the `success` property
                 # We can set the response to empty strings and run the checks to
                 # accomplish this.
-                response_eval._response = CandidateResponse(content='', metadata={})
+                response_eval._response = CandidateResponse(response='', metadata={})
                 eval_result = response_eval._execute_checks()
                 if eval_result.response_metadata is None:
                     eval_result.response_metadata = {}

@@ -43,7 +43,7 @@ class MockCandidate(Candidate):
 
     def __call__(self, input: str) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
-        return CandidateResponse(content=self.model(input))
+        return CandidateResponse(response=self.model(input))
 
 def test_filter_tags(  # noqa: PLR0915
         fake_eval_8f9fbf37: dict,

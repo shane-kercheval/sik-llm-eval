@@ -93,7 +93,7 @@ def test__Eval__call__result__to_from_dict():  # noqa
     # dict before call should be the same as after call
     assert eval_obj.to_dict() == {'input': messages}
     assert Eval(**eval_obj.to_dict()) == eval_obj
-    result = eval_obj(lambda x: CandidateResponse(content=f'response: {x}'))
+    result = eval_obj(lambda x: CandidateResponse(response=f'response: {x}'))
     assert result.eval_obj == eval_obj
     assert result.response == "response: [{'role': 'user', 'content': 'test'}]"
     assert result.response_metadata is None
@@ -114,7 +114,7 @@ def test__Eval__from_objects__minimal():  # noqa
     prompt = "This is a prompt."
     messages = [user_message(prompt)]
     eval_obj = Eval(input=messages)
-    result = eval_obj(lambda x: CandidateResponse(content=mock_llm(x)))
+    result = eval_obj(lambda x: CandidateResponse(response=mock_llm(x)))
     assert result.eval_obj == eval_obj
     assert result.candidate_obj
     assert result.response == mock_llm(messages)
@@ -132,7 +132,7 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
     assert eval_obj.to_dict() == eval_dict
 
     responses = [
-        CandidateResponse(content="This is a response with code blocks\n```python\nprint('hello world')\n```"),  # noqa
+        CandidateResponse(response="This is a response with code blocks\n```python\nprint('hello world')\n```"),  # noqa
     ]
     def create_mock_llm(responses, use_async):  # noqa
         if use_async:
@@ -158,7 +158,7 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
     else:
         assert not is_async_candidate(mock_llm)
     eval_result = eval_obj(mock_llm)
-    assert eval_result.response == responses[0].content
+    assert eval_result.response == responses[0].response
     assert eval_result.eval_obj.input == eval_obj.input
     assert eval_result.eval_obj.to_dict() == eval_dict
     expected_num_checks = 3
@@ -218,7 +218,7 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     expected_successful_code_blocks = len(expected_code_blocks)
 
     def mock_llm(_):  # noqa
-        return CandidateResponse(content=response)
+        return CandidateResponse(response=response)
 
     eval_result = eval_obj(mock_llm)
     # we need to strip the code blocks of leading/trailing whitespace to compare them
@@ -763,7 +763,7 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
             prompt: response,
         },
     )
-    assert candidate_2(eval_config['input']).content == response
+    assert candidate_2(eval_config['input']).response == response
 
     eval_1 = Eval(**eval_config)
     eval_2 = Eval(**eval_config)
@@ -894,7 +894,7 @@ class UnregisteredCandidate(Candidate):  # noqa
 
     def __call__(self, prompt: dict) -> dict:  # noqa
         # returns dictionary instead of string
-        return CandidateResponse(content={'prompt': prompt, 'response': self.response})
+        return CandidateResponse(response={'prompt': prompt, 'response': self.response})
 
 
 def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa
@@ -1004,7 +1004,7 @@ def test__Eval__callable_check__callable_candidate__non_string_prompt_and_respon
     assert len(eval_.to_dict()['checks']) == 2
 
     # return dictionary instead of string
-    result = eval_(lambda prompt: CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response'}))  # noqa
+    result = eval_(lambda prompt: CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response'}))  # noqa
     assert result.response == {'prompt': 'Test Prompt', 'response': 'Test Prompt & Response'}
     assert len(result.check_results) == 2
     check_result_1 = result.check_results[0]
@@ -1036,16 +1036,16 @@ def test__Eval__callable_check__callable_candidate__non_string_prompt_and_respon
 def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(use_async):  # noqa
     if use_async:
         async def async_candidate_1(prompt):  # noqa
-            return CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response1'})  # noqa
+            return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response1'})  # noqa
 
         async def async_candidate_2(prompt):  # noqa
-            return CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response2'})  # noqa
+            return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response2'})  # noqa
 
         candidates = [async_candidate_1, async_candidate_2]
     else:
         candidates = [
-            lambda prompt: CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response1'}),  # noqa
-            lambda prompt: CandidateResponse(content=prompt | {'response': prompt['prompt'] + ' & Response2'}),  # noqa
+            lambda prompt: CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response1'}),  # noqa
+            lambda prompt: CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response2'}),  # noqa
         ]
 
     harness = EvalHarness(

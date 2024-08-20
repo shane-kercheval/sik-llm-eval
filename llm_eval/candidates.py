@@ -73,7 +73,7 @@ class CandidateResponse(BaseModel):
     Metadata is a dictionary of metadata about the response (e.g. cost, usage, etc.).
     """
 
-    content: Any
+    response: Any
     metadata: dict | None = None
 
 
@@ -230,7 +230,7 @@ class OpenAICandidate(Candidate):
             total_cost = None
 
         return CandidateResponse(
-            content=response.content,
+            response=response.content,
             metadata={
                 'prompt_tokens': prompt_tokens,
                 'completion_tokens': completion_tokens,
@@ -239,7 +239,6 @@ class OpenAICandidate(Candidate):
                 'completion_cost': completion_cost,
                 'total_cost': total_cost,
                 'completion_characters': len(response.content),
-
             },
         )
 
@@ -326,7 +325,7 @@ class OpenAIToolsCandidate(Candidate):
 
         content = response.tools if isinstance(response, OpenAIToolsResponse) else response.content
         return CandidateResponse(
-            content=content,
+            response=content,
             metadata={
                 'type': 'tools' if isinstance(response, OpenAIToolsResponse) else 'completion',
                 'prompt_tokens': prompt_tokens,

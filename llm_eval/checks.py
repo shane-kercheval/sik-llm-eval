@@ -169,6 +169,13 @@ class ResponseData:
     Stores the data associated with a request/response. This object is created by the
     Eval/EvalHarness and passed to the Check objects' __call__ function to evaluate the response,
     potentially using additional information like input, response_metadata, or ideal_response.
+
+    Candidates return a CandidateResponse object, which contains `response` and `metadata` fields,
+    which are passed to ResponseData's `response` and `response_metadata` fields, respectively.
+    ResponseData is then passed to the Check objects' __call__ function to evaluate the response.
+    The reason we use ResponseData instead of passing the CandidateResponse object directly is to
+    allow the Check objects to access additional information like input or ideal_response. Some
+    checks (e.g. checks via LLMs) may use the input or ideal_response to evaluate the response.
     """
 
     input: str | Any | None = None
@@ -830,7 +837,7 @@ class LLMCheck(SerializableCheck):
         }]
         response = evaluator(messages)
         return CheckResult(
-            value=response.content,
+            value=response.response,
             success=self.success(response) if self.success else None,
             metadata={
                 'check_type': self.check_type,
@@ -877,8 +884,8 @@ class ToxicityCheck(LLMCheck):
         }]
         response = evaluator(messages)
         return CheckResult(
-            value=response.content,
-            success='false' in response.content.lower(),  # success if not toxic
+            value=response.response,
+            success='false' in response.response.lower(),  # success if not toxic
             metadata={
                 'check_type': self.check_type,
                 'check_metadata': self.metadata,

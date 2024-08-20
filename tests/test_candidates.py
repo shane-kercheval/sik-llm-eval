@@ -135,7 +135,7 @@ def test__OpenAI__default__no_parameters(openai_model_name):  # noqa
     assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
     messages = [user_message("What is the capital of France?")]
     response = candidate(messages)
-    assert 'Paris' in response.content
+    assert 'Paris' in response.response
     assert response.metadata['prompt_tokens'] > 0
     assert response.metadata['completion_tokens'] > 0
     assert response.metadata['total_tokens'] > 0
@@ -150,7 +150,7 @@ def test__OpenAI__default__no_parameters(openai_model_name):  # noqa
     assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
     messages = [user_message("What is the capital of Germany?")]
     response = recreated_candidate(messages)
-    assert 'Berlin' in response.content
+    assert 'Berlin' in response.response
 
 def test__OpenAI__config():  # noqa
     """Test that the various config options for an OpenAI candidate work."""
@@ -186,7 +186,7 @@ def test__OpenAI__template__parameters(openai_candidate_template):  # noqa
 
     messages = [user_message("What is the capital of France?")]
     response = candidate(messages)
-    assert 'Paris' in response.content
+    assert 'Paris' in response.response
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAI__invalid_parameters(openai_candidate_template):  # noqa
@@ -211,11 +211,11 @@ def test__OpenAIToolsCandidate__from_yaml(openai_tools_candidate_template: dict,
 
     response = candidate([user_message("What's the weather like in Boston today in degrees F?")])
     assert isinstance(response, CandidateResponse)
-    assert isinstance(response.content, list)
-    assert len(response.content) == 1
-    assert response.content[0]['type'] == 'function'
-    assert response.content[0]['name'] == 'get_current_weather'
-    arguments = response.content[0]['arguments']
+    assert isinstance(response.response, list)
+    assert len(response.response) == 1
+    assert response.response[0]['type'] == 'function'
+    assert response.response[0]['name'] == 'get_current_weather'
+    arguments = response.response[0]['arguments']
     assert 'location' in arguments
     assert arguments['location']
     assert isinstance(arguments['location'], str)
