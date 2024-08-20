@@ -172,7 +172,7 @@ def test__OpenAICompletionWrapper__streaming() -> None:  # noqa
     assert response.finish_reason == 'length'
     assert callback_chunks[-1].finish_reason == 'length'
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test__AsyncOpenAICompletionWrapper() -> None:  # noqa
     client = AsyncOpenAI()
     assert client.api_key is not None  # via load_dotenv in conftest.py
@@ -230,7 +230,7 @@ async def test__AsyncOpenAICompletionWrapper() -> None:  # noqa
     assert response.logprobs_tokens is not None
     assert len(response.logprobs_tokens) == response.usage['completion_tokens']
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test__AsyncOpenAICompletionWrapper__streaming() -> None:  # noqa
     # test valid parameters for streaming
     callback_chunks = []
@@ -296,7 +296,7 @@ async def test__AsyncOpenAICompletionWrapper__streaming() -> None:  # noqa
     assert response.finish_reason == 'length'
     assert callback_chunks[-1].finish_reason == 'length'
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test__async_MockOpenAI_object() -> None:  # noqa
     # ensure our mock object is working as expected before we use it in actual tests
     expected_response = "Hello, world!"
@@ -343,7 +343,7 @@ async def test__async_MockOpenAI_object() -> None:  # noqa
     assert streaming_response.model == expected_model
     assert streaming_response.created is not None
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test__async_MockOpenAI_object_streaming() -> None:  # noqa
     callback_chunks = []
     async def streaming_callback(record) -> None:  # noqa: ANN001
@@ -369,7 +369,7 @@ async def test__async_MockOpenAI_object_streaming() -> None:  # noqa
     assert response.content == ''.join(x.content for x in callback_chunks)
     assert callback_chunks[-1].finish_reason is not None
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test__async_MockOpenAI_object__legacy_structure() -> None:  # noqa
     expected_response = "Hello, world!"
     expected_model = 'my-model'
@@ -415,7 +415,7 @@ async def test__async_MockOpenAI_object__legacy_structure() -> None:  # noqa
     assert streaming_response.model == expected_model
     assert streaming_response.created is not None
 
-@pytest.mark.asyncio()
+@pytest.mark.asyncio
 async def test__async_MockOpenAI_object_streaming__legacy_structure() -> None:  # noqa
     callback_chunks = []
     async def streaming_callback(record) -> None:  # noqa: ANN001

@@ -958,8 +958,7 @@ class ToolCallsCheck(Check):
                             num_arguments_successful += 1
                 if self.penalize_extraneous_arguments:
                     num_arguments_successful -= len(tool_call_function_arguments)
-                    if num_arguments_successful < 0:
-                        num_arguments_successful = 0
+                    num_arguments_successful = max(num_arguments_successful, 0)
                 score = num_arguments_successful / num_arguments
                 break
 

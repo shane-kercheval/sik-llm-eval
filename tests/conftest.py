@@ -17,7 +17,7 @@ from llm_eval.openai import Function, FunctionParameter
 load_dotenv()
 
 
-@pytest.fixture()
+@pytest.fixture
 def openai_model_name() -> str:
     """Returns the name of the OpenAI model."""
     return "gpt-4o-mini"
@@ -127,7 +127,7 @@ class MockCandidateCannedResponse(Candidate):  # noqa
         return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
-# @pytest.fixture()
+# @pytest.fixture
 # def fake_docs_abcd() -> list[Document]:
 #     """Meant to be used MockABCDEmbeddings model."""
 #     return [
@@ -177,12 +177,12 @@ class FakeRetryHandler:
         return f(*args, **kwargs)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_retry_handler():  # noqa
     return FakeRetryHandler()
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_hugging_face_response_json():  # noqa
     fake = Faker()
     num_words = fake.random_int(min=8, max=10)
@@ -196,7 +196,7 @@ def fake_hugging_face_response_json():  # noqa
     }]
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_hugging_face_response(fake_hugging_face_response_json):  # noqa
     response = MagicMock()
     response.json.return_value = fake_hugging_face_response_json
@@ -219,7 +219,7 @@ def is_endpoint_available(url: str) -> bool:
     return available
 
 
-@pytest.fixture()
+@pytest.fixture
 def hugging_face_endpoint() -> str:
     """Returns the endpoint for the hugging face API."""
     return os.getenv('HUGGING_FACE_ENDPOINT_UNIT_TESTS')
@@ -231,105 +231,105 @@ def pattern_found(value: str, pattern: str) -> bool:
     return bool(pattern.match(value))
 
 
-@pytest.fixture()
+@pytest.fixture
 def conversation_mask_email() -> dict:
     """Returns a mock llm  conversation for masking emails."""
     with open('tests/fake_data/fake_conversation__mask_email_function.yml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def conversation_sum() -> dict:
     """Returns a mock llm conversation for summing numbers."""
     with open('tests/fake_data/fake_conversation__sum_function.yml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_eval_8f9fbf37() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_8F9FBF37.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_eval_subtract_two_numbers() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_subtract_two_numbers.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_eval_sum_two_numbers() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_sum_two_numbers.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_eval_sum_two_numbers_code_blocks_run() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_sum_two_numbers_code_blocks_run.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_eval_no_code_blocks() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_no_code_blocks.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_eval_with_previous_messages() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_with_previous_messages.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_eval_non_string_values() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_eval_non_string_values.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_multi_eval() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_multi_eval.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_multi_eval_non_string_values() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_multi_eval_non_string_values.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_multi_eval_with_prompt_sequence() -> dict:
     """Returns a fake eval."""
     with open('tests/fake_data/fake_multi_eval_with_prompt_sequence.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def openai_candidate_template() -> dict:
     """Returns the yaml template for an OpenAI."""
     with open('examples/candidates/openai_4o-mini.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def openai_tools_candidate_template() -> dict:
     """Returns the yaml template for an OpenAI Tools."""
     with open('examples/candidates/openai_tools_4o-mini.yaml') as f:
         return yaml.safe_load(f)
 
 
-@pytest.fixture()
+@pytest.fixture
 def hugging_face_candidate_template() -> dict:
     """Returns the yaml template for a Hugging Face Endpoint candidate."""
     with open('examples/candidates/additional_examples/hugging_face_endpoint_mistral_a10g.yaml') as f:  # noqa
@@ -338,7 +338,7 @@ def hugging_face_candidate_template() -> dict:
     return config
 
 
-@pytest.fixture()
+@pytest.fixture
 def function_weather() -> Function:
     """Returns a dictionary defining a weather function."""
     return Function(
@@ -361,7 +361,7 @@ def function_weather() -> Function:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def function_stocks() -> Function:
     """Returns a dictionary defining a stock function."""
     return Function(
