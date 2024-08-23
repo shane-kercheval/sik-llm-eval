@@ -442,7 +442,7 @@ async def test__async_MockOpenAI_object_streaming__legacy_structure() -> None:  
     assert callback_chunks[-1].finish_reason is not None
 
 def test_num_tokens():  # noqa
-    assert num_tokens(model_name='gpt-3.5-turbo-0613', value="This should be six tokens.") == 6
+    assert num_tokens(model='gpt-3.5-turbo-0613', value="This should be six tokens.") == 6
 
 
 def test_Function__get_current_weather__to_dict(function_weather: Function):  # noqa

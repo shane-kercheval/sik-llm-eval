@@ -42,9 +42,9 @@ def main() -> None:
     start = time.time()
     results = harness()  # run the evals
     end = time.time()
-    # for r in results:
-    #     for a in r:
-    #         print(a)
+    for r in results:
+        for a in r:
+            print(a)
     print(f"Total time: {end - start}")
 
 

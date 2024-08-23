@@ -185,7 +185,7 @@ class OpenAICandidate(Candidate):
 
     def __init__(  # noqa: D417
             self,
-            model_name: str | None = None,
+            model: str | None = None,
             endpoint_url: str | None = None,
             metadata: dict | None = None,
             parameters: dict | None = None) -> None:
@@ -193,7 +193,7 @@ class OpenAICandidate(Candidate):
         Initialize a OpenAICandidate object.
 
         Args:
-            model_name:
+            model:
                 The name of the OpenAI model to use (e.g. 'gpt-4o-mini').
             endpoint_url:
                 This parameter is used when running against a local OpenAI-compatible API endpoint.
@@ -203,15 +203,15 @@ class OpenAICandidate(Candidate):
                 A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
         super().__init__(metadata=metadata, parameters=parameters)
-        assert model_name or endpoint_url, "model_name or endpoint_url must be provided"
-        self.model_name = model_name
+        assert model or endpoint_url, "model or endpoint_url must be provided"
+        self.model = model
         self.endpoint_url = endpoint_url
 
     def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
         client = OpenAICompletion(
             client=OpenAI(base_url=self.endpoint_url),
-            model=self.model_name or self.endpoint_url,
+            model=self.model or self.endpoint_url,
             **self.parameters or {},
         )
         response: OpenAIChatResponse = client(input)
@@ -219,7 +219,7 @@ class OpenAICandidate(Candidate):
         completion_tokens = response.usage.get('completion_tokens')
         total_tokens = response.usage.get('total_tokens')
 
-        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model_name)
+        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model)
         if cost_per_token and prompt_tokens and completion_tokens:
             prompt_cost = cost_per_token['input'] * prompt_tokens
             completion_cost = cost_per_token['output'] * completion_tokens
@@ -245,8 +245,8 @@ class OpenAICandidate(Candidate):
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
         value = super().to_dict()
-        if self.model_name:
-            value['model_name'] = self.model_name
+        if self.model:
+            value['model'] = self.model
         if self.endpoint_url:
             value['endpoint_url'] = self.endpoint_url
         return value
@@ -265,7 +265,7 @@ class OpenAIToolsCandidate(Candidate):
             self,
             tools: list[dict],
             tool_choice: Literal['none', 'auto', 'required'] | dict[str] = 'required',
-            model_name: str | None = None,
+            model: str | None = None,
             endpoint_url: str | None = None,
             metadata: dict | None = None,
             parameters: dict | None = None) -> None:
@@ -281,7 +281,7 @@ class OpenAIToolsCandidate(Candidate):
                 tools list. See `openai.py` for more information.
             tool_choice:
                 See https://platform.openai.com/docs/guides/function-calling/configuring-function-calling-behavior-using-the-tool_choice-parameter
-            model_name:
+            model:
                 The name of the OpenAI model to use (e.g. 'gpt-4o-mini').
             endpoint_url:
                 This parameter is used when running against a local OpenAI-compatible API endpoint.
@@ -291,8 +291,8 @@ class OpenAIToolsCandidate(Candidate):
                 A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
         super().__init__(metadata=metadata, parameters=parameters)
-        assert model_name or endpoint_url, "model_name or endpoint_url must be provided"
-        self.model_name = model_name
+        assert model or endpoint_url, "model or endpoint_url must be provided"
+        self.model = model
         self.endpoint_url = endpoint_url
         self.tools = tools
         self.tool_choice = tool_choice
@@ -301,7 +301,7 @@ class OpenAIToolsCandidate(Candidate):
         """Invokes the underlying model with the input/tools and returns the response."""
         client = OpenAICompletion(
             client=OpenAI(base_url=self.endpoint_url),
-            model=self.model_name or self.endpoint_url,
+            model=self.model or self.endpoint_url,
             **self.parameters or {},
         )
         response: OpenAIToolsResponse | OpenAICompletionResponse = client(
@@ -313,7 +313,7 @@ class OpenAIToolsCandidate(Candidate):
         completion_tokens = response.usage.get('completion_tokens')
         total_tokens = response.usage.get('total_tokens')
 
-        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model_name)
+        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model)
         if cost_per_token and prompt_tokens and completion_tokens:
             prompt_cost = cost_per_token['input'] * prompt_tokens
             completion_cost = cost_per_token['output'] * completion_tokens
@@ -340,8 +340,8 @@ class OpenAIToolsCandidate(Candidate):
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
         value = super().to_dict()
-        if self.model_name:
-            value['model_name'] = self.model_name
+        if self.model:
+            value['model'] = self.model
         if self.endpoint_url:
             value['endpoint_url'] = self.endpoint_url
         value['tools'] = self.tools

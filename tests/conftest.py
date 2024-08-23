@@ -18,7 +18,7 @@ load_dotenv()
 
 
 @pytest.fixture
-def openai_model_name() -> str:
+def openai_model() -> str:
     """Returns the name of the OpenAI model."""
     return "gpt-4o-mini"
 

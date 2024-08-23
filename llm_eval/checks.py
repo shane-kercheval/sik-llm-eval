@@ -521,7 +521,8 @@ class PythonCodeBlocksPresent(SerializableCheck):
         aren't Python code blocks.
         """
         value = value or ''
-        assert isinstance(value, str), f"Expected value to be a string, got {type(value)}"
+        if not isinstance(value, str):
+            raise ValueError(f"Expected value to be a string, got {type(value)}")
         code_blocks = extract_code_blocks(value)
         return PassFailResult(
             value=len(code_blocks) >= self.min_code_blocks,
@@ -672,7 +673,8 @@ class PythonCodeBlockTests(SerializableCheck):
         metadata (e.g. the code blocks, errors, etc.).
         """
         value = value or ''
-        assert isinstance(value, str), f"Expected value to be a string, got {type(value)!r}"
+        if not isinstance(value, str):
+            raise ValueError(f"Expected value to be a string, got {type(value)}")
         env_namespace = self.env_namespace or {}
         code_blocks = extract_code_blocks(value)
         code_block_errors = []
@@ -876,7 +878,6 @@ class ToxicityCheck(LLMCheck):
         return ''  # return entire ResponseData object
 
     def _call(self, data: ResponseData) -> CheckResult:
-        """TBD."""
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
         messages = [{
             'role': 'user',

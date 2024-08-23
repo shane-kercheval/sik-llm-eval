@@ -130,9 +130,9 @@ def test__candidate__to_from_dict():  # noqa
     assert candidate.model.prompts == ['test']
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__default__no_parameters(openai_model_name):  # noqa
-    candidate = OpenAICandidate(model_name=openai_model_name)
-    assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
+def test__OpenAI__default__no_parameters(openai_model):  # noqa
+    candidate = OpenAICandidate(model=openai_model)
+    assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model': openai_model}  # noqa
     messages = [user_message("What is the capital of France?")]
     response = candidate(messages)
     assert 'Paris' in response.response
@@ -147,7 +147,7 @@ def test__OpenAI__default__no_parameters(openai_model_name):  # noqa
     # but that they don't share history (i.e. there is a new underlying object for the model)
     recreated_candidate = Candidate.from_dict(candidate.to_dict())
     assert candidate == recreated_candidate
-    assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model_name': openai_model_name}  # noqa
+    assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model': openai_model}  # noqa
     messages = [user_message("What is the capital of Germany?")]
     response = recreated_candidate(messages)
     assert 'Berlin' in response.response
@@ -157,7 +157,7 @@ def test__OpenAI__config():  # noqa
     config = {
         'metadata': {'name': 'Test Name'},
         'candidate_type': CandidateType.OPENAI.name,
-        'model_name': 'test model name',
+        'model': 'test model name',
         'parameters': {
             'temperature': -1,
             'max_tokens': -2,

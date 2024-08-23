@@ -59,20 +59,20 @@ MODEL_COST_PER_TOKEN = CHAT_MODEL_COST_PER_TOKEN | EMBEDDING_MODEL_COST_PER_TOKE
 
 
 @cache
-def _get_encoding_for_model(model_name: str) -> Encoding:
+def _get_encoding_for_model(model: str) -> Encoding:
     """Gets the encoding for a given model so that we can calculate the number of tokens."""
-    return tiktoken.encoding_for_model(model_name)
+    return tiktoken.encoding_for_model(model)
 
-def num_tokens(model_name: str, value: str) -> int:
+def num_tokens(model: str, value: str) -> int:
     """For a given model, returns the number of tokens based on the str `value`."""
-    return len(_get_encoding_for_model(model_name=model_name).encode(value))
+    return len(_get_encoding_for_model(model=model).encode(value))
 
-def num_tokens_from_messages(model_name: str, messages: list[dict]) -> int:
+def num_tokens_from_messages(model: str, messages: list[dict]) -> int:
     """
     Copied from https://github.com/openai/openai-cookbook/blob/main/examples/How_to_count_tokens_with_tiktoken.ipynb
     Returns the number of tokens used by a list of messages.
     """
-    if model_name in {
+    if model in {
         "gpt-3.5-turbo-0613",
         "gpt-3.5-turbo-16k-0613",
         "gpt-4-0314",
@@ -85,23 +85,23 @@ def num_tokens_from_messages(model_name: str, messages: list[dict]) -> int:
         }:
         tokens_per_message = 3
         tokens_per_name = 1
-    elif model_name == "gpt-3.5-turbo-0301":
+    elif model == "gpt-3.5-turbo-0301":
         tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
         tokens_per_name = -1  # if there's a name, the role is omitted
-    elif "gpt-3.5-turbo" in model_name:
+    elif "gpt-3.5-turbo" in model:
         # Warning: gpt-3.5-turbo may update over time.
         # Returning num tokens assuming gpt-3.5-turbo-0613
-        return num_tokens_from_messages(model_name="gpt-3.5-turbo-1106", messages=messages)
-    elif "gpt-4" in model_name:
+        return num_tokens_from_messages(model="gpt-3.5-turbo-1106", messages=messages)
+    elif "gpt-4" in model:
         # Warning: gpt-4 may update over time. Returning num tokens assuming gpt-4-0613.
-        return num_tokens_from_messages(model_name="gpt-4-1106-preview", messages=messages)
+        return num_tokens_from_messages(model="gpt-4-1106-preview", messages=messages)
     else:
-        raise NotImplementedError(f"""num_tokens_from_messages() is not implemented for model {model_name}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.""")  # noqa
+        raise NotImplementedError(f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.""")  # noqa
     num_tokens = 0
     for message in messages:
         num_tokens += tokens_per_message
         for key, value in message.items():
-            num_tokens += len(_get_encoding_for_model(model_name=model_name).encode(value))
+            num_tokens += len(_get_encoding_for_model(model=model).encode(value))
             if key == "name":
                 num_tokens += tokens_per_name
     num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>

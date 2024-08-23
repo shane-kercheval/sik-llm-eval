@@ -1,6 +1,6 @@
 metadata:
   name: OpenAI GPT-4o-mini
-model_name: gpt-4o-mini
+model: gpt-4o-mini
 candidate_type: OPENAI_TOOLS
 tool_choice: required
 tools: 
