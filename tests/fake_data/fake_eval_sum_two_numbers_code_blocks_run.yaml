@@ -10,46 +10,38 @@ metadata:
     - sum_two_numbers
     - code_block
   source: Test
-prompt_sequence:
-  - prompt: Write a function that called `sum_two_numbers` that takes two numbers and returns their sum.
-    checks:
-      - check_type: CONTAINS
-        value: sum_two_numbers
-      - check_type: MATCH
-        value: does not match
-      - check_type: CONTAINS
-        value: does not contain
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
-  - prompt: Write some assertion statements to check the function.
-    checks:
-      - check_type: CONTAINS
-        value: assert sum_two_numbers
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
-      - check_type: PYTHON_CODE_BLOCK_TESTS
-        code_block_timeout: 5
-        code_test_timeout: 5
-        code_tests:
-          - |
-            def verify_function_exists_and_runs_correctly(code_blocks: list[str]) -> bool:
-                # should pass
-                return sum_two_numbers(2, 3) == 5
-          - |
-            def checking_3_code_blocks_are_passed(code_blocks: list[str]) -> bool:
-                # should pass
-                return len(code_blocks) == 3
-          - |
-            def checking_4_code_blocks_are_passed__should_fail(code_blocks: list[str]) -> bool:
-                # should fail
-                return len(code_blocks) == 4
-          - |
-            def checking_result_in_code_block_2(code_blocks: list[str]) -> bool:
-                # should pass
-                return result == 105
-          - |
-            def checking_my_value_in_code_block_3__ensures_code_block_ran(code_blocks: list[str]) -> bool:
-                # should pass
-                return my_value == 1
-          - |
-            def checking_non_existant_variable_should_fail_check_but_not_raise_error(code_blocks: list[str]) -> bool:
-                # should fail
-                return variable_does_not_exist == 1
+input:
+  - role: user
+    content: Write a function that called `sum_two_numbers` that takes two numbers and returns their sum.
+checks:
+  - check_type: CONTAINS
+    value: sum_two_numbers
+  - check_type: MATCH
+    value: does not match
+  - check_type: CONTAINS
+    value: does not contain
+  - check_type: PYTHON_CODE_BLOCKS_PRESENT
+  - check_type: PYTHON_CODE_BLOCK_TESTS
+    code_block_timeout: 5
+    code_test_timeout: 5
+    code_tests:
+      - |
+        def verify_function_exists_and_runs_correctly(code_blocks: list[str]) -> bool:
+            # should pass
+            return sum_two_numbers(2, 3) == 5
+      - |
+        def checking_3_code_blocks_are_passed(code_blocks: list[str]) -> bool:
+            # should pass
+            return len(code_blocks) == 2
+      - |
+        def checking_4_code_blocks_are_passed__should_fail(code_blocks: list[str]) -> bool:
+            # should fail
+            return len(code_blocks) == 4
+      - |
+        def checking_result_in_code_block_2(code_blocks: list[str]) -> bool:
+            # should pass
+            return result == 105
+      - |
+        def checking_non_existant_variable_should_fail_check_but_not_raise_error(code_blocks: list[str]) -> bool:
+            # should fail
+            return variable_does_not_exist == 1

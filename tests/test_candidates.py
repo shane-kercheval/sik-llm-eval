@@ -4,14 +4,13 @@ from copy import deepcopy
 from openai import BadRequestError
 import pytest
 from llm_eval.candidates import (
-    CallableCandidate,
     Candidate,
+    CandidateResponse,
     CandidateType,
     OpenAICandidate,
     is_async_candidate,
 )
-from llm_eval.llms.hugging_face import HuggingFaceRequestError
-
+from llm_eval.openai import Function, user_message
 
 class MockLMM:
     """Mock class representing an LLM."""
@@ -20,17 +19,10 @@ class MockLMM:
         self.llm_parameters = kwargs
         self.prompts = []
 
-
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
-        return
-
-    def set_system_message(self, system_message: str) -> None:  # noqa
-        return
-
-    def __call__(self, prompt: str) -> str:
+    def __call__(self, input: str) -> str:  # noqa: A002
         """Caches prompts for unit tests."""
-        self.prompts.append(prompt)
-        return prompt
+        self.prompts.append(input)
+        return input
 
 
 @Candidate.register('MOCK_MODEL')
@@ -48,18 +40,9 @@ class MockCandidate(Candidate):
         else:
             self.model = MockLMM()
 
-    def __call__(self, prompt: str) -> str:
-        """Invokes the underlying model with the prompt and returns the response."""
-        return self.model(prompt)
-
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
-        return
-
-    def set_system_message(self, system_message: str) -> None:  # noqa
-        return
-
-    def clone(self) -> 'Candidate':  # noqa
-        return Candidate.from_dict(deepcopy(self.to_dict()))
+    def __call__(self, input: str) -> str:  # noqa: A002
+        """Invokes the underlying model with the input and returns the response."""
+        return self.model(input)
 
 
 def test__is_async_candidate():  # noqa
@@ -79,9 +62,8 @@ def test__is_async_candidate():  # noqa
     assert is_async_candidate(AsyncCallable())
     assert not is_async_candidate(SyncCallable())
 
-
 def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa
-    candidate = Candidate.from_yaml('examples/candidates/openai_3.5.yaml')
+    candidate = Candidate.from_yaml('examples/candidates/openai_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.to_dict() == openai_candidate_template
 
@@ -147,208 +129,36 @@ def test__candidate__to_from_dict():  # noqa
     assert another_candidate.model.prompts == ['test_another']
     assert candidate.model.prompts == ['test']
 
-def test__candidate__clone():  #noqa
-    candidate_dict = {
-        'candidate_type': 'MOCK_MODEL',
-        'metadata': {'name': 'test name'},
-        'parameters': {'param_1': 'param_a', 'param_2': 'param_b'},
-    }
-    candidate = Candidate.from_dict(candidate_dict)
-    response = candidate('test')
-    assert response == 'test'
-    assert candidate.model.prompts == ['test']
-
-    clone = candidate.clone()
-    assert candidate.clone() == candidate
-    assert candidate.to_dict() == clone.to_dict()
-    # the "objects" i.e. dictionaries should match but the model objects should not
-    assert candidate.model.prompts == ['test']
-    assert clone.model.prompts == []
-    # ensure that changing values on the clone doesn't affect the original
-    clone.metadata['name'] = 'test name 2'
-    clone.parameters['param_1'] = 'param_a_2'
-    assert clone.to_dict() != candidate.to_dict()
-    assert candidate.to_dict() == candidate_dict
-    # ensure that using the clone doesn't affect the original
-    response = clone('test another')
-    assert response == 'test another'
-    assert clone.model.prompts == ['test another']
-    assert candidate.model.prompts == ['test']
-
-def test__CallableCandidate():  # noqa
-    candidate = CallableCandidate(model=lambda x: x)
-    assert candidate('test') == 'test'
-    assert candidate.to_dict() == {'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name}
-    assert str(candidate)  # ensure __str__ doesn't raise an error
-
-    candidate = CallableCandidate(model=lambda x: x, metadata={'name': 'test name'})
-    assert candidate('test') == 'test'
-    assert candidate.metadata == {'name': 'test name'}
-    assert candidate.to_dict() == {
-        'candidate_type': CandidateType.CALLABLE_NO_SERIALIZE.name,
-        'metadata': {'name': 'test name'},
-    }
-    assert str(candidate)  # ensure __str__ doesn't raise an error
-
-@pytest.mark.skip("We removed the functionality where multiple model parameters (as a list) are supported. We should add this functionality back in with a new format/syntax. Let's keep this test for now. We can remove in the future if we don't think we will add the functionality back in.")  # noqa
-def test__candidate__multiple_model_params_returns_multiple_candidates():  # noqa
-    test_params = {'param_1': 'param_a', 'param_2': 'param_b'}
-    candidate_dict = {
-        'candidate_type': 'MOCK_MODEL',
-        'metadata': {'name': 'test name'},
-        'parameters': test_params,
-    }
-    # create a single Candidate object from dictionary without multiple model parameters
-    candidate = Candidate.from_dict(candidate_dict)
-    assert isinstance(candidate, MockCandidate)
-    assert candidate.metadata == {'name': 'test name'}
-    assert candidate.model.llm_parameters == test_params
-    response = candidate('test')
-    assert response == 'test'
-    assert candidate.model.prompts == ['test']
-
-    # test a single model parameter that is a list
-    test_params = {
-        'param_1': 'param_a',
-        'param_2': 'param_b',
-        'param_3': ['param_c', 'param_d'],
-    }
-    expected_params = [
-        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_c'},
-        {'param_1': 'param_a', 'param_2': 'param_b', 'param_3': 'param_d'},
-    ]
-    multi_candidate_dict = {
-        'candidate_type': 'MOCK_MODEL',
-        'metadata': {'name': 'test name'},
-        'parameters': test_params,
-    }
-    candidates = Candidate.from_dict(multi_candidate_dict)
-    assert isinstance(candidates, list)
-    assert len(candidates) == len(expected_params)
-    assert all(isinstance(c, MockCandidate) for c in candidates)
-    assert candidates[0].model is not candidates[1].model
-    # all candidates should have the same metadata
-    assert all(c.metadata == {'name': 'test name'} for c in candidates)
-    # check expected model parameter values
-    for e, c in zip(expected_params, candidates):
-        assert c.model.llm_parameters == e
-        assert c.parameters == e
-    assert candidates[0].metadata is not candidates[1].metadata
-
-    # test multiple model parameters that are lists
-    test_params = {
-        'param_1': ['param_a', 'param_b'],
-        'param_2': ['param_c', 'param_d'],
-        'param_3': ['param_e', 'param_f'],
-    }
-    expected_params = [
-        {'param_1': 'param_a', 'param_2': 'param_c', 'param_3': 'param_e'},
-        {'param_1': 'param_a', 'param_2': 'param_c', 'param_3': 'param_f'},
-        {'param_1': 'param_a', 'param_2': 'param_d', 'param_3': 'param_e'},
-        {'param_1': 'param_a', 'param_2': 'param_d', 'param_3': 'param_f'},
-        {'param_1': 'param_b', 'param_2': 'param_c', 'param_3': 'param_e'},
-        {'param_1': 'param_b', 'param_2': 'param_c', 'param_3': 'param_f'},
-        {'param_1': 'param_b', 'param_2': 'param_d', 'param_3': 'param_e'},
-        {'param_1': 'param_b', 'param_2': 'param_d', 'param_3': 'param_f'},
-    ]
-    multi_candidate_dict = {
-        'candidate_type': 'MOCK_MODEL',
-        'metadata': {'name': 'test name'},
-        'parameters': test_params,
-    }
-    candidates = Candidate.from_dict(multi_candidate_dict)
-    assert isinstance(candidates, list)
-    assert len(candidates) == len(expected_params)
-    assert all(isinstance(c, MockCandidate) for c in candidates)
-    assert candidates[0].model is not candidates[1].model
-    # all candidates should have the same metadata
-    assert all(c.metadata == {'name': 'test name'} for c in candidates)
-    # check expected model parameter values
-    for e, c in zip(expected_params, candidates):
-        assert c.model.llm_parameters == e
-        assert c.parameters == e
-    assert candidates[0].metadata is not candidates[1].metadata
-    assert candidates[0].metadata is not candidates[2].metadata
-    assert candidates[1].metadata is not candidates[2].metadata
-
-    # test without any metadata
-    multi_candidate_dict = {
-        'candidate_type': 'MOCK_MODEL',
-        # 'metadata': {'name': 'test name'},
-        'parameters': test_params,
-    }
-    candidates = Candidate.from_dict(multi_candidate_dict)
-    assert isinstance(candidates, list)
-    assert len(candidates) == len(expected_params)
-    assert all(isinstance(c, MockCandidate) for c in candidates)
-    assert candidates[0].model is not candidates[1].model
-    # all candidates should have the same metadata
-    assert all(not c.metadata for c in candidates)
-    # check expected model parameter values
-    for e, c in zip(expected_params, candidates):
-        assert c.model.llm_parameters == e
-        assert c.parameters == e
-
-    # test without model parameters
-    candidate_dict_no_params = {
-        'candidate_type': 'MOCK_MODEL',
-        # 'metadata': {'name': 'test name'},
-        # 'parameters': test_params,
-    }
-    candidate_no_params = Candidate.from_dict(candidate_dict_no_params)
-    assert isinstance(candidate_no_params, MockCandidate)
-    assert not candidate_no_params.metadata
-    assert candidate_no_params.parameters is None
-    response = candidate_no_params('test')
-    assert response == 'test'
-    assert candidate_no_params.model.prompts == ['test']
-
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__default__no_parameters():  # noqa
-    candidate = OpenAICandidate()
-    candidate.model.parameters == {}
-    response = candidate("What is the capital of France?")
-    assert 'Paris' in response
-    assert candidate.total_tokens > 0
-    assert candidate.total_tokens == candidate.model.total_tokens
-    assert candidate.response_tokens > 0
-    assert candidate.response_tokens == candidate.model.response_tokens
-    assert candidate.input_tokens > 0
-    assert candidate.input_tokens == candidate.model.input_tokens
-    assert candidate.cost > 0
-    assert candidate.cost == candidate.model.cost
-    assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name}
+def test__OpenAI__default__no_parameters(openai_model):  # noqa
+    candidate = OpenAICandidate(model=openai_model)
+    assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model': openai_model}  # noqa
+    messages = [user_message("What is the capital of France?")]
+    response = candidate(messages)
+    assert 'Paris' in response.response
+    assert response.metadata['prompt_tokens'] > 0
+    assert response.metadata['completion_tokens'] > 0
+    assert response.metadata['total_tokens'] > 0
+    assert response.metadata['prompt_cost'] > 0
+    assert response.metadata['completion_cost'] > 0
+    assert response.metadata['total_cost'] > 0
+    assert response.metadata['completion_characters'] > 0
     # test that the model generated from the dict is the same as the original
     # but that they don't share history (i.e. there is a new underlying object for the model)
     recreated_candidate = Candidate.from_dict(candidate.to_dict())
-    recreated_candidate.model.parameters == {}
     assert candidate == recreated_candidate
-    # ensure that the recreated candidate doesn't share history with the original
-    assert len(candidate.model.history()) == 1
-    assert len(recreated_candidate.model.history()) == 0
-    response = recreated_candidate("What is the capital of Spain?")
-    assert 'Madrid' in response
-    assert len(candidate.model.history()) == 1
-    assert len(recreated_candidate.model.history()) == 1
-    # ensure that the cloned candidate doesn't share history with the original
-    cloned_candidate = recreated_candidate.clone()
-    cloned_candidate.model.parameters == {}
-    assert cloned_candidate == recreated_candidate
-    assert len(cloned_candidate.model.history()) == 0
-    response = cloned_candidate("What is the capital of Germany?")
-    assert 'Berlin' in response
-    assert len(candidate.model.history()) == 1
-    assert len(recreated_candidate.model.history()) == 1
-    assert len(cloned_candidate.model.history()) == 1
+    assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model': openai_model}  # noqa
+    messages = [user_message("What is the capital of Germany?")]
+    response = recreated_candidate(messages)
+    assert 'Berlin' in response.response
 
 def test__OpenAI__config():  # noqa
     """Test that the various config options for an OpenAI candidate work."""
     config = {
         'metadata': {'name': 'Test Name'},
         'candidate_type': CandidateType.OPENAI.name,
+        'model': 'test model name',
         'parameters': {
-            'model_name': 'test model name',
-            'system_message': 'test system message',
             'temperature': -1,
             'max_tokens': -2,
             'seed': -3,
@@ -358,14 +168,6 @@ def test__OpenAI__config():  # noqa
     assert candidate.metadata == config['metadata']
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.parameters == config['parameters']
-    # test that the underlying model parameters that are sent to OpenAI are correct
-    expected_model_param_names = ['temperature', 'max_tokens']
-    expected_parameters = {
-        k:v for k, v in config['parameters'].items()
-        if k in expected_model_param_names
-    }
-    assert candidate.model.parameters == expected_parameters
-
     assert candidate.to_dict() == config
     assert candidate.from_dict(candidate.to_dict()) == candidate
 
@@ -379,19 +181,12 @@ def test__OpenAI__template__parameters(openai_candidate_template):  # noqa
         if k in expected_model_param_names
     }
     candidate = Candidate.from_dict(template)
-    assert candidate.model.parameters == expected_parameters
-    assert candidate.model.model_name == template['parameters']['model_name']
-    assert candidate.model.system_message == template['parameters']['system_message']
+    candidate.parameters == expected_parameters
     assert candidate.to_dict() == template
 
-    response = candidate("What is the capital of France?")
-    assert 'Paris' in response
-    assert candidate.model.model_name == template['parameters']['model_name']
-    assert candidate.model.history()[-1].metadata['model_name'] == template['parameters']['model_name']  # noqa: E501
-    assert candidate.model.history()[-1].metadata['parameters'] == expected_parameters
-    # after all tests, the dict_copy shoudl be the same as the original i.e. no side effects from
-    # other functions we are passing dict4 to
-    assert template == openai_candidate_template
+    messages = [user_message("What is the capital of France?")]
+    response = candidate(messages)
+    assert 'Paris' in response.response
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAI__invalid_parameters(openai_candidate_template):  # noqa
@@ -399,106 +194,30 @@ def test__OpenAI__invalid_parameters(openai_candidate_template):  # noqa
     template = deepcopy(openai_candidate_template)
     template['parameters']['temperature'] = -10  # invalid value
     candidate = Candidate.from_dict(template)
+    messages = [user_message("What is the capital of France?")]
     with pytest.raises(BadRequestError):
-        _ = candidate("What is the capital of France?")
+        _ = candidate(messages)
 
-@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_API_KEY'), reason="HUGGING_FACE_API_KEY is not set")  # noqa
-@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
-def test__HuggingFaceEndpoint__template(hugging_face_candidate_template):  # noqa
-    """Test that the various config options for a Hugging Face Endpoint candidate work."""
-    template = deepcopy(hugging_face_candidate_template)
-    expected_model_param_names = ['temperature', 'max_tokens', 'seed']
-    expected_parameters = {
-        k:v for k, v in template['parameters'].items()
-        if k in expected_model_param_names
-    }
-    candidate = Candidate.from_dict(template)
-    assert candidate.to_dict() == template
-    assert Candidate.from_dict(candidate.to_dict()) == candidate
-
-    # check .parameters on candidate
-    expected_candidate_parameters = deepcopy(template['parameters'])
-    expected_candidate_parameters.pop('system_format')
-    expected_candidate_parameters.pop('prompt_format')
-    expected_candidate_parameters.pop('response_prefix')
-    assert candidate.parameters == expected_candidate_parameters
-
-    # check .parameters on model
-    model_parameters = candidate.model.parameters.copy()
-    del model_parameters['return_full_text']
-    assert model_parameters == expected_parameters
-
-    # test that the dictionary hasn't changed after passing the dict to various functions
-    # i.e. test no side effects against dict
-    assert candidate.to_dict() == template
-    assert template == hugging_face_candidate_template
-    assert Candidate.from_dict(candidate.to_dict()) == candidate
-
-    # test response
-    response = candidate("What is the capital of France?")
-    assert 'Paris' in response
-    assert candidate.total_tokens > 0
-    assert candidate.total_tokens == candidate.model.total_tokens
-    assert candidate.response_tokens > 0
-    assert candidate.response_tokens == candidate.model.response_tokens
-    assert candidate.input_tokens > 0
-    assert candidate.input_tokens == candidate.model.input_tokens
-    # test that the model generated from the dict is the same as the original
-    # but that they don't share history (i.e. there is a new underlying object for the model)
-    assert candidate.to_dict() == template
-    recreated_candidate = Candidate.from_dict(candidate.to_dict())
-    assert candidate == recreated_candidate
-    # ensure that the recreated candidate doesn't share history with the original
-    assert len(candidate.model.history()) == 1
-    assert len(recreated_candidate.model.history()) == 0
-    response = recreated_candidate("What is the capital of Spain?")
-    assert 'Madrid' in response
-    assert len(candidate.model.history()) == 1
-    assert len(recreated_candidate.model.history()) == 1
-    assert recreated_candidate.to_dict() == template
-    # ensure that the cloned candidate doesn't share history with the original
-    cloned_candidate = recreated_candidate.clone()
-    assert cloned_candidate == candidate
-    assert len(cloned_candidate.model.history()) == 0
-    response = cloned_candidate("What is the capital of Germany?")
-    assert 'Berlin' in response
-    assert cloned_candidate.to_dict() == template
-    assert len(candidate.model.history()) == 1
-    assert len(recreated_candidate.model.history()) == 1
-    assert len(cloned_candidate.model.history()) == 1
-
-@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_API_KEY'), reason="HUGGING_FACE_API_KEY is not set")  # noqa
-@pytest.mark.skipif(not os.environ.get('HUGGING_FACE_ENDPOINT_UNIT_TESTS'), reason="HUGGING_FACE_ENDPOINT_UNIT_TESTS is not set")  # noqa
-def test__HuggingFaceEndpointCandidate__invalid_parameters(hugging_face_candidate_template):  # noqa
-    """Test invalid parameters so that we know we're actually sending them."""
-    template = deepcopy(hugging_face_candidate_template)
-    template['parameters']['temperature'] = -10  # invalid value
-    candidate = Candidate.from_dict(template)
-    with pytest.raises(HuggingFaceRequestError) as exception:
-        _ = candidate("What is the capital of France?")
-    exception = exception.value
-    assert exception.error_type.lower() == 'validation'
-    assert 'temperature' in exception.error_message
-
-def test__OpenAICandidate__from_yaml(openai_tools_candidate_template: dict, tool_weather, tool_stocks):  # noqa
-    candidate = Candidate.from_yaml('examples/candidates/openai_tools_3.5.yaml')
+def test__OpenAIToolsCandidate__from_yaml(openai_tools_candidate_template: dict, function_weather: Function, function_stocks: Function):  # noqa
+    candidate = Candidate.from_yaml('examples/candidates/openai_tools_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI_TOOLS.name
     assert candidate.to_dict() == openai_tools_candidate_template
-    assert candidate.model.model_name == candidate.to_dict()['parameters']['model_name']
-    assert isinstance(candidate.model.tools, list)
-    assert len(candidate.model.tools) == 2
-    assert isinstance(candidate.model.tools[0], dict)
-    assert candidate.model.tools[0]['function'] == tool_weather
-    assert isinstance(candidate.model.tools[1], dict)
-    assert candidate.model.tools[1]['function'] == tool_stocks
+    assert isinstance(candidate.tools, list)
+    assert len(candidate.tools) == 2
+    assert isinstance(candidate.tools[0], dict)
+    assert candidate.tools[0] == function_weather.to_dict()
+    assert isinstance(candidate.tools[1], dict)
+    assert candidate.tools[1] == function_stocks.to_dict()
 
-    response = candidate("What's the weather like in Boston today in degrees F?")
-    assert isinstance(response, list)
-    assert len(response) == 1
-    # ensure the response is from the weather tool and contains the correct parameters
-    assert response[0]['name'] == 'get_current_weather'
-    assert 'location' in response[0]['arguments']
-    assert response[0]['arguments']['location']
-    assert isinstance(response[0]['arguments']['location'], str)
-    assert 'unit' in response[0]['arguments']
-    assert response[0]['arguments']['unit'] in ['celsius', 'fahrenheit']
+    response = candidate([user_message("What's the weather like in Boston today in degrees F?")])
+    assert isinstance(response, CandidateResponse)
+    assert isinstance(response.response, list)
+    assert len(response.response) == 1
+    assert response.response[0]['type'] == 'function'
+    assert response.response[0]['name'] == 'get_current_weather'
+    arguments = response.response[0]['arguments']
+    assert 'location' in arguments
+    assert arguments['location']
+    assert isinstance(arguments['location'], str)
+    assert 'unit' in arguments
+    assert arguments['unit'] in ['celsius', 'fahrenheit']

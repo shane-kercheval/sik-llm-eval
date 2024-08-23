@@ -2,13 +2,15 @@
 Defines classes for different types of built-in Candidates and a corresponding registry system for
 custom Candidates.
 
-The purpose of a Candidate is to provide a standard interface for the the underlying LLM and client
-(e.g. ChatpGPT via OpenAI() client, Lamma3 via LM Studio, etc.) so that the user can define evals
-for any type of LLM/agent/etc and client.
+A Candidate is a callable object that takes input (e.g. OpenAI-style messages) and returns a
+response. The input and response can be any type of object that can be serialized/de-serialized
+(e.g. string, dictionary, list, etc.).
 
-A Candidate is a callable object that takes a prompt and returns a response. The prompt and
-response can be any type of object that can be serialized/de-serialized (e.g. string, dictionary,
-list, etc.).
+The purpose of a Candidate is to provide a standard interface that A) allows the user to define
+evals in a consistent manner and B) allows the results of the evals to be evaluated (checked) in a
+consistent manner. A Candidate is essentially an adapter that takes the input from the Eval and
+converts it to the input format that the underlying LLM (e.g. OpenAI) expects, and then converts
+the response from the LLM to the response format that the Eval/Checks expects.
 
 Candidates can be created from a dictionary using the `Candidate.from_dict(...)` method. The
 dictionary must have a `candidate_type` field that matches the type name of the registered
@@ -22,19 +24,23 @@ Candidates can also be passed to the EvalHarness (or Eval object) directory as a
 can be serialized into a dictionary and the information can be saved in the EvalResult object
 (evals.py).
 """
-import asyncio
 import yaml
 from inspect import iscoroutinefunction
 from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Any, Callable, List, Type, Union
-from llm_eval.llms.base import ChatModel
-from llm_eval.llms.hugging_face import HuggingFaceEndpointChat
-from llm_eval.llms.message_formatters import MessageFormatter
-from llm_eval.llms.openai import OpenAIChat, OpenAITools, OpenAIServerChat
-from llm_eval.utilities.internal_utilities import (
+from typing import Any, Callable, List, Literal, Type, Union
+from pydantic import BaseModel
+from openai import OpenAI
+from llm_eval.openai import (
+    MODEL_COST_PER_TOKEN,
+    OpenAIChatResponse,
+    OpenAICompletion,
+    OpenAICompletionResponse,
+    OpenAIToolsResponse,
+)
+from llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
     Registry,
@@ -49,14 +55,26 @@ def is_async_candidate(candidate: Callable | 'Candidate') -> bool:
         return iscoroutinefunction(candidate.__call__)
     return False
 
+
 class CandidateType(EnumMixin, Enum):
     """Provides a typesafe representation of the built-in types of Candidates."""
 
     OPENAI = auto()
     OPENAI_TOOLS = auto()
-    HUGGING_FACE_ENDPOINT = auto()
-    CALLABLE_NO_SERIALIZE = auto()
-    OPENAI_SERVER = auto()
+
+
+class CandidateResponse(BaseModel):
+    """
+    Provides a standard response object for Candidates so that the Eval/TestHarness can
+    consistently evaluate the response and store the metadata (e.g. cost, usage, etc.) for the
+    response.
+
+    Content is the text/dict/etc. from the LLM that is meant to be evaluated (via Check objects).
+    Metadata is a dictionary of metadata about the response (e.g. cost, usage, etc.).
+    """
+
+    response: Any
+    metadata: dict | None = None
 
 
 class Candidate(DictionaryEqualsMixin, ABC):
@@ -65,68 +83,28 @@ class Candidate(DictionaryEqualsMixin, ABC):
     implementation of an LLM interface (e.g. history/context management)) along with optional
     model parameters.
 
-    A Candidate is a callable object that takes a prompt and returns a response.
-
-    NOTE: If a candidate is being evaluated against multiple prompts (i.e. multiple PromptTest
-    objects) in the same Eval, the assumption is that those prompts are testing a conversation
-    (i.e. sequential prompt/response exchanges). This means that the candidate/client should be
-    able to maintain state between prompts (e.g. history/context) and a single Candidate object
-    should be created for a single Eval object, and not reused across multiple Eval objects.
+    A Candidate is a callable object that takes an input and returns a CandidateResponse.
     """
 
     registry = Registry()
 
-    def __init__(self, metadata: dict | None = None, parameters: dict | None = None) -> None:
+    def __init__(self, metadata: dict | None = None, parameters: dict | None = None) -> None:  # noqa: D417
         """
         Initialize a Candidate object.
 
         Args:
-            metadata: A dictionary of metadata about the Candidate.
-            parameters: A dictionary of parameters for the Candidate.
-        """
+            metadata:
+                A dictionary of metadata about the Candidate.
+            parameters:
+                A dictionary of parameters for the Candidate (most likely, the model parameters
+                passed to the LLM).
+        """  # noqa
         self.metadata = deepcopy(metadata) or {}
         self.parameters = deepcopy(parameters)
 
     @abstractmethod
-    def __call__(self, prompt: Any) -> Any:  # noqa: ANN401
-        """Invokes the underlying model with the prompt and returns the response."""
-
-    @abstractmethod
-    def set_system_message(self, system_message: str) -> None:
-        """
-        Sets the system message. This method allows the Eval object (via the EvalHarness) to
-        set/override the system message of the underlying model.
-        """
-
-    @abstractmethod
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:
-        """
-        Sets the messages of the model. This method allows the Eval object (via the
-        EvalHarness) to set the "previous" messages of the underlying model. This is useful for
-        few-shot learning and other stateful conversations.
-
-        Args:
-            messages: A list of ExchangeRecord objects, a list of dictionaries, or a list of
-                tuples.
-
-                If a list of tuples, each tuple should have two elements: the prompt as the first
-                element and the response as the second element.
-
-                If a list of dictionaries is passed in, each dictionary contains a two key-value
-                pairs, where one key is 'user' and the value is the user's message, and the other
-                key is 'assistant' and the value is the assistant's response.
-        """
-
-    @abstractmethod
-    def clone(self) -> 'Candidate':
-        """
-        Returns a copy of the Candidate with the same state but with a different instance of the
-        underlying model (e.g. same parameters but reset history/context).
-
-        This is needed because the same Candidate object should not be reused across multiple Eval
-        objects. This method allows the Eval object to create a new Candidate object and ensure
-        the original Candidate object is not modified.
-        """
+    def __call__(self, input: Any) -> CandidateResponse:  # noqa: A002, ANN401
+        """Invokes the underlying model with the input and returns the response."""
 
     @classmethod
     def register(cls, candidate_type: str | Enum):  # noqa: ANN102
@@ -196,306 +174,176 @@ class Candidate(DictionaryEqualsMixin, ABC):
         """).strip()
 
 
-@Candidate.register(CandidateType.CALLABLE_NO_SERIALIZE)
-class CallableCandidate(Candidate):
-    """
-    Candidate for a simple callable model. This is useful for simple use-cases, stateless models,
-    and for testing.
-
-    NOTE: This class is registered with the Candidate registry and can be created from a dictionary
-    using `Candidate.from_dict(...)`. However, since the model is a callable defined at runtime,
-    it cannot be serialized (to/from dict) and is not included in the dict representation of the
-    Candidate. When creating a CallableCandidate from a dictionary, the `model` field will be
-    `None`. Therefore, it can be reloded from a dictionary but will not be able to run evaluations.
-    """
-
-    def __init__(
-            self,
-            model: Callable | None = None,
-            metadata: dict | None = None) -> None:
-        """
-        Initialize a CallableCandidate object. The model is a callable object that takes a prompt
-        and returns a response. If clone() is called (which happens if the candidate is used
-        in the EvalHarness), then the model is assumed to be stateless and will be used against
-        multiple Evals.
-
-        Args:
-            model: The callable model.
-            metadata: A dictionary of metadata about the Candidate.
-            parameters: A dictionary of parameters for the Candidate.
-        """
-        super().__init__(metadata=metadata, parameters=None)
-        self.model = model
-
-    def __call__(self, prompt: str) -> str:
-        """Invokes the underlying model with the prompt and returns the response."""
-        if is_async_candidate(self.model):
-            return asyncio.run(self.model(prompt))
-        return self.model(prompt)
-
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:  # noqa
-        return
-
-    def set_system_message(self, system_message: str) -> None:   # noqa
-        return
-
-    def clone(self) -> 'Candidate':
-        """
-        Returns a copy of the Candidate with the same state but with a different instance of the
-        underlying model (e.g. same parameters but reset history/context).
-
-        Reques
-        """
-        return CallableCandidate(model=self.model, metadata=self.metadata)
-
-
-class ChatModelCandidate(Candidate):
-    """Abstract class for a Candidate that wraps a ChatModel."""
-
-    def __init__(
-            self,
-            model: ChatModel,
-            metadata: dict | None = None,
-            parameters: dict | None = None,
-            ) -> None:
-        """
-        Initialize a Candidate object.
-
-        Args:
-            model: The ChatModel object.
-            metadata: A dictionary of metadata about the Candidate.
-            parameters: A dictionary of parameters for the Candidate.
-        """
-        self.model = model
-        self.metadata = deepcopy(metadata) or {}
-        self.parameters = deepcopy(parameters)
-
-    def __call__(self, prompt: str) -> str:
-        """Invokes the underlying model with the prompt and returns the response."""
-        return self.model(prompt)
-
-    def set_system_message(self, system_message: str) -> None:
-        """
-        Sets the system message. This method allows the Eval object (via the EvalHarness) to set
-        the system message of the underlying model.
-        """
-        self.model.set_system_message(system_message)
-
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:
-        """
-        Sets the messages of the model. This method allows the Eval object (via the
-        EvalHarness) to set the "previous" messages of the underlying model. This is useful for
-        few-shot learning and other stateful conversations.
-
-        Args:
-            messages: A list of ExchangeRecord objects, a list of dictionaries, or a list of
-                tuples.
-
-                If a list of tuples, each tuple should have two elements: the prompt as the first
-                element and the response as the second element.
-
-                If a list of dictionaries is passed in, each dictionary contains a two key-value
-                pairs, where one key is 'user' and the value is the user's message, and the other
-                key is 'assistant' and the value is the assistant's response.
-        """
-        self.model.set_message_history(messages)
-
-    @property
-    def total_tokens(self) -> int:
-        """Returns the total number of tokens processed by the model."""
-        return self.model.total_tokens
-
-    @property
-    def input_tokens(self) -> int:
-        """Returns the total number of input tokens processed by the model."""
-        return self.model.input_tokens
-
-    @property
-    def response_tokens(self) -> int:
-        """Returns the total number of response tokens returned by the model."""
-        return self.model.response_tokens
-
-    @property
-    def cost(self) -> float:
-        """Returns the total cost of using the model."""
-        return self.model.cost
-
-    def clone(self) -> 'Candidate':
-        """
-        Returns a copy of the Candidate with the same state but with a different instance of the
-        underlying model (e.g. same parameters but reset history/context).
-
-        Reques
-        """
-        return Candidate.from_dict(deepcopy(self.to_dict()))
-
-
 @Candidate.register(CandidateType.OPENAI)
-class OpenAICandidate(ChatModelCandidate):
+class OpenAICandidate(Candidate):
     """
     Wrapper around the OpenAI API that allows the user to create an OpenAI candidate from a
-    dictionary. The client is a callable object that takes a prompt and returns a response. It will
-    also track the history/messages, supporting stateful conversations, which is needed to evaluate
-    multiple prompts in a single Eval object.
+    dictionary.
 
     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
     def __init__(  # noqa: D417
             self,
+            model: str | None = None,
+            endpoint_url: str | None = None,
             metadata: dict | None = None,
             parameters: dict | None = None) -> None:
         """
         Initialize a OpenAICandidate object.
 
         Args:
+            model:
+                The name of the OpenAI model to use (e.g. 'gpt-4o-mini').
+            endpoint_url:
+                This parameter is used when running against a local OpenAI-compatible API endpoint.
             metadata:
                 A dictionary of metadata about the Candidate.
             parameters:
-                A dictionary of parameters passed to OpenAI. `model_name` (e.g.
-                'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
-                such as `system_message` and model-specific parameters (e.g. `temperature`) can be
-                passed.
+                A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
-        if parameters is None:
-            parameters = {}
-        super().__init__(
-            model=OpenAIChat(**deepcopy(parameters)),
-            metadata=metadata,
-            parameters=parameters,
+        super().__init__(metadata=metadata, parameters=parameters)
+        assert model or endpoint_url, "model or endpoint_url must be provided"
+        self.model = model
+        self.endpoint_url = endpoint_url
+
+    def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
+        """Invokes the underlying model with the input and returns the response."""
+        client = OpenAICompletion(
+            client=OpenAI(base_url=self.endpoint_url),
+            model=self.model or self.endpoint_url,
+            **self.parameters or {},
         )
+        response: OpenAIChatResponse = client(input)
+        prompt_tokens = response.usage.get('prompt_tokens')
+        completion_tokens = response.usage.get('completion_tokens')
+        total_tokens = response.usage.get('total_tokens')
 
+        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model)
+        if cost_per_token and prompt_tokens and completion_tokens:
+            prompt_cost = cost_per_token['input'] * prompt_tokens
+            completion_cost = cost_per_token['output'] * completion_tokens
+            total_cost = prompt_cost + completion_cost
+        else:
+            prompt_cost = None
+            completion_cost = None
+            total_cost = None
 
-@Candidate.register(CandidateType.OPENAI_TOOLS)
-class OpenAIToolsCandidate(ChatModelCandidate):
-    """
-    Wrapper around the OpenAI API that allows the user to create an OpenAI candidate with tools
-    from a dictionary. The client is a callable object that takes a prompt and returns a response.
-    It will also track the history/messages, supporting stateful conversations, which is needed
-    to evaluate multiple prompts in a single Eval object.
-
-    NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
-    """
-
-    def __init__(  # noqa: D417
-            self,
-            metadata: dict | None = None,
-            parameters: dict | None = None) -> None:
-        """
-        Initialize a OpenAICandidate object.
-
-        Args:
-            metadata:
-                A dictionary of metadata about the Candidate.
-            parameters:
-                A dictionary of parameters passed to OpenAI. `model_name` (e.g.
-                'gpt-3.5-turbo-1106') is the only required parameter. However, other parameters
-                such as `system_message` and model-specific parameters (e.g. `temperature`) can be
-                passed.
-        """  # noqa
-        if parameters is None:
-            parameters = {}
-        super().__init__(
-            model=OpenAITools(**deepcopy(parameters)),
-            metadata=metadata,
-            parameters=parameters,
-        )
-
-
-@Candidate.register(CandidateType.HUGGING_FACE_ENDPOINT)
-class HuggingFaceEndpointCandidate(ChatModelCandidate):
-    """
-    Wrapper around the Hugging Face Endpoint API that allows the user to create the candidate from
-    a dictionary. The client is a callable object that takes a prompt and returns a response. It
-    will also track the history/messages, supporting stateful conversations, which is needed to
-    evaluate multiple prompts in a single Eval object.
-
-    NOTE: the `HUGGING_FACE_API_KEY` environment variable must be set to use this class.
-    """
-
-    def __init__(  # noqa: D417
-            self,
-            parameters: dict,
-            metadata: dict | None = None) -> None:
-        r"""
-        Initialize a HuggingFaceEndpointCandidate object.
-
-        Args:
-            metadata:
-                A dictionary of metadata about the Candidate.
-            parameters:
-                A dictionary of parameters passed to OpenAI. `endpoint_url`, `system_format`,
-                `prompt_format`, and `response_prefix` are required parameters. Other parameters
-                such as `system_message` and model-specific parameters (e.g. `temperature`) can be
-                passed.
-
-                An example of system/prompt/response formats is:
-
-                ```
-                system_format: '[INST] <<SYS>> {system_message} <</SYS>> [/INST]\n'
-                prompt_format: '[INST] {prompt} [/INST]\n'
-                response_prefix: '\n'
-                ```
-        """   # noqa
-        parameters = deepcopy(parameters)
-        self.system_format = parameters.pop('system_format')
-        self.prompt_format = parameters.pop('prompt_format')
-        self.response_prefix = parameters.pop('response_prefix')
-        super().__init__(
-            model=HuggingFaceEndpointChat(
-                message_formatter=MessageFormatter(
-                    system_format=self.system_format,
-                    prompt_format=self.prompt_format,
-                    response_prefix=self.response_prefix,
-                ),
-                **parameters,
-            ),
-            metadata=metadata,
-            parameters=parameters,
+        return CandidateResponse(
+            response=response.content,
+            metadata={
+                'prompt_tokens': prompt_tokens,
+                'completion_tokens': completion_tokens,
+                'total_tokens': total_tokens,
+                'prompt_cost': prompt_cost,
+                'completion_cost': completion_cost,
+                'total_cost': total_cost,
+                'completion_characters': len(response.content),
+            },
         )
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
-        # value = self.model_dump(exclude_defaults=True, exclude_none=True)
         value = super().to_dict()
-        if self.system_format:
-            value['parameters']['system_format'] = self.system_format
-        if self.prompt_format:
-            value['parameters']['prompt_format'] = self.prompt_format
-        if self.response_prefix:
-            value['parameters']['response_prefix'] = self.response_prefix
+        if self.model:
+            value['model'] = self.model
+        if self.endpoint_url:
+            value['endpoint_url'] = self.endpoint_url
         return value
 
 
-@Candidate.register(CandidateType.OPENAI_SERVER)
-class OpenAIServerCandidate(ChatModelCandidate):
+@Candidate.register(CandidateType.OPENAI_TOOLS)
+class OpenAIToolsCandidate(Candidate):
     """
-    Wrapper around the OpenAI API that allows the user to create an OpenAI compatible candidate
-    from a dictionary. The client is a callable object that takes a prompt and returns a response.
-    It will also track the history/messages, supporting stateful conversations, which is needed to
-    evaluate multiple prompts in a single Eval object.
+    Wrapper around the OpenAI API that allows the user to create an OpenAI candidate from a
+    dictionary.
+
+    NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
     def __init__(  # noqa: D417
             self,
+            tools: list[dict],
+            tool_choice: Literal['none', 'auto', 'required'] | dict[str] = 'required',
+            model: str | None = None,
+            endpoint_url: str | None = None,
             metadata: dict | None = None,
             parameters: dict | None = None) -> None:
         """
-        Initialize a OpenAIServerCandidate object.
+        Initialize a OpenAIToolsCandidate object.
 
         Args:
+            tools:
+                A list of tools to use with the OpenAI model. See https://platform.openai.com/docs/api-reference/chat/create
+                for more information.
+
+                The Function and FunctionParameter classes in `openai.py` can be used to create the
+                tools list. See `openai.py` for more information.
+            tool_choice:
+                See https://platform.openai.com/docs/guides/function-calling/configuring-function-calling-behavior-using-the-tool_choice-parameter
+            model:
+                The name of the OpenAI model to use (e.g. 'gpt-4o-mini').
+            endpoint_url:
+                This parameter is used when running against a local OpenAI-compatible API endpoint.
             metadata:
                 A dictionary of metadata about the Candidate.
             parameters:
-                A dictionary of parameters passed to OpenAIServerChat. `endpoint_url` is the only 
-                required parameters. However, other parameters such as `system_message` 
-                can be passed.
+                A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
-        if parameters is None:
-            parameters = {}
-        super().__init__(
-            model=OpenAIServerChat(**deepcopy(parameters)),
-            metadata=metadata,
-            parameters=parameters,
+        super().__init__(metadata=metadata, parameters=parameters)
+        assert model or endpoint_url, "model or endpoint_url must be provided"
+        self.model = model
+        self.endpoint_url = endpoint_url
+        self.tools = tools
+        self.tool_choice = tool_choice
+
+    def __call__(self, input: dict) -> CandidateResponse:  # noqa: A002
+        """Invokes the underlying model with the input/tools and returns the response."""
+        client = OpenAICompletion(
+            client=OpenAI(base_url=self.endpoint_url),
+            model=self.model or self.endpoint_url,
+            **self.parameters or {},
+        )
+        response: OpenAIToolsResponse | OpenAICompletionResponse = client(
+            messages=input,
+            tools=self.tools,
+            tool_choice=self.tool_choice,
+        )
+        prompt_tokens = response.usage.get('prompt_tokens')
+        completion_tokens = response.usage.get('completion_tokens')
+        total_tokens = response.usage.get('total_tokens')
+
+        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model)
+        if cost_per_token and prompt_tokens and completion_tokens:
+            prompt_cost = cost_per_token['input'] * prompt_tokens
+            completion_cost = cost_per_token['output'] * completion_tokens
+            total_cost = prompt_cost + completion_cost
+        else:
+            prompt_cost = None
+            completion_cost = None
+            total_cost = None
+
+        content = response.tools if isinstance(response, OpenAIToolsResponse) else response.content
+        return CandidateResponse(
+            response=content,
+            metadata={
+                'type': 'tools' if isinstance(response, OpenAIToolsResponse) else 'completion',
+                'prompt_tokens': prompt_tokens,
+                'completion_tokens': completion_tokens,
+                'total_tokens': total_tokens,
+                'prompt_cost': prompt_cost,
+                'completion_cost': completion_cost,
+                'total_cost': total_cost,
+            },
         )
 
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the Candidate."""
+        value = super().to_dict()
+        if self.model:
+            value['model'] = self.model
+        if self.endpoint_url:
+            value['endpoint_url'] = self.endpoint_url
+        value['tools'] = self.tools
+        value['tool_choice'] = self.tool_choice
+        return value

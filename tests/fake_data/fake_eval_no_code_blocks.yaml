@@ -9,14 +9,12 @@ metadata:
     - test
     - no_code_blocks
   source: Test
-prompt_sequence:
-  - prompt: This is the prompt from the user.
-    ideal_response: This is the ideal repsonse.
-    checks:
-      - check_type: CONTAINS
-        value: response
-      - check_type: CONTAINS
-        value: another value
-  - prompt: This is a follow up prompt from the user.
-    ideal_response: This is the ideal response to the follow up prompt.
-    checks:
+input:
+  - role: user
+    content: This is the prompt from the user.
+ideal_response: This is the ideal repsonse.
+checks:
+  - check_type: CONTAINS
+    value: response
+  - check_type: CONTAINS
+    value: another value

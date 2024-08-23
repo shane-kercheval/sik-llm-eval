@@ -1,0 +1,35 @@
+metadata:
+  name: OpenAI GPT-4o-mini
+model: gpt-4o-mini
+candidate_type: OPENAI_TOOLS
+tool_choice: required
+tools: 
+  - type: "function"
+    function:
+      name: "get_current_weather"
+      description: "Get the current weather in a given location"
+      parameters:
+        type: "object"
+        properties:
+          location:
+            type: "string"
+            description: "The city and state, e.g. San Francisco, CA"
+          unit:
+            type: "string"
+            enum: ["celsius", "fahrenheit"]
+        required: ["location"]
+  - type: "function"
+    function:
+      name: "get_current_stocks"
+      description: "Get the current stock price of a given company"
+      parameters:
+        type: "object"
+        properties:
+          company:
+            type: "string"
+            description: "The name of the company, e.g. Apple"
+        required: ["company"]
+parameters:
+  temperature: 0.01
+  max_tokens: 4096
+  seed: 42

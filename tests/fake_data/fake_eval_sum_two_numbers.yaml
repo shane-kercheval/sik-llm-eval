@@ -9,9 +9,10 @@ metadata:
     - test
     - sum_two_numbers
   source: Test
-prompt_sequence:
-  - prompt: Write a function that called `sum_two_numbers` that takes two numbers and returns their sum.
-    checks:
-      - check_type: CONTAINS
-        value: sum_two_numbers
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+input:
+  - role: user
+    content: Write a function that called `sum_two_numbers` that takes two numbers and returns their sum.
+checks:
+  - check_type: CONTAINS
+    value: sum_two_numbers
+  - check_type: PYTHON_CODE_BLOCKS_PRESENT

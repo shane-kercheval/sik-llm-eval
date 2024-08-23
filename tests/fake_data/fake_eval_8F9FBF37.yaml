@@ -9,16 +9,15 @@ metadata:
     - test
     - eval_8f9
   source: Test
-prompt_sequence:
-  - prompt: This is the prompt from the user.
-    ideal_response: This is the ideal repsonse.
-    checks:
-      - check_type: CONTAINS
-        value: response
-      - check_type: CONTAINS
-        value: another value
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
-  - prompt: This is a follow up prompt from the user.
-    ideal_response: This is the ideal response to the follow up prompt.
-    checks:
-      - check_type: PYTHON_CODE_BLOCKS_PRESENT
+input:
+  - role: user
+    content: This is the prompt from the user.
+ideal_response:
+  - role: system
+    content: This is the ideal response.
+checks:
+  - check_type: CONTAINS
+    value: response
+  - check_type: CONTAINS
+    value: another value
+  - check_type: PYTHON_CODE_BLOCKS_PRESENT

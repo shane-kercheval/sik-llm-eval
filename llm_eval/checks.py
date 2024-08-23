@@ -1,13 +1,12 @@
 """
 Defines classes for different types of checks and corresponding registry systems.
 
-A "check" is a single test defined within an Eval corresponding to a specific prompt. The goal of a
-check is to test various aspects of the LLMs response to the prompt. (An Eval can have multiple
-prompts; each prompt can have multiple checks.) The intent of the check can range from simple
-matching (i.e. does the LLM response exactly match the expected value provided) to using an
-LLM to evaluate the response.
+A "check" is a single test defined within an Eval which corresponding to a specific prompt/input.
+The goal of a check is to test various aspects of the LLMs response. The intent of the check can
+range from simple matching (i.e. does the LLM response exactly match the expected value provided?)
+to using an LLM to evaluate the response.
 
-Registry systems are used to allow the user to save and load checks and check results from a
+A registry system is used to allow the user to save and load checks and check results from a
 dictionary (e.g. from an underlying yaml file). This is useful for defining/storing/running large
 amounts of checks/results.
 """
@@ -21,7 +20,7 @@ from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from llm_eval.candidates import Candidate
-from llm_eval.utilities.internal_utilities import (
+from llm_eval.internal_utilities import (
     EnumMixin,
     Registry,
     execute_code_blocks,
@@ -167,28 +166,34 @@ class ScoreResult(CheckResult):
 @dataclass
 class ResponseData:
     """
-    Store the data associated with a request/response. This data is created by the Eval/EvalHarness
-    and passed to the Check objects' __call__ function to evaluate the response.
+    Stores the data associated with a request/response. This object is created by the
+    Eval/EvalHarness and passed to the Check objects' __call__ function to evaluate the response,
+    potentially using additional information like input, response_metadata, or ideal_response.
+
+    Candidates return a CandidateResponse object, which contains `response` and `metadata` fields,
+    which are passed to ResponseData's `response` and `response_metadata` fields, respectively.
+    ResponseData is then passed to the Check objects' __call__ function to evaluate the response.
+    The reason we use ResponseData instead of passing the CandidateResponse object directly is to
+    allow the Check objects to access additional information like input or ideal_response. Some
+    checks (e.g. checks via LLMs) may use the input or ideal_response to evaluate the response.
     """
 
-    prompt: str | Any | None = None
-    response: str | dict  | list | Any | None = None
-    code_blocks: list[str] | None = None
+    input: str | Any | None = None
+    response: Any | None = None
+    response_metadata: dict[str, Any] | None = None
     ideal_response: str | Any | None = None
 
 
 class Check(BaseModel, ABC):
     """
-    Represents a single check in an Eval. Each Eval can test multiple/sequential prompts, and
-    each prompt can have multiple checks. The check is responsible for evaluating the response to
-    the prompt. The intent of the check can range from simple matching (i.e. does the LLM response
-    exactly match the expected value provided) to using custom logic (e.g. using an LLM to evaluate
-    the response).
+    Represents a single check in an Eval. A check is responsible for evaluating the response of an
+    LLM or agent. The intent of the check can range from simple matching (i.e. does the LLM
+    response exactly match the expected value provided) to using custom logic (e.g. using an LLM to
+    evaluate the response).
 
     A Check can be saved to and loaded from a dictionary (e.g. from an underlying yaml file). If
-    the user wants to load the Check into memory and into the original subclass (either directly or
-    by saving/loading an Eval or EvalResult which contains all checks associated with an Eval) the
-    Check subclass must be registered with the `register` decorator. This allows the Check to be
+    the user wants to load the Check into memory as a Check object the, then corresponding Check
+    subclass must be registered with the `register` decorator. This allows the Check to be
     created from a dictionary by calling `from_dict` with the name of the check in the dictionary
     with key `check_type` (registered with the decorator) and any parameters for the Check.
     """
@@ -494,16 +499,18 @@ class PythonCodeBlocksPresent(SerializableCheck):
     """
     Checks that the response contains code blocks. The code blocks do not necessary need to run
     successfully (this check does not run the code blocks), but they must be present.
+
+    The full response from the LLM is passed to the __call__ method of the Check, and the code
+    blocks are extracted from the response and executed in the order they are found in the
+    response.
     """
 
     min_code_blocks: int = Field(
         default=1,
         description="The minimum number of code blocks that must be present in the response.",
     )
-    # the default in value_extractor is 'response' because this check is designed to check
-    # each/specific responses (for multiple responses), whereas code_blocks is cumulative
 
-    def _call(self, value: str | list[str] | None) -> PassFailResult:
+    def _call(self, value: str) -> PassFailResult:
         """
         Returns a PassFailResult based on the number of code blocks present.
 
@@ -513,14 +520,10 @@ class PythonCodeBlocksPresent(SerializableCheck):
         PythonCodeBlockTests check and b) just because the code blocks fail doesn't mean they
         aren't Python code blocks.
         """
-        # note we are passing in the response and manually extracting the code block here instead
-        # of passing in code_blocks directly from the Eval because code_blocks is cumulative (all
-        # code blocks from previous responses are passed in) but we only want to check the code
-        # blocks from the current response
-        if self.value_extractor == 'code_blocks':  # `value` already contains the code blocks
-            code_blocks = value or []
-        else:
-            code_blocks = extract_code_blocks(value)
+        value = value or ''
+        if not isinstance(value, str):
+            raise ValueError(f"Expected value to be a string, got {type(value)}")
+        code_blocks = extract_code_blocks(value)
         return PassFailResult(
             value=len(code_blocks) >= self.min_code_blocks,
             metadata={
@@ -541,7 +544,9 @@ class PythonCodeBlockTests(SerializableCheck):
     """
     This Check tests that the code blocks contained within the response run successfully, and
     allows users to define custom tests that can be used to test the code blocks and the
-    environment that the code blocks are executed in. 
+    environment that the code blocks are executed in. The full response from the LLM is passed to
+    the __call__ method of the Check, and the code blocks are extracted from the response and
+    executed in the order they are found in the response.
 
     Unlike other checks, this check aggregates several metrics into a single result.
 
@@ -551,14 +556,6 @@ class PythonCodeBlockTests(SerializableCheck):
 
     The `success_threshold` is the minimum **percent** of successfully executed code blocks *and*
     custom tests (if `code_tests` is used) required for the check to be considered successful.
-    
-    NOTE: this check will run all code blocks generated across all responses for a given Eval.
-    Therefore, you should not define multiple PythonCodeBlockTests checks within a single Eval (in
-    order to avoid running the same code blocks multiple times). It is recommended to define the
-    PythonCodeBlockTests check at the end of the test sequence for a given Eval. If a
-    PythonCodeBlockTests check is defined in the middle of the test sequence, the code blocks
-    generated from subsequent responses will not have executed yet (and corresponding values, 
-    functions, etc., defined in those code blocks will not be available to the functions/tests).
     """  # noqa
 
     success_threshold: float = Field(
@@ -657,11 +654,6 @@ class PythonCodeBlockTests(SerializableCheck):
         """,
     )
 
-    @property
-    def default_value_extractor(self) -> str:
-        """Default value extractor for the check."""
-        return 'code_blocks'
-
     @model_validator(mode='before')
     def strip_code_tests(cls, values: dict) -> dict:  # noqa: N805
         """Strip whitespace from code_tests."""
@@ -674,17 +666,17 @@ class PythonCodeBlockTests(SerializableCheck):
             values['code_tests'] = stripped_code_tests
         return values
 
-    def _call(self, value: list[str] | str | None) -> ScoreResult:  # noqa: PLR0912, PLR0915
+    def _call(self, value: str) -> ScoreResult:  # noqa: PLR0915
         """
         Executes the check on the response and returns a ScoreResult containing the success rate of
         the code blocks and function checks (if `functions` is used), along with additional
         metadata (e.g. the code blocks, errors, etc.).
         """
+        value = value or ''
+        if not isinstance(value, str):
+            raise ValueError(f"Expected value to be a string, got {type(value)}")
         env_namespace = self.env_namespace or {}
-        if self.value_extractor == 'code_blocks':  # code is already extracted
-            code_blocks = value or []
-        else:
-            code_blocks = extract_code_blocks(value)
+        code_blocks = extract_code_blocks(value)
         code_block_errors = []
         test_results = []
         test_errors = []
@@ -841,15 +833,18 @@ class LLMCheck(SerializableCheck):
     def _call(self, data: ResponseData) -> CheckResult:
         """Executes the check on the response and returns the response of the evaluator LLM."""
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
-        result = evaluator(f"{self.eval_prompt}\n\nQuestion: {data.prompt}\n\nAnswer: {data.response}")  # noqa
-        if evaluator.cost:
-            self.metadata['cost'] = self.metadata.get('cost', 0) + evaluator.cost
+        messages = [{
+            'role': 'user',
+            'content': f"{self.eval_prompt}\n\nQuestion: {data.input}\n\nAnswer: {data.response}",
+        }]
+        response = evaluator(messages)
         return CheckResult(
-            value=result,
-            success=self.success(result) if self.success else None,
+            value=response.response,
+            success=self.success(response) if self.success else None,
             metadata={
                 'check_type': self.check_type,
                 'check_metadata': self.metadata,
+                'response_metadata': response.metadata,
             },
         )
 
@@ -883,17 +878,19 @@ class ToxicityCheck(LLMCheck):
         return ''  # return entire ResponseData object
 
     def _call(self, data: ResponseData) -> CheckResult:
-        """TBD."""
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
-        result = evaluator(f"{self.eval_prompt}\n\nResponse: {data.response}")
-        if evaluator.cost:
-            self.metadata['cost'] = self.metadata.get('cost', 0) + evaluator.cost
+        messages = [{
+            'role': 'user',
+            'content': f"{self.eval_prompt}\n\nResponse: {data.response}",
+        }]
+        response = evaluator(messages)
         return CheckResult(
-            value=result,
-            success='false' in result.lower(),  # success if not toxic
+            value=response.response,
+            success='false' in response.response.lower(),  # success if not toxic
             metadata={
                 'check_type': self.check_type,
                 'check_metadata': self.metadata,
+                'response_metadata': response.metadata,
             },
         )
 
@@ -928,7 +925,7 @@ class ToolCallsCheck(Check):
         """,
     )
 
-    def _call(self, value: str) -> CheckResult:
+    def _call(self, value: list[dict]) -> CheckResult:
         """Executes the check on the response/value and returns a ScoreResult."""
         score = 0
         metadata = {
@@ -962,8 +959,7 @@ class ToolCallsCheck(Check):
                             num_arguments_successful += 1
                 if self.penalize_extraneous_arguments:
                     num_arguments_successful -= len(tool_call_function_arguments)
-                    if num_arguments_successful < 0:
-                        num_arguments_successful = 0
+                    num_arguments_successful = max(num_arguments_successful, 0)
                 score = num_arguments_successful / num_arguments
                 break
 

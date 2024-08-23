@@ -12,7 +12,6 @@ from llm_eval.eval import EvalResult
 from llm_eval.eval import EvalHarness
 
 load_dotenv()
-
 DIR_PATH = "__temp__"
 
 
@@ -24,7 +23,6 @@ def print_result(result: EvalResult) -> None:
     print(f"Finished {result.total_time_seconds}, saved to {path}", flush=True)
     print('-------------------', flush=True)
 
-
 def main() -> None:
     """Run the main function."""
     if os.path.exists(DIR_PATH):
@@ -32,20 +30,17 @@ def main() -> None:
     os.makedirs(DIR_PATH)
     assert os.path.exists(DIR_PATH)
 
-    eval_harness = EvalHarness(
-        # num_cpus=1,
-        # async_batch_size=1,
-        callback=print_result,
-    )
-    # example of adding all evals in a directory
-    eval_harness.add_evals_from_yamls('../examples/evals/*.yaml')
-    # example of adding candidates one at a time
-    eval_harness.add_candidate_from_yaml('../examples/candidates/openai_3.5.yaml')
-    eval_harness.add_candidate_from_yaml('../examples/candidates/openai_4.0.yaml')
+    harness = EvalHarness(callback=print_result, num_cpus=None)
+    harness.add_evals_from_yamls('examples/evals/*.yaml')
+    harness.add_candidate_from_yaml('examples/candidates/openai_4.0.yaml')
+    harness.add_candidate_from_yaml('examples/candidates/openai_4o-mini.yaml')
 
-    print('start')
+    print("# of Evals: ", len(harness.evals))
+    print("# of Candidates: ", len(harness.candidates))
+
+    print("Starting eval_harness")
     start = time.time()
-    results = eval_harness()
+    results = harness()  # run the evals
     end = time.time()
     for r in results:
         for a in r:

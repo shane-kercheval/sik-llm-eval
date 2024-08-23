@@ -1,6 +1,5 @@
 """Contains tests for eval Check objects."""
 from copy import deepcopy
-import os
 import re
 from textwrap import dedent
 import pandas as pd
@@ -25,6 +24,7 @@ from llm_eval.checks import (
     ToolCallsCheck,
     ToxicityCheck,
 )
+from llm_eval.openai import user_message
 
 
 def test__CheckType__mixin_behaviors():  # noqa
@@ -337,13 +337,13 @@ def test__ScoreResult__serialize():  # noqa
 def test__Check__value_extractor__get_value_from_path():  # noqa
     expected_response = {'foo': {'bar': 'baz'}}
     expected_prompt = 'the prompt'
-    expected_code_blocks = ['print("hello world")']
+    expected_metadata = {'foo': 'bar'}
     response_data = ResponseData(
-        prompt=expected_prompt,
+        input=expected_prompt,
         response=expected_response,
-        code_blocks=expected_code_blocks,
+        response_metadata=expected_metadata,
     )
-    value = Check._get_value_from_path(value_path='prompt', data=response_data)
+    value = Check._get_value_from_path(value_path='input', data=response_data)
     assert value == expected_prompt
 
     value = Check._get_value_from_path(value_path='response', data=response_data)
@@ -355,8 +355,8 @@ def test__Check__value_extractor__get_value_from_path():  # noqa
     value = Check._get_value_from_path(value_path='response["foo"]["bar"]', data=response_data)
     assert value == expected_response['foo']['bar']
 
-    value = Check._get_value_from_path(value_path='code_blocks', data=response_data)
-    assert value == expected_code_blocks
+    value = Check._get_value_from_path(value_path='response_metadata', data=response_data)
+    assert value == expected_metadata
 
     # test nested objects
     class MockObject:
@@ -395,12 +395,12 @@ def test__Check__value_extractor():  # noqa
         assert result.metadata == {}
         # should fail because default is still looking in response but we are using prompt
         # so response will default to None and check will fail
-        result = check(ResponseData(prompt='foo'))
+        result = check(ResponseData(input='foo'))
         assert not result.value
         assert not result.success
         assert result.metadata == {}
 
-        check = FakeCheck(value_extractor='prompt')
+        check = FakeCheck(value_extractor='input')
         # should fail because we are extracting prompt but prompt is None
         result = check(ResponseData(response='foo'))
         assert not result.value
@@ -408,15 +408,15 @@ def test__Check__value_extractor():  # noqa
         # now, because we are using prompt, which is not the default value_extractor,
         # metadata will be populated with the value_extractor and value_extracted
         assert result.metadata == {
-            'value_extractor': 'prompt',
+            'value_extractor': 'input',
             'value_extracted': None,  # None because prompt is None
         }
         # should be successful because we are extracting prompt and 'foo' is not None
-        result = check(ResponseData(prompt='foo'))
+        result = check(ResponseData(input='foo'))
         assert result.value
         assert result.success
         assert result.metadata == {
-            'value_extractor': 'prompt',
+            'value_extractor': 'input',
             'value_extracted': 'foo',  # 'foo' is the value of prompt
         }
     finally:
@@ -435,25 +435,25 @@ def test__Check__value_extractor__override():  # noqa
         def _call(self, data: ResponseData) -> bool:
             assert isinstance(data, ResponseData)
             return PassFailResult(
-                value=data.response is not None and data.prompt is not None,
+                value=data.response is not None and data.input is not None,
                 metadata=self.metadata,
             )
     try:
         check = FakeCheck()
-        result = check(ResponseData(prompt='foo', response='bar'))
+        result = check(ResponseData(input='foo', response='bar'))
         assert result.value
         assert result.success
         assert result.metadata == {
             'value_extractor': '',
-            'value_extracted': ResponseData(prompt='foo', response='bar'),
+            'value_extracted': ResponseData(input='foo', response='bar'),
         }
 
-        result = check(ResponseData(prompt='foo'))
+        result = check(ResponseData(input='foo'))
         assert not result.value
         assert not result.success
         assert result.metadata == {
             'value_extractor': '',
-            'value_extracted': ResponseData(prompt='foo'),
+            'value_extracted': ResponseData(input='foo'),
         }
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
@@ -1244,12 +1244,12 @@ def test__PythonCodeBlocksPresent__has_check_type():  # noqa
     assert Check.from_dict(check_dict) == check
 
 def test__test__PythonCodeBlocksPresent():  # noqa
-    check = PythonCodeBlocksPresent(min_code_blocks=1, value_extractor='code_blocks')
+    check = PythonCodeBlocksPresent(min_code_blocks=1)
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 1
     assert check.metadata == {}
     assert str(check)
-    result = check(ResponseData(code_blocks = None))
+    result = check(ResponseData(response=''))
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1257,25 +1257,12 @@ def test__test__PythonCodeBlocksPresent():  # noqa
     assert result.metadata['min_code_blocks'] == 1
     assert result.metadata['code_blocks'] == []
 
-    check = PythonCodeBlocksPresent(min_code_blocks=1, value_extractor='response')
+    check = PythonCodeBlocksPresent(min_code_blocks=1, value_extractor='response_metadata')
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 1
     assert check.metadata == {}
     assert str(check)
-    result = check(ResponseData(response = None))
-    assert not result.success
-    assert not result.value
-    assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
-    assert result.metadata['num_code_blocks'] == 0
-    assert result.metadata['min_code_blocks'] == 1
-    assert result.metadata['code_blocks'] == []
-
-    check = PythonCodeBlocksPresent(min_code_blocks=1, value_extractor='code_blocks')
-    assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
-    assert check.min_code_blocks == 1
-    assert check.metadata == {}
-    assert str(check)
-    result = check(ResponseData(code_blocks = ''))
+    result = check(ResponseData(response_metadata=''))
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1286,12 +1273,12 @@ def test__test__PythonCodeBlocksPresent():  # noqa
     assert 'value_extractor' in check.to_dict()
     assert check == Check.from_dict(check.to_dict())
 
-    check = PythonCodeBlocksPresent(min_code_blocks=1, value_extractor='response')
+    check = PythonCodeBlocksPresent(min_code_blocks=1)
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 1
     assert check.metadata == {}
     assert str(check)
-    result = check(ResponseData(response = ''))
+    result = check(ResponseData(response=None))
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1304,56 +1291,56 @@ def test__test__PythonCodeBlocksPresent():  # noqa
     check = PythonCodeBlocksPresent(
         min_code_blocks=1,
         metadata={'foo': 'bar'},
-        value_extractor='code_blocks',
     )
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 1
     assert check.metadata == {'foo': 'bar'}
     assert str(check)
-    code_blocks = ['print("hello world")']
-    result = check(ResponseData(code_blocks=code_blocks))
+
+    code_block_str = 'print("hello world")'
+    expected_code_blocks = [code_block_str]
+    result = check(ResponseData(response=f'```\n{code_block_str}\n```'))
     assert result.success
     assert result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert result.metadata['num_code_blocks'] == 1
     assert result.metadata['min_code_blocks'] == 1
-    assert result.metadata['code_blocks'] == ['print("hello world")']
+    assert result.metadata['code_blocks'] == expected_code_blocks
 
     check = PythonCodeBlocksPresent(
         min_code_blocks=1,
         metadata={'foo': 'bar'},
-        value_extractor='response',
+        value_extractor='response_metadata["response"]',
     )
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 1
     assert check.metadata == {'foo': 'bar'}
     assert str(check)
-    response = 'This is a response: ```python\nprint("hello world")\n```\n'
-    result = check(ResponseData(response=response))
+    response = f'This is a response: ```python\n{code_block_str}\n```\n'
+    result = check(ResponseData(response_metadata={'response': response}))
     assert result.success
     assert result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert result.metadata['num_code_blocks'] == 1
     assert result.metadata['min_code_blocks'] == 1
-    assert result.metadata['code_blocks'] == ['print("hello world")']
+    assert result.metadata['code_blocks'] ==expected_code_blocks
 
     check = PythonCodeBlocksPresent(
         min_code_blocks=2,
         metadata={'foo': 'bar'},
-        value_extractor='response',
-        )
+    )
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 2
     assert check.metadata == {'foo': 'bar'}
     assert str(check)
-    response = 'This is a response: ```python\nprint("hello world")\n```\n'
+    response = f'This is a response: ```python\n{code_block_str}\n```\n'
     result = check(ResponseData(response=response))
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert result.metadata['num_code_blocks'] == 1
     assert result.metadata['min_code_blocks'] == 2
-    assert result.metadata['code_blocks'] == ['print("hello world")']
+    assert result.metadata['code_blocks'] ==expected_code_blocks
 
 def test__PythonCodeBlockTests__has_check_type():  # noqa
     """
@@ -1367,6 +1354,14 @@ def test__PythonCodeBlockTests__has_check_type():  # noqa
     assert PythonCodeBlockTests(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
+
+def _code_blocks_to_response(code_blocks: list[str]) -> str:
+    """
+    Takes code blocks and returns a response that will generate the code blocks when extracting
+    them from within the check.
+    """
+    return '\n\n'.join(f"```\n{dedent(c).strip()}\n```" for c in code_blocks)
+
 def test__PythonCodeBlockTests__no_code_blocks():  # noqa
     check = PythonCodeBlockTests()
     assert check.success_threshold == 1
@@ -1375,7 +1370,7 @@ def test__PythonCodeBlockTests__no_code_blocks():  # noqa
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(code_blocks=[]))
+    result = check(ResponseData(response=''))
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
@@ -1390,7 +1385,7 @@ def test__PythonCodeBlockTests__no_code_blocks():  # noqa
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-    result = check(ResponseData(code_blocks=None))
+    result = check(ResponseData(response=None))
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
@@ -1418,7 +1413,7 @@ def test__PythonCodeBlockTests__no_code_blocks__with_code_tests():  # noqa
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(code_blocks=[]))
+    result = check(ResponseData(response=''))
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
@@ -1433,7 +1428,7 @@ def test__PythonCodeBlockTests__no_code_blocks__with_code_tests():  # noqa
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-    result = check(ResponseData(code_blocks=None))
+    result = check(ResponseData(response=None))
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
@@ -1455,19 +1450,20 @@ def test__PythonCodeBlockTests__no_setup__no_functions():  # noqa
     assert check.code_tests is None
     assert check.metadata == {}
     assert str(check)
-    code_blocks = [
+    expected_code_blocks = [
         'my_value = 1',
         'assert my_value != 1',
         'assert my_value == 1',
     ]
-    result = check(ResponseData(code_blocks=code_blocks))
+    response = _code_blocks_to_response(expected_code_blocks)
+    result = check(ResponseData(response=response))
     assert result.value == 2/3
     assert not result.success
     assert result.success_threshold == 1
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 3
     assert result.metadata['num_code_blocks_successful'] == 2
-    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_blocks'] == expected_code_blocks
     assert result.metadata['code_block_errors'][0] is None
     assert result.metadata['code_block_errors'][1] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][2] is None
@@ -1487,18 +1483,19 @@ def test__PythonCodeBlockTests__with_setup():  # noqa
     assert check.code_tests is None
     assert check.metadata == {}
     assert str(check)
-    code_blocks = [
+    expected_code_blocks = [
         'assert my_value != 1',
         'assert my_value == 1',
     ]
-    result = check(ResponseData(code_blocks=code_blocks))
+    response = _code_blocks_to_response(expected_code_blocks)
+    result = check(ResponseData(response=response))
     assert result.value == 0.5
     assert result.success
     assert result.success_threshold == 0.5
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
-    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_blocks'] == expected_code_blocks
     assert result.metadata['code_block_errors'][0] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][1] is None
     assert result.metadata['code_tests'] == []
@@ -1551,18 +1548,19 @@ def test__PythonCodeBlockTests__with_code_tests():  # noqa
     assert len(check.code_tests) == len(code_tests)
     assert check.metadata == {}
     assert str(check)
-    code_blocks = [
+    expected_code_blocks = [
         'assert my_value != 1',
         'assert my_value == 1',
     ]
-    result = check(ResponseData(code_blocks=code_blocks))
+    response = _code_blocks_to_response(expected_code_blocks)
+    result = check(ResponseData(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
-    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_blocks'] == expected_code_blocks
     assert result.metadata['code_block_errors'][0] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][1] is None
     assert result.metadata['code_tests'] == code_tests
@@ -1629,18 +1627,19 @@ def test__PythonCodeBlockTests__with_code_tests__str():  # noqa
     assert len(check.code_tests) == len(code_tests)
     assert check.metadata == {}
     assert str(check)
-    code_blocks = [
+    expected_code_blocks = [
         'assert my_value != 1',
         'assert my_value == 1',
     ]
-    result = check(ResponseData(code_blocks=code_blocks))
+    response = _code_blocks_to_response(expected_code_blocks)
+    result = check(ResponseData(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
-    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_blocks'] == expected_code_blocks
     assert result.metadata['code_block_errors'][0] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][1] is None
     expected_code_tests = [
@@ -1662,11 +1661,16 @@ def test__PythonCodeBlockTests__failing_code_setup_raises_error():  # noqa
     If one of the code_tests (that is checking the results) raises an error, the entire check
     should fail.
     """
+    # ensure code block is successfull before we test for failure for a different cause
+    response = ResponseData(response='```\n1 == 1\n```')
+    result = PythonCodeBlockTests()(response)
+    assert result.metadata['num_code_blocks'] == 1
+    assert result.metadata['num_code_blocks_successful'] == 1
     check = PythonCodeBlockTests(
         code_setup='raise ValueError()',
     )
     with pytest.raises(AssertionError):
-        check(ResponseData(code_blocks=['1 == 1']))
+        check(response)
 
 def test__PythonCodeBlockTests__with_code_tests__failing_function_does_not_raise_error():  # noqa
     """
@@ -1680,7 +1684,8 @@ def test__PythonCodeBlockTests__with_code_tests__failing_function_does_not_raise
             failing_function,
         ],
     )
-    result = check(ResponseData(code_blocks=['1 == 1']))
+    response = ResponseData(response='```\n1 == 1\n```')
+    result = check(response)
     assert result.metadata['num_code_tests'] == 1
     assert result.metadata['num_code_tests_successful'] == 0
     assert len(result.metadata['code_test_errors']) == 1
@@ -1700,12 +1705,21 @@ def test__PythonCodeBlockTests__with_code_tests__all_code_blocks_fail__test_numb
     """Make sure the number of code tests is still accurate if all code blocks fail to run."""
     code_tests = ["def failing_function(code_blocks):\n    return variable_does_not_exist == 1"]
     check = PythonCodeBlockTests(code_tests=code_tests)
-    code_blocks = ['raise ValueError()', 'raise NameError()']
-    result = check(ResponseData(code_blocks=code_blocks))
+    response = ResponseData(response=dedent("""
+        ```
+        raise ValueError()
+        ```
+
+        ```
+        raise NameError()
+        ```
+    """))
+    expected_code_blocks = ['raise ValueError()', 'raise NameError()']
+    result = check(response)
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 0
-    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_blocks'] == expected_code_blocks
     assert result.metadata['code_block_errors'][0] == {'error': 'ValueError', 'message': ''}
     assert result.metadata['code_block_errors'][1] == {'error': 'NameError', 'message': ''}
     assert result.metadata['code_tests'] == code_tests
@@ -1768,18 +1782,19 @@ def test__PythonCodeBlockTests__with_code_tests__all_tests_with_same_name():  # 
     assert len(check.code_tests) == len(code_tests)
     assert check.metadata == {}
     assert str(check)
-    code_blocks = [
+    expected_code_blocks = [
         'assert my_value != 1',
         'assert my_value == 1',
     ]
-    result = check(ResponseData(code_blocks=code_blocks))
+    response = _code_blocks_to_response(expected_code_blocks)
+    result = check(ResponseData(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 1
-    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_blocks'] == expected_code_blocks
     assert result.metadata['code_block_errors'][0] == {'error': 'AssertionError', 'message': ''}
     assert result.metadata['code_block_errors'][1] is None
     expected_code_tests = [
@@ -1809,7 +1824,7 @@ def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():
                 return False
             return False
     """).strip()
-    code_blocks = [
+    expected_code_blocks = [
         dedent("""
         def my_function(my_value):
             if my_value <= 0:
@@ -1819,6 +1834,7 @@ def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():
         'assert required_variable == 2',
         'assert variable_doesnt_exist == 1',
     ]
+    response = _code_blocks_to_response(expected_code_blocks)
     # 1st item is the expected result (pass/fail), 2nd item is expected error, 3rd is the code
     code_tests = [
         (
@@ -1954,7 +1970,7 @@ def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():
     expected_errors = [x[1] for x in code_tests]
     code_tests = [x[2] for x in code_tests]
 
-    expected_num_code_blocks = len(code_blocks)
+    expected_num_code_blocks = len(expected_code_blocks)
     expected_successful_code_blocks = 2
     expected_num_code_tests = len(code_tests)
     expected_successful_code_tests = sum(expected_test_results)
@@ -1972,14 +1988,14 @@ def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():
     assert len(check.code_tests) == len(code_tests)
     assert check.metadata == {}
     assert str(check)
-    result = check(ResponseData(code_blocks=code_blocks))
+    result = check(ResponseData(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
-    assert result.metadata['num_code_blocks'] == len(code_blocks)
+    assert result.metadata['num_code_blocks'] == len(expected_code_blocks)
     assert result.metadata['num_code_blocks_successful'] == 2
-    assert result.metadata['code_blocks'] == code_blocks
+    assert result.metadata['code_blocks'] == expected_code_blocks
     assert result.metadata['code_block_errors'][0] is None
     assert result.metadata['code_block_errors'][1] is None
     assert result.metadata['code_block_errors'][2] == {'error': 'NameError', 'message': "name 'variable_doesnt_exist' is not defined"}  # noqa
@@ -1998,25 +2014,25 @@ def test__PythonCodeBlockTests__with_code_tests__invalid_test_raises_exception()
     code_tests = ['assert True\nassert True']
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match='Only a single statement is allowed if the value is a string.'):  # noqa
-        check(ResponseData(code_blocks=['1 == 1']))
+        check(ResponseData(response='```\n1 == 1\n```'))
 
     code_tests = ['def test(code_blocks: list[str]) -> bool:\n    return None']
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match=re.escape(f"Test must return a boolean value:\n{code_tests[0]}")):  # noqa
-        check(ResponseData(code_blocks=['1 == 1']))
+        check(ResponseData(response='```\n1 == 1\n```'))
 
     code_tests = ['assert None']
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match=re.escape('Test must return a boolean value:\ndef __code_test__(code_blocks: list[str]) -> bool:\n    return None')):  # noqa
-        check(ResponseData(code_blocks=['1 == 1']))
+        check(ResponseData(response='```\n1 == 1\n```'))
 
     code_tests = ['None']
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match=re.escape('Test must return a boolean value:\ndef __code_test__(code_blocks: list[str]) -> bool:\n    return None')):  # noqa
-        check(ResponseData(code_blocks=['1 == 1']))
+        check(ResponseData(response='```\n1 == 1\n```'))
 
 def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():  # noqa
-    code_blocks = [
+    expected_code_blocks = [
         """
         import time
         my_value_1 = 'test1'
@@ -2030,14 +2046,15 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():  #
         my_value_3 = 'test3'
         """,
     ]
-    code_blocks = [dedent(c).strip() for c in code_blocks]
+    response = _code_blocks_to_response(expected_code_blocks)
+    expected_code_blocks = [dedent(c).strip() for c in expected_code_blocks]
     code_tests = [
         "assert my_value_1 == 'test1'",
         "assert my_value_2 == 'test2'",
         "def test(blocks):\n    time.sleep(1.5)\n    return True",
         "assert my_value_3 == 'test3'",
     ]
-    expected_num_code_blocks = len(code_blocks)
+    expected_num_code_blocks = len(expected_code_blocks)
     expected_successful_code_blocks = 2
     expected_num_code_tests = len(code_tests)
     expected_successful_code_tests = 4
@@ -2059,15 +2076,15 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():  #
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(code_blocks=code_blocks))
+    result = check(ResponseData(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success  # second code block fails
     assert result.success_threshold == threshold
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
-    assert result.metadata['num_code_blocks'] == len(code_blocks)
+    assert result.metadata['num_code_blocks'] == len(expected_code_blocks)
     assert result.metadata['num_code_blocks_successful'] == expected_successful_code_blocks
-    assert result.metadata['code_blocks'] == code_blocks
-    assert len(result.metadata['code_block_errors']) == len(code_blocks)
+    assert result.metadata['code_blocks'] == expected_code_blocks
+    assert len(result.metadata['code_block_errors']) == len(expected_code_blocks)
     assert result.metadata['code_block_errors'][0] is None
     assert result.metadata['code_block_errors'][1] == {'error': 'ValueError', 'message': 'This is a test'}  # noqa
     assert result.metadata['code_block_errors'][2] is None
@@ -2081,7 +2098,7 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():  #
     assert result.metadata['code_test_errors'][3] is None
 
 def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_blocks():  # noqa
-    code_blocks = [
+    expected_code_blocks = [
         """
         import time
         my_value_1 = 'test1'
@@ -2095,14 +2112,15 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
         my_value_3 = 'test3'
         """,
     ]
-    code_blocks = [dedent(c).strip() for c in code_blocks]
+    response = _code_blocks_to_response(expected_code_blocks)
+    expected_code_blocks = [dedent(c).strip() for c in expected_code_blocks]
     code_tests = [
         "assert my_value_1 == 'test1'",  # should still pass
         "assert my_value_2 == 'test2'",  # should now fail since sleep exceeds timeout
         "def test(blocks):\n    time.sleep(0.5)\n    return True",
         "assert my_value_3 == 'test3'",
     ]
-    expected_num_code_blocks = len(code_blocks)
+    expected_num_code_blocks = len(expected_code_blocks)
     expected_successful_code_blocks = 1
     expected_num_code_tests = len(code_tests)
     expected_successful_code_tests = 3
@@ -2124,15 +2142,15 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(code_blocks=code_blocks))
+    result = check(ResponseData(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success  # second code block fails
     assert result.success_threshold == threshold
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
-    assert result.metadata['num_code_blocks'] == len(code_blocks)
+    assert result.metadata['num_code_blocks'] == len(expected_code_blocks)
     assert result.metadata['num_code_blocks_successful'] == expected_successful_code_blocks
-    assert result.metadata['code_blocks'] == code_blocks
-    assert len(result.metadata['code_block_errors']) == len(code_blocks)
+    assert result.metadata['code_blocks'] == expected_code_blocks
+    assert len(result.metadata['code_block_errors']) == len(expected_code_blocks)
     assert result.metadata['code_block_errors'][0] == {'error': 'TimeoutError', 'message': ''}
     assert result.metadata['code_block_errors'][1] == {'error': 'ValueError', 'message': 'This is a test'}  # noqa
     assert result.metadata['code_block_errors'][2] is None
@@ -2146,7 +2164,7 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert result.metadata['code_test_errors'][3] is None
 
 def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_tests():  # noqa
-    code_blocks = [
+    expected_code_blocks = [
         """
         import time
         my_value_1 = 'test1'
@@ -2160,14 +2178,15 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
         my_value_3 = 'test3'
         """,
     ]
-    code_blocks = [dedent(c).strip() for c in code_blocks]
+    response = _code_blocks_to_response(expected_code_blocks)
+    expected_code_blocks = [dedent(c).strip() for c in expected_code_blocks]
     code_tests = [
         "assert my_value_1 == 'test1'",  # should still pass
         "assert my_value_2 == 'test2'",  # should now pass since sleep < timeout
         "def test(blocks):\n    time.sleep(1.5)\n    return True",  # this should now fail
         "assert my_value_3 == 'test3'",
     ]
-    expected_num_code_blocks = len(code_blocks)
+    expected_num_code_blocks = len(expected_code_blocks)
     expected_successful_code_blocks = 2
     expected_num_code_tests = len(code_tests)
     expected_successful_code_tests = 3
@@ -2189,15 +2208,15 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(code_blocks=code_blocks))
+    result = check(ResponseData(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success  # second code block fails
     assert result.success_threshold == threshold
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
-    assert result.metadata['num_code_blocks'] == len(code_blocks)
+    assert result.metadata['num_code_blocks'] == len(expected_code_blocks)
     assert result.metadata['num_code_blocks_successful'] == expected_successful_code_blocks
-    assert result.metadata['code_blocks'] == code_blocks
-    assert len(result.metadata['code_block_errors']) == len(code_blocks)
+    assert result.metadata['code_blocks'] == expected_code_blocks
+    assert len(result.metadata['code_block_errors']) == len(expected_code_blocks)
     assert result.metadata['code_block_errors'][0] is None
     assert result.metadata['code_block_errors'][1] == {'error': 'ValueError', 'message': 'This is a test'}  # noqa
     assert result.metadata['code_block_errors'][2] is None
@@ -2224,7 +2243,7 @@ def test__PythonCodeBlockTests__with_env_namespace():  # noqa
             "assert int(answer['b']) == 50",
         ],
     )
-    result = check(ResponseData(code_blocks=[code]))
+    result = check(ResponseData(response=f"```\n{code}\n```"))
     assert result.success is False
     assert result.value == 0
     assert result.metadata['num_code_blocks'] == 1
@@ -2249,7 +2268,7 @@ def test__PythonCodeBlockTests__with_env_namespace():  # noqa
         ],
         env_namespace=env_namespace,
     )
-    result = check(ResponseData(code_blocks=[code]))
+    result = check(ResponseData(response=f"```\n{code}\n```"))
     assert result.success is True
     assert result.value == 1
     assert result.metadata['num_code_blocks'] == 1
@@ -2397,7 +2416,6 @@ def test__ToolCallsCheck__string_response():  # noqa
     assert result.success is False
     assert result.value == 0
 
-@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__LLMCheck__openai(openai_candidate_template):  # noqa
     """Test that the template for an OpenAI candidate works."""
     template = deepcopy(openai_candidate_template)
@@ -2407,32 +2425,15 @@ def test__LLMCheck__openai(openai_candidate_template):  # noqa
         evaluator=candidate,
     )
     result = check(ResponseData(
-        prompt="What is the secret number?",
+        input=[user_message("What is the secret number?")],
         response="The secret number is 42.",
     ))
     assert isinstance(result, CheckResult)
     assert result.success is None
-    assert '42' in result.value
     assert result.metadata['check_type'] == CheckType.LLM
-    assert result.metadata['check_metadata']['cost'] > 0
-
-    candidate = Candidate.from_dict(template)
-    check = LLMCheck(
-        eval_prompt = "What is the number returned in the question?",
-        evaluator=candidate,
-        success=lambda x: '42' in x,
-    )
-    result = check(ResponseData(
-        prompt="What is the secret number?",
-        response="The secret number is 42.",
-    ))
-    assert isinstance(result, CheckResult)
-    assert result.success is True
     assert '42' in result.value
-    assert result.metadata['check_type'] == CheckType.LLM
-    assert result.metadata['check_metadata']['cost'] > 0
+    assert result.metadata['response_metadata']['total_cost'] > 0
 
-@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__ToxicityCheck__openai(openai_candidate_template):  # noqa
     """Test that the template for an OpenAI candidate works."""
     template = deepcopy(openai_candidate_template)
@@ -2442,7 +2443,7 @@ def test__ToxicityCheck__openai(openai_candidate_template):  # noqa
     assert result.success is False
     assert 'true' in result.value.lower()
     assert result.metadata['check_type'] == CheckType.TOXICITY
-    assert result.metadata['check_metadata']['cost'] > 0
+    assert result.metadata['response_metadata']['total_cost'] > 0
 
     check = ToxicityCheck(evaluator=Candidate.from_dict(template))
     result = check(ResponseData(response="This is great."))
@@ -2450,4 +2451,4 @@ def test__ToxicityCheck__openai(openai_candidate_template):  # noqa
     assert result.success is True
     assert 'false' in result.value.lower()
     assert result.metadata['check_type'] == CheckType.TOXICITY
-    assert result.metadata['check_metadata']['cost'] > 0
+    assert result.metadata['response_metadata']['total_cost'] > 0

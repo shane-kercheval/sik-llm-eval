@@ -1,5 +1,5 @@
 """Unit tests for the filtering module."""
-from llm_eval.candidates import Candidate
+from llm_eval.candidates import Candidate, CandidateResponse
 from llm_eval.eval import Eval
 from llm_eval.filtering import (
     eval_contains_code_block_tests,
@@ -23,7 +23,7 @@ class MockLMM:
     def __call__(self, prompt: str) -> str:
         """Caches prompts for unit tests."""
         self.prompts.append(prompt)
-        return prompt
+        return prompt[-1]['content']
 
 
 @Candidate.register('MOCK_MODEL_FILTERING')
@@ -41,19 +41,9 @@ class MockCandidate(Candidate):
         else:
             self.model = MockLMM()
 
-    def __call__(self, prompt: str) -> str:
-        """Invokes the underlying model with the prompt and returns the response."""
-        return self.model(prompt)
-
-    def set_system_message(self, system_message: str) -> None:
-        """Not needed."""
-
-    def set_message_history(self, messages: list[dict] | list[tuple]) -> None:
-        """Not needed."""
-
-    def clone(self) -> 'MockCandidate':  # noqa
-        return MockCandidate(parameters=self.parameters, metadata=self.metadata)
-
+    def __call__(self, input: str) -> CandidateResponse:  # noqa: A002
+        """Invokes the underlying model with the input and returns the response."""
+        return CandidateResponse(response=self.model(input))
 
 def test_filter_tags(  # noqa: PLR0915
         fake_eval_8f9fbf37: dict,
@@ -143,9 +133,6 @@ def test__expects_code_blocks(
         fake_eval_sum_two_numbers_code_blocks_run: dict,
         fake_eval_no_code_blocks: dict) -> None:
     """Test the xxx_expects_code_blocks functions."""
-    temp = Eval(**fake_eval_8f9fbf37)
-    temp.prompt_sequence[0].checks[0]
-
     assert eval_expects_code_blocks(Eval(**fake_eval_8f9fbf37))
     assert eval_expects_code_blocks(Eval(**fake_eval_subtract_two_numbers))
     assert eval_expects_code_blocks(Eval(**fake_eval_sum_two_numbers))
