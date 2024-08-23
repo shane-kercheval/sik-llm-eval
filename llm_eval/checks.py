@@ -672,7 +672,7 @@ class PythonCodeBlockTests(SerializableCheck):
         metadata (e.g. the code blocks, errors, etc.).
         """
         value = value or ''
-        assert isinstance(value, str), f"Expected value to be a string, got {type(value)}"
+        assert isinstance(value, str), f"Expected value to be a string, got {type(value)!r}"
         env_namespace = self.env_namespace or {}
         code_blocks = extract_code_blocks(value)
         code_block_errors = []
