@@ -952,11 +952,14 @@ class ToolCallsCheck(Check):
                 for key, val in dict(self.function_arguments).items():
                     if key in tool_call_function_arguments:
                         tool_call_value = tool_call_function_arguments.pop(key)
-                        if self.allow_regex:
+                        # since re.search does not allow non-string types
+                        # first handle bools/ints/floats that are equal
+                        # or check if none
+                        if tool_call_value == val or tool_call_value is None and val is None:
+                            num_arguments_successful += 1
+                        elif self.allow_regex and isinstance(val, str):
                             if re.search(val, tool_call_value):
                                 num_arguments_successful += 1
-                        elif tool_call_value == val:
-                            num_arguments_successful += 1
                 if self.penalize_extraneous_arguments:
                     num_arguments_successful -= len(tool_call_function_arguments)
                     num_arguments_successful = max(num_arguments_successful, 0)
