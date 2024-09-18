@@ -2331,11 +2331,23 @@ def test__ToolCallsCheck__multiple_functions():  # noqa
 def test__ToolCallsCheck__allow_regex():  # noqa
     check = ToolCallsCheck(
         function_name='get_current_weather',
-        function_arguments={'location': 'Boston', 'unit': 'fahrenheit', 'temperature': 70, 'raining': False, 'uv_index': None},
+        function_arguments={
+            'location': 'Boston',
+            'unit': 'fahrenheit',
+            'temperature': 70,
+            'raining': False,
+            'uv_index': None
+        },
         allow_regex=True,
     )
     result = check(ResponseData(response=[{
-        'arguments': {'location':'Boston, MA', 'unit':'fahrenheit', 'temperature': 70, 'raining': False, 'uv_index': None},
+        'arguments': {
+            'location':'Boston, MA',
+            'unit':'fahrenheit',
+            'temperature': 70,
+            'raining': False,
+            'uv_index': None
+        },
         'name': 'get_current_weather',
     }]))
     assert isinstance(result, CheckResult)
@@ -2343,7 +2355,11 @@ def test__ToolCallsCheck__allow_regex():  # noqa
     assert result.value == 1
     assert result.metadata['function_name'] == 'get_current_weather'
     assert result.metadata['function_arguments'] == {
-        'location': 'Boston', 'unit': 'fahrenheit', 'temperature': 70, 'raining': False, 'uv_index': None,
+        'location': 'Boston',
+        'unit': 'fahrenheit',
+        'temperature': 70,
+        'raining': False,
+        'uv_index': None,
     }
     assert result.metadata['allow_regex'] is True
     assert result.metadata['check_type'] == CheckType.TOOL_CALL
@@ -2389,11 +2405,23 @@ def test__ToolCallsCheck__incorrect_function_name():  # noqa
 def test__ToolCallsCheck__allow_regex_partial_correct():  # noqa
     check = ToolCallsCheck(
         function_name='get_current_weather',
-        function_arguments={'location': 'Boston', 'unit': 'fahrenheit', 'temperature': 70, 'raining': False, 'uv_index': None},
+        function_arguments={
+            'location': 'Boston',
+            'unit': 'fahrenheit',
+            'temperature': 70,
+            'raining': False,
+            'uv_index': None
+        },
         allow_regex=True,
     )
     result = check(ResponseData(response=[{
-        'arguments': {'location':'Boston, MA', 'unit':'fahrenheit', 'temperature': 70, 'raining': True, 'uv_index': 0},
+        'arguments': {
+            'location':'Boston, MA',
+            'unit':'fahrenheit',
+            'temperature': 70,
+            'raining': True,
+            'uv_index': 0
+        },
         'name': 'get_current_weather',
     }]))
     assert isinstance(result, CheckResult)
@@ -2401,7 +2429,11 @@ def test__ToolCallsCheck__allow_regex_partial_correct():  # noqa
     assert result.value == 0.6
     assert result.metadata['function_name'] == 'get_current_weather'
     assert result.metadata['function_arguments'] == {
-        'location': 'Boston', 'unit': 'fahrenheit', 'temperature': 70, 'raining': False, 'uv_index': None,
+        'location': 'Boston',
+        'unit': 'fahrenheit',
+        'temperature': 70,
+        'raining': False,
+        'uv_index': None,
     }
     assert result.metadata['allow_regex'] is True
     assert result.metadata['check_type'] == CheckType.TOOL_CALL
