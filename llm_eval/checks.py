@@ -955,9 +955,6 @@ class ToolCallsCheck(Check):
                         # since re.search does not allow non-string types
                         # first handle bools/ints/floats that are equal
                         # or check if none
-                        # since re.search does not allow non-string types
-                        # first handle bools/ints/floats that are equal
-                        # or check if none
                         if (
                             (tool_call_value == val)
                             or (tool_call_value is None and val is None)
