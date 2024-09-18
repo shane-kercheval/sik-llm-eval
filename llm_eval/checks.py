@@ -965,7 +965,6 @@ class ToolCallsCheck(Check):
                             )
                         ):
                             num_arguments_successful += 1
-                            num_arguments_successful += 1
                 if self.penalize_extraneous_arguments:
                     num_arguments_successful -= len(tool_call_function_arguments)
                     num_arguments_successful = max(num_arguments_successful, 0)
