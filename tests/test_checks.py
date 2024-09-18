@@ -2336,7 +2336,7 @@ def test__ToolCallsCheck__allow_regex():  # noqa
             'unit': 'fahrenheit',
             'temperature': 70,
             'raining': False,
-            'uv_index': None
+            'uv_index': None,
         },
         allow_regex=True,
     )
@@ -2346,7 +2346,7 @@ def test__ToolCallsCheck__allow_regex():  # noqa
             'unit':'fahrenheit',
             'temperature': 70,
             'raining': False,
-            'uv_index': None
+            'uv_index': None,
         },
         'name': 'get_current_weather',
     }]))
@@ -2410,7 +2410,7 @@ def test__ToolCallsCheck__allow_regex_partial_correct():  # noqa
             'unit': 'fahrenheit',
             'temperature': 70,
             'raining': False,
-            'uv_index': None
+            'uv_index': None,
         },
         allow_regex=True,
     )
@@ -2420,7 +2420,7 @@ def test__ToolCallsCheck__allow_regex_partial_correct():  # noqa
             'unit':'fahrenheit',
             'temperature': 70,
             'raining': True,
-            'uv_index': 0
+            'uv_index': 0,
         },
         'name': 'get_current_weather',
     }]))
