@@ -6,6 +6,7 @@ from typing import Callable, Literal
 import json
 
 from mistralai import Mistral
+from mistralai.models.chatcompletionresponse import ChatCompletionResponse
 from pydantic import BaseModel, SerializeAsAny
 
 # https://mistral.ai/technology/#pricing
@@ -110,8 +111,8 @@ class MistralAICompletionWrapperBase(ABC):
 
     @staticmethod
     def _parse_response(
-        response,
-    ) -> MistralAIChatResponse | MistralAICompletionResponse:  # noqa: ANN001
+        response: ChatCompletionResponse,
+    ) -> MistralAIChatResponse | MistralAICompletionResponse:
         # chat.completion is the latest response type
         # 'chat.completion.chunk' indicates streaming
         if hasattr(response, "data"):
@@ -119,8 +120,8 @@ class MistralAICompletionWrapperBase(ABC):
 
         if len(response.choices) != 1:
             raise ValueError(
-                f"Currently only handling one choice, received {len(response.choices)}"
-            )  # noqa: E501
+                f"Currently only handling one choice, received {len(response.choices)}",
+            )
 
         is_function_call = (
             response.object == "chat.completion"
@@ -173,7 +174,7 @@ class MistralAICompletionWrapperBase(ABC):
             or is_legacy_streaming
             or is_non_streaming
             or is_legacy_non_streaming
-        ), f"Unexpected response object: {response.object}"  # noqa: E501
+        ), f"Unexpected response object: {response.object}"
 
         if is_streaming or is_legacy_streaming:
             return MistralAICompletionResponse(
@@ -235,7 +236,7 @@ class MistralAICompletion(MistralAICompletionWrapperBase):
                     created=chunk.data.created,
                     content="",
                     finish_reason=chunk.data.choices[0].finish_reason,  # last finish reason
-                )
+                ),
             )
             end_time = time.time()
             if hasattr(chunk, "data"):
@@ -340,9 +341,7 @@ class MistralAITools(MistralAICompletionWrapperBase):
             model: str | None = None,
             **model_kwargs: dict,
         ) -> MistralAIToolsResponse | MistralAICompletionResponse:
-        """
-        For example, MistralAICompletionResponse can be returned if `auto` and unrelated question.
-        """
+        """Call the MistralAI Tools API and return the response."""
         model = model or self.model
         model_parameters = model_kwargs or self.model_parameters
         start_time = time.time()

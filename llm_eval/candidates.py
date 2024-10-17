@@ -27,25 +27,34 @@ can be serialized into a dictionary and the information can be saved in the Eval
 
 import os
 import yaml
+import contextlib
 from inspect import iscoroutinefunction
 from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Any, Callable, List, Literal, Type, Union
+from typing import Any, Callable, List, Literal, Type, Union, TYPE_CHECKING
 from pydantic import BaseModel
 from openai import OpenAI
 from llm_eval.openai import (
     MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
     OpenAICompletion,
-    OpenAICompletionResponse,
     OpenAIToolsResponse,
+    OpenAICompletionResponse,
 )
 from llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
     Registry,
 )
+
+if TYPE_CHECKING:
+    with contextlib.suppress(ImportError):
+        from llm_eval.mistralai import (
+            MistralAICompletion,
+            MistralAICompletionResponse,
+            MistralAIToolsResponse,
+        )
 
 
 @staticmethod
@@ -93,16 +102,16 @@ class Candidate(DictionaryEqualsMixin, ABC):
     registry = Registry()
 
     def __init__(
-        self, metadata: dict | None = None, parameters: dict | None = None
-    ) -> None:  # noqa: D417
+        self,
+        metadata: dict | None = None,
+        parameters: dict | None = None,
+    ) -> None:
         """
         Initialize a Candidate object.
 
         Args:
-            metadata:
-                A dictionary of metadata about the Candidate.
-            parameters:
-                A dictionary of parameters for the Candidate (most likely, the model parameters
+            metadata: A dictionary of metadata about the Candidate.
+            parameters: A dictionary of parameters for the Candidate (most likely, the model parameters
                 passed to the LLM).
         """  # noqa
         self.metadata = deepcopy(metadata) or {}
@@ -118,7 +127,8 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
         def decorator(subclass: Type[Candidate]) -> Type[Candidate]:
             assert issubclass(
-                subclass, Candidate
+                subclass,
+                Candidate,
             ), f"Candidate '{candidate_type}' ({subclass.__name__}) must extend Candidate"
             cls.registry.register(type_name=candidate_type, item=subclass)
             return subclass
@@ -127,8 +137,9 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
     @classmethod
     def from_dict(
-        cls, data: dict
-    ) -> Union["Candidate", List["Candidate"]]:  # noqa: ANN102
+        cls: Type["Candidate"],
+        data: dict,
+    ) -> Union["Candidate", List["Candidate"]]:
         """
         Creates a Candidate object.
 
@@ -164,8 +175,9 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
     @classmethod
     def from_yaml(
-        cls, path: str
-    ) -> Union["Candidate", List["Candidate"]]:  # noqa: ANN102
+        cls: Type["Candidate"],
+        path: str,
+    ) -> Union["Candidate", List["Candidate"]]:
         """
         Creates a Candidate object from a YAML file. This method requires the Candidate subclass to
         be registered via `Candidate.register(...)` before calling this method. It also requires
@@ -189,7 +201,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
             metadata={self.metadata},
             {parameters}
         )
-        """
+        """,
         ).strip()
 
 
@@ -226,7 +238,7 @@ class ServiceCandidate(Candidate, ABC):
 
     @property
     @abstractmethod
-    def client(self):
+    def client_callable(self) -> Any:  # noqa: ANN401
         """Return the client for the service."""
 
     @property
@@ -238,16 +250,12 @@ class ServiceCandidate(Candidate, ABC):
         """
 
     @abstractmethod
-    def _invoke_client(self, input: Any) -> Any:
-        """
-        Invoke the client with the input and return the response.
-        """
+    def _invoke_client_callable(self, input: list[dict[str, str]]) -> Any:  # noqa: ANN401, A002
+        """Invoke the client with the input and return the response."""
 
     @abstractmethod
-    def _parse_response(self, response):
-        """
-        Get the desired attribute from the response object.
-        """
+    def _parse_response(self, response: Any) -> str | dict:  # noqa: ANN401
+        """Get the desired attribute from the response object."""
 
     def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
@@ -267,7 +275,9 @@ class ServiceCandidate(Candidate, ABC):
             total_cost = None
 
         parsed_response = self._parse_response(response)
-        completion_characters = len(parsed_response) if isinstance(parsed_response, str) else None
+        completion_characters = (
+            len(parsed_response) if isinstance(parsed_response, str) else None
+        )
         return CandidateResponse(
             response=parsed_response,
             metadata={
@@ -312,7 +322,7 @@ class OpenAICandidate(ServiceCandidate):
         """
         return OPENAI_MODEL_COST_PER_TOKEN.get(self.model)
 
-    def client(self) -> OpenAICompletion:
+    def client_callable(self) -> OpenAICompletion:
         """Return the client for the OpenAI service."""
         return OpenAICompletion(
             client=OpenAI(base_url=self.endpoint_url),
@@ -320,11 +330,11 @@ class OpenAICandidate(ServiceCandidate):
             **self.parameters or {},
         )
 
-    def _invoke_client(self, input: Any) -> Any:
-        """
-        Invoke the client with the input and return the response.
-        """
-        return self.client(input)
+    def _invoke_client_callable(
+        self, input: list[dict[str, str]],  # noqa: A002
+    ) -> OpenAICompletionResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(input)
 
 
 @Candidate.register(CandidateType.OPENAI_TOOLS)
@@ -375,18 +385,22 @@ class OpenAIToolsCandidate(OpenAICandidate):
         self.tools = tools
         self.tool_choice = tool_choice
 
-    def _invoke_client(self, input: Any) -> Any:
-        """
-        Invoke the client with the input and return the response.
-        """
-        return self.client(
-            messages=input, tools=self.tools, tool_choice=self.tool_choice
+    def _invoke_client_callable(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> OpenAIToolsResponse | OpenAICompletionResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(
+            messages=input,
+            tools=self.tools,
+            tool_choice=self.tool_choice,
         )
 
-    def _parse_response(self, response):
-        """
-        Get the desired attribute from the response object.
-        """
+    def _parse_response(
+        self,
+        response: OpenAIToolsResponse | OpenAICompletionResponse,
+    ) -> str | dict:
+        """Get the desired attribute from the response object."""
         return (
             response.tools
             if isinstance(response, OpenAIToolsResponse)
@@ -411,7 +425,7 @@ class MistralAICandidate(ServiceCandidate):
     """
 
     @property
-    def client(self):
+    def client_callable(self) -> "MistralAICompletion":
         """Return the client for the OpenAI service."""
         from mistralai import Mistral
         from llm_eval.mistralai import MistralAICompletion
@@ -425,18 +439,23 @@ class MistralAICandidate(ServiceCandidate):
         )
 
     @property
-    def model_cost_per_token(self):
+    def model_cost_per_token(self) -> float | None:
+        """
+        Return the cost per token for the model. This is used to calculate the cost of the
+        completion.
+        """
         from llm_eval.mistralai import (
             MODEL_COST_PER_TOKEN as MISTRAL_MODEL_COST_PER_TOKEN,
         )
 
         return MISTRAL_MODEL_COST_PER_TOKEN.get(self.model)
 
-    def _invoke_client(self, input: Any) -> Any:
-        """
-        Invoke the client with the input and return the response.
-        """
-        return self.client(messages=input)
+    def _invoke_client(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> "MistralAICompletionResponse" | "MistralAIToolsResponse":
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(messages=input)
 
 
 @Candidate.register(CandidateType.MISTRALAI_TOOLS)
@@ -475,7 +494,8 @@ class MistralAIToolsCandidate(MistralAICandidate):
                 endpoint.
             metadata:
                 A dictionary of metadata about the Candidate.
-            parameters:
+
+        Parameters
                 A dictionary of model-specific parameters (e.g. `temperature`).
         """
         super().__init__(
@@ -487,19 +507,24 @@ class MistralAIToolsCandidate(MistralAICandidate):
         self.tools = tools
         self.tool_choice = tool_choice
 
-    def _invoke_client(self, input: Any) -> Any:
-        """
-        Invoke the client with the input and return the response.
-        """
-        return self.client(
-            messages=input, tools=self.tools, tool_choice=self.tool_choice
+    def _invoke_client(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> "MistralAICompletionResponse" | "MistralAIToolsResponse":
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(
+            messages=input,
+            tools=self.tools,
+            tool_choice=self.tool_choice,
         )
 
-    def _parse_response(self, response):
-        """
-        Get the desired attribute from the response object.
-        """
+    def _parse_response(
+        self,
+        response: "MistralAICompletionResponse" | "MistralAIToolsResponse",
+    ) -> str | dict:
+        """Get the desired attribute from the response object."""
         from llm_eval.mistralai import MistralAIToolsResponse
+
         return (
             response.tools
             if isinstance(response, MistralAIToolsResponse)
