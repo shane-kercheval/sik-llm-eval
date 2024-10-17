@@ -501,7 +501,7 @@ def test_OpenAITools(function_weather: Function, function_stocks: Function):  # 
     assert isinstance(response, OpenAIToolsResponse)
     assert 'gpt-4o-mini' in response.model
     assert response.role == 'assistant'
-    assert response.finish_reason == 'stop'
+    assert response.finish_reason == 'tool_calls'
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None

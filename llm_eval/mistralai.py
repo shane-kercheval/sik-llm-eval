@@ -2,7 +2,7 @@
 
 from abc import ABC
 import time
-from typing import Callable
+from typing import Callable, Literal
 import json
 
 from mistralai import Mistral
@@ -114,6 +114,9 @@ class MistralAICompletionWrapperBase(ABC):
     ) -> MistralAIChatResponse | MistralAICompletionResponse:  # noqa: ANN001
         # chat.completion is the latest response type
         # 'chat.completion.chunk' indicates streaming
+        if hasattr(response, "data"):
+            response = response.data
+
         if len(response.choices) != 1:
             raise ValueError(
                 f"Currently only handling one choice, received {len(response.choices)}"
@@ -220,25 +223,27 @@ class MistralAICompletion(MistralAICompletionWrapperBase):
                 **model_parameters,
             )
             for chunk in response:
-                if chunk.choices[0].delta.content:
+                if chunk.data.choices[0].delta.content:
                     chunk_parsed = MistralAICompletion._parse_response(chunk)
                     stream_callback(chunk_parsed)
                     chunks.append(chunk_parsed)
             # send a final chunk with no content to indicate the end of the stream
             stream_callback(
                 MistralAICompletionResponse(
-                    object_name=chunk.object,
-                    model=chunk.model,
-                    created=chunk.created,
+                    object_name=chunk.data.object,
+                    model=chunk.data.model,
+                    created=chunk.data.created,
                     content="",
-                    finish_reason=chunk.choices[0].finish_reason,  # last finish reason
+                    finish_reason=chunk.data.choices[0].finish_reason,  # last finish reason
                 )
             )
             end_time = time.time()
+            if hasattr(chunk, "data"):
+                chunk = chunk.data
             return MistralAIChatResponse(
                 object_name="chat.stream",
-                model=chunks[0].model,
-                created=chunks[-1].created,
+                model=chunk.model,
+                created=chunk.created,
                 role="assistant",
                 duration_seconds=end_time - start_time,
                 content="".join([chunk.content for chunk in chunks]),
@@ -249,6 +254,103 @@ class MistralAICompletion(MistralAICompletionWrapperBase):
             model=model,
             messages=messages,
             stream=False,
+            **model_parameters,
+        )
+        end_time = time.time()
+        response = MistralAICompletion._parse_response(response)
+        response.duration_seconds = end_time - start_time
+        return response
+
+
+class AsyncMistralAICompletion(MistralAICompletionWrapperBase):
+    """
+    Async wrapper for MistralAI API which provides a simple interface for calling the
+    chat.completions.create method and parsing the response.
+    """
+
+    async def __call__(
+            self,
+            messages: list[str],
+            model: str | None = None,
+            stream_callback: Callable | None = None,
+            **model_kwargs: dict,
+            ) -> MistralAIChatResponse | MistralAICompletionResponse:
+        """Async __call__."""
+        model = model or self.model
+        stream_callback = stream_callback or self.stream_callback
+        model_parameters = model_kwargs or self.model_parameters
+        if stream_callback:
+            chunks = []
+            start_time = time.time()
+            response = await self.client.chat.complete_async(
+                model=model,
+                messages=messages,
+                stream=True,
+                **model_parameters,
+            )
+            async for chunk in response:
+                if chunk.data.choices[0].delta.content:
+                    chunk_parsed = MistralAICompletion._parse_response(chunk)
+                    await stream_callback(chunk_parsed)
+                    chunks.append(chunk_parsed)
+            # send a final chunk with no content to indicate the end of the stream
+            await stream_callback(MistralAICompletionResponse(
+                object_name=chunk.data.object,
+                model=chunk.model,
+                created=chunk.created,
+                content="",
+                finish_reason=chunk.data.choices[0].finish_reason,  # last finish reason
+            ))
+            end_time = time.time()
+            if hasattr(chunk, "data"):
+                chunk = chunk.data
+            return MistralAIChatResponse(
+                object_name='chat.completion',
+                model=chunk.model,
+                created=chunk.created,
+                role='assistant',
+                duration_seconds=end_time - start_time,
+                content="".join([chunk.content for chunk in chunks]),
+                finish_reason=chunk.choices[0].finish_reason,
+            )
+        start_time = time.time()
+        response = await self.client.chat.complete_async(
+            model=model,
+            messages=messages,
+            stream=False,
+            **model_parameters,
+        )
+        end_time = time.time()
+        response = MistralAICompletion._parse_response(response)
+        response.duration_seconds = end_time - start_time
+        return response
+
+
+class MistralAITools(MistralAICompletionWrapperBase):
+    """
+    Wrapper for MistralAI Tools API which provides a simple interface for calling the
+    chat.completions.create method and parsing the response.
+    """
+
+    def __call__(
+            self,
+            messages: list[str],
+            tools: list[dict],
+            tool_choice: Literal['none', 'auto', 'any'] | dict[str] = 'any',
+            model: str | None = None,
+            **model_kwargs: dict,
+        ) -> MistralAIToolsResponse | MistralAICompletionResponse:
+        """
+        For example, MistralAICompletionResponse can be returned if `auto` and unrelated question.
+        """
+        model = model or self.model
+        model_parameters = model_kwargs or self.model_parameters
+        start_time = time.time()
+        response = self.client.chat.complete(
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
             **model_parameters,
         )
         end_time = time.time()
