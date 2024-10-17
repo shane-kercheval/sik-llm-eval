@@ -190,8 +190,8 @@ def test_MistralAITools(function_weather: Function, function_stocks: Function): 
         {
             "role": "user",
             "content": "What's the weather like in Boston today in degrees F?",
-        }
-    ]  # noqa: E501
+        },
+    ]
     response = model(
         messages=messages,
         tools=tools,
@@ -215,9 +215,10 @@ def test_MistralAITools(function_weather: Function, function_stocks: Function): 
     }
 
 
-def test_MistralAITools__unrelated_prompt__auto(
-    function_weather: Function, function_stocks: Function
-):  # noqa
+def test_MistralAITools__unrelated_prompt__auto(  # noqa
+    function_weather: Function,
+    function_stocks: Function,
+) -> None:
     """
     When the prompt is unrelated to any tool and the tool_choice is 'auto', then we will get
     a MistralAICompletionResponse object rather than a MistralAIToolResponse object.
@@ -248,9 +249,10 @@ def test_MistralAITools__unrelated_prompt__auto(
     assert response.content
 
 
-def test_MistralAITools__unrelated_prompt__required(
-    function_weather: Function, function_stocks: Function
-):  # noqa
+def test_MistralAITools__unrelated_prompt__required(  # noqa
+    function_weather: Function,
+    function_stocks: Function,
+) -> None:
     """
     When the prompt is unrelated to any tool and the tool_choice is 'required', then we will get
     a MistralAIToolResponse object, because `required` means that a tool must be returned.
@@ -271,9 +273,10 @@ def test_MistralAITools__unrelated_prompt__required(
     assert isinstance(response, MistralAIToolsResponse)
 
 
-def test_MistralAITools__unrelated_prompt__none(
-    function_weather: Function, function_stocks: Function
-):  # noqa
+def test_MistralAITools__unrelated_prompt__none(  # noqa
+    function_weather: Function,
+    function_stocks: Function,
+):
     tools = [
         function_weather.to_dict(),
         function_stocks.to_dict(),
