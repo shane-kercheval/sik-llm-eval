@@ -24,6 +24,7 @@ Candidates can also be passed to the EvalHarness (or Eval object) directory as a
 can be serialized into a dictionary and the information can be saved in the EvalResult object
 (evals.py).
 """
+from __future__ import annotations
 
 import os
 import yaml
@@ -253,13 +254,13 @@ class ServiceCandidate(Candidate, ABC):
     def _invoke_client_callable(self, input: list[dict[str, str]]) -> Any:  # noqa: ANN401, A002
         """Invoke the client with the input and return the response."""
 
-    @abstractmethod
     def _parse_response(self, response: Any) -> str | dict:  # noqa: ANN401
         """Get the desired attribute from the response object."""
+        return response.content
 
     def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
-        response = self._invoke_client(input)
+        response = self._invoke_client_callable(input)
         prompt_tokens = response.usage.get("prompt_tokens")
         completion_tokens = response.usage.get("completion_tokens")
         total_tokens = response.usage.get("total_tokens")
@@ -315,6 +316,7 @@ class OpenAICandidate(ServiceCandidate):
     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
+    @property
     def model_cost_per_token(self) -> float | None:
         """
         Return the cost per token for the model. This is used to calculate the cost of the
@@ -322,6 +324,7 @@ class OpenAICandidate(ServiceCandidate):
         """
         return OPENAI_MODEL_COST_PER_TOKEN.get(self.model)
 
+    @property
     def client_callable(self) -> OpenAICompletion:
         """Return the client for the OpenAI service."""
         return OpenAICompletion(
@@ -450,7 +453,7 @@ class MistralAICandidate(ServiceCandidate):
 
         return MISTRAL_MODEL_COST_PER_TOKEN.get(self.model)
 
-    def _invoke_client(
+    def _invoke_client_callable(
         self,
         input: list[dict[str, str]],  # noqa: A002
     ) -> "MistralAICompletionResponse" | "MistralAIToolsResponse":
@@ -507,7 +510,7 @@ class MistralAIToolsCandidate(MistralAICandidate):
         self.tools = tools
         self.tool_choice = tool_choice
 
-    def _invoke_client(
+    def _invoke_client_callable(
         self,
         input: list[dict[str, str]],  # noqa: A002
     ) -> "MistralAICompletionResponse" | "MistralAIToolsResponse":
