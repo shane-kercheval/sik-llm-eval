@@ -1,0 +1,7 @@
+metadata:
+  name: MistralAI ministral-8b-latest
+candidate_type: MISTRALAI
+model: ministral-8b-latest
+parameters:
+  temperature: 0.01
+  max_tokens: 4096
