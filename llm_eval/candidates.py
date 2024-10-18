@@ -34,7 +34,7 @@ from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Any, Callable, List, Literal, Type, Union, TYPE_CHECKING
+from typing import Any, Callable, Literal, TYPE_CHECKING
 from pydantic import BaseModel
 from openai import OpenAI
 from llm_eval.openai import (
@@ -59,7 +59,7 @@ if TYPE_CHECKING:
 
 
 @staticmethod
-def is_async_candidate(candidate: Callable | "Candidate") -> bool:
+def is_async_candidate(candidate: Callable | Candidate) -> bool:
     """Tests if the Candidate object or callable is an async function."""
     if iscoroutinefunction(candidate):
         return True
@@ -126,7 +126,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
     def register(cls, candidate_type: str | Enum):  # noqa: ANN102
         """Register a subclass of Candidate."""
 
-        def decorator(subclass: Type[Candidate]) -> Type[Candidate]:
+        def decorator(subclass: type[Candidate]) -> type[Candidate]:
             assert issubclass(
                 subclass,
                 Candidate,
@@ -138,9 +138,9 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
     @classmethod
     def from_dict(
-        cls: Type["Candidate"],
+        cls: type[Candidate],
         data: dict,
-    ) -> Union["Candidate", List["Candidate"]]:
+    ) -> Candidate | list[Candidate]:
         """
         Creates a Candidate object.
 
@@ -176,9 +176,9 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
     @classmethod
     def from_yaml(
-        cls: Type["Candidate"],
+        cls: type[Candidate],
         path: str,
-    ) -> Union["Candidate", List["Candidate"]]:
+    ) -> Candidate | list[Candidate]:
         """
         Creates a Candidate object from a YAML file. This method requires the Candidate subclass to
         be registered via `Candidate.register(...)` before calling this method. It also requires
@@ -428,7 +428,7 @@ class MistralAICandidate(ServiceCandidate):
     """
 
     @property
-    def client_callable(self) -> "MistralAICompletion":
+    def client_callable(self) -> MistralAICompletion:
         """Return the client for the OpenAI service."""
         from mistralai import Mistral
         from llm_eval.mistralai import MistralAICompletion
@@ -456,7 +456,7 @@ class MistralAICandidate(ServiceCandidate):
     def _invoke_client_callable(
         self,
         input: list[dict[str, str]],  # noqa: A002
-    ) -> "MistralAICompletionResponse" | "MistralAIToolsResponse":
+    ) -> MistralAICompletionResponse | MistralAIToolsResponse:
         """Invoke the client with the input and return the response."""
         return self.client_callable(messages=input)
 
@@ -513,7 +513,7 @@ class MistralAIToolsCandidate(MistralAICandidate):
     def _invoke_client_callable(
         self,
         input: list[dict[str, str]],  # noqa: A002
-    ) -> "MistralAICompletionResponse" | "MistralAIToolsResponse":
+    ) -> MistralAICompletionResponse | MistralAIToolsResponse:
         """Invoke the client with the input and return the response."""
         return self.client_callable(
             messages=input,
@@ -523,7 +523,7 @@ class MistralAIToolsCandidate(MistralAICandidate):
 
     def _parse_response(
         self,
-        response: "MistralAICompletionResponse" | "MistralAIToolsResponse",
+        response: MistralAICompletionResponse | MistralAIToolsResponse,
     ) -> str | dict:
         """Get the desired attribute from the response object."""
         from llm_eval.mistralai import MistralAIToolsResponse
