@@ -10,6 +10,7 @@ dependencies:
   - joblib=1.4
   - markdown=3.4
   - markdownify=0.11
+  - mistralai=1.1
   - numpy=1.26
   - openai=1.25
   - pandas=2.2

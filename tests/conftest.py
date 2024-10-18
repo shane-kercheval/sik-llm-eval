@@ -502,7 +502,7 @@ class AsyncMockOpenAI:
 
                 response = self.fake_responses[self.response_index]
                 self.response_index += 1
-                model = kwargs.get('model', None)
+                model = kwargs.get('model')
 
                 if stream:
                     if self.legacy:

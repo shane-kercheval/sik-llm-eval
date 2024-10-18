@@ -24,21 +24,24 @@ Candidates can also be passed to the EvalHarness (or Eval object) directory as a
 can be serialized into a dictionary and the information can be saved in the EvalResult object
 (evals.py).
 """
+from __future__ import annotations
+
+import os
 import yaml
+import contextlib
 from inspect import iscoroutinefunction
 from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Any, Callable, List, Literal, Type, Union
+from typing import Any, Callable, Literal, TYPE_CHECKING
 from pydantic import BaseModel
 from openai import OpenAI
 from llm_eval.openai import (
-    MODEL_COST_PER_TOKEN,
-    OpenAIChatResponse,
+    MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
     OpenAICompletion,
-    OpenAICompletionResponse,
     OpenAIToolsResponse,
+    OpenAICompletionResponse,
 )
 from llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
@@ -46,12 +49,21 @@ from llm_eval.internal_utilities import (
     Registry,
 )
 
+if TYPE_CHECKING:
+    with contextlib.suppress(ImportError):
+        from llm_eval.mistralai import (
+            MistralAICompletion,
+            MistralAICompletionResponse,
+            MistralAIToolsResponse,
+        )
+
+
 @staticmethod
-def is_async_candidate(candidate: Callable | 'Candidate') -> bool:
+def is_async_candidate(candidate: Callable | Candidate) -> bool:
     """Tests if the Candidate object or callable is an async function."""
     if iscoroutinefunction(candidate):
         return True
-    if hasattr(candidate, '__call__'):
+    if hasattr(candidate, "__call__"):
         return iscoroutinefunction(candidate.__call__)
     return False
 
@@ -61,6 +73,8 @@ class CandidateType(EnumMixin, Enum):
 
     OPENAI = auto()
     OPENAI_TOOLS = auto()
+    MISTRALAI = auto()
+    MISTRALAI_TOOLS = auto()
 
 
 class CandidateResponse(BaseModel):
@@ -88,15 +102,17 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
     registry = Registry()
 
-    def __init__(self, metadata: dict | None = None, parameters: dict | None = None) -> None:  # noqa: D417
+    def __init__(
+        self,
+        metadata: dict | None = None,
+        parameters: dict | None = None,
+    ) -> None:
         """
         Initialize a Candidate object.
 
         Args:
-            metadata:
-                A dictionary of metadata about the Candidate.
-            parameters:
-                A dictionary of parameters for the Candidate (most likely, the model parameters
+            metadata: A dictionary of metadata about the Candidate.
+            parameters: A dictionary of parameters for the Candidate (most likely, the model parameters
                 passed to the LLM).
         """  # noqa
         self.metadata = deepcopy(metadata) or {}
@@ -109,15 +125,22 @@ class Candidate(DictionaryEqualsMixin, ABC):
     @classmethod
     def register(cls, candidate_type: str | Enum):  # noqa: ANN102
         """Register a subclass of Candidate."""
-        def decorator(subclass: Type[Candidate]) -> Type[Candidate]:
-            assert issubclass(subclass, Candidate), \
-                f"Candidate '{candidate_type}' ({subclass.__name__}) must extend Candidate"
+
+        def decorator(subclass: type[Candidate]) -> type[Candidate]:
+            assert issubclass(
+                subclass,
+                Candidate,
+            ), f"Candidate '{candidate_type}' ({subclass.__name__}) must extend Candidate"
             cls.registry.register(type_name=candidate_type, item=subclass)
             return subclass
+
         return decorator
 
     @classmethod
-    def from_dict(cls, data: dict) -> Union['Candidate', List['Candidate']]:  # noqa: ANN102
+    def from_dict(
+        cls: type[Candidate],
+        data: dict,
+    ) -> Candidate | list[Candidate]:
         """
         Creates a Candidate object.
 
@@ -126,7 +149,7 @@ class Candidate(DictionaryEqualsMixin, ABC):
         `candidate_type` field that matches the type name of the registered Candidate subclass.
         """
         data = deepcopy(data)
-        candidate_type = data.pop('candidate_type', '')
+        candidate_type = data.pop("candidate_type", "")
         if candidate_type in cls.registry:
             return cls.registry.create_instance(type_name=candidate_type, **data)
         raise ValueError(f"Unknown type {candidate_type}")
@@ -136,23 +159,26 @@ class Candidate(DictionaryEqualsMixin, ABC):
         # value = self.model_dump(exclude_defaults=True, exclude_none=True)
         value = {}
         if self.metadata:
-            value['metadata'] = deepcopy(self.metadata)
+            value["metadata"] = deepcopy(self.metadata)
         if self.parameters:
-            value['parameters'] = deepcopy(self.parameters)
+            value["parameters"] = deepcopy(self.parameters)
         if self.candidate_type:
-            value['candidate_type'] = self.candidate_type
+            value["candidate_type"] = self.candidate_type
         return value
 
     @property
     def candidate_type(self) -> str | None:
         """The type of Candidate."""
         # check that self.__class__ has _type_name attribute
-        if hasattr(self.__class__, '_type_name'):
+        if hasattr(self.__class__, "_type_name"):
             return self.__class__._type_name.upper()
         return self.__class__.__name__
 
     @classmethod
-    def from_yaml(cls, path: str) -> Union['Candidate', List['Candidate']]:  # noqa: ANN102
+    def from_yaml(
+        cls: type[Candidate],
+        path: str,
+    ) -> Candidate | list[Candidate]:
         """
         Creates a Candidate object from a YAML file. This method requires the Candidate subclass to
         be registered via `Candidate.register(...)` before calling this method. It also requires
@@ -165,38 +191,42 @@ class Candidate(DictionaryEqualsMixin, ABC):
 
     def __str__(self) -> str:
         """Returns a string representation of the Candidate."""
-        parameters = '' if not self.parameters else f'\n            parameters={self.parameters},'
-        return dedent(f"""
+        parameters = (
+            ""
+            if not self.parameters
+            else f"\n            parameters={self.parameters},"
+        )
+        return dedent(
+            f"""
         {self.__class__.__name__}(
             metadata={self.metadata},
             {parameters}
         )
-        """).strip()
+        """,
+        ).strip()
 
 
-@Candidate.register(CandidateType.OPENAI)
-class OpenAICandidate(Candidate):
+class ServiceCandidate(Candidate, ABC):
     """
-    Wrapper around the OpenAI API that allows the user to create an OpenAI candidate from a
+    Wrapper around a service API that allows the user to create a service candidate from a
     dictionary.
-
-    NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
     def __init__(  # noqa: D417
-            self,
-            model: str | None = None,
-            endpoint_url: str | None = None,
-            metadata: dict | None = None,
-            parameters: dict | None = None) -> None:
+        self,
+        model: str | None = None,
+        endpoint_url: str | None = None,
+        metadata: dict | None = None,
+        parameters: dict | None = None,
+    ) -> None:
         """
-        Initialize a OpenAICandidate object.
+        Initialize a Service object.
 
         Args:
             model:
-                The name of the OpenAI model to use (e.g. 'gpt-4o-mini').
+                The name of the model to use.
             endpoint_url:
-                This parameter is used when running against a local OpenAI-compatible API endpoint.
+                This parameter is used when running against a local service-compatible API endpoint.
             metadata:
                 A dictionary of metadata about the Candidate.
             parameters:
@@ -207,38 +237,63 @@ class OpenAICandidate(Candidate):
         self.model = model
         self.endpoint_url = endpoint_url
 
+    @property
+    @abstractmethod
+    def client_callable(self) -> Any:  # noqa: ANN401
+        """Return the client for the service."""
+
+    @property
+    @abstractmethod
+    def model_cost_per_token(self) -> float | None:
+        """
+        Return the cost per token for the model. This is used to calculate the cost of the
+        completion.
+        """
+
+    @abstractmethod
+    def _invoke_client_callable(self, input: list[dict[str, str]]) -> Any:  # noqa: ANN401, A002
+        """Invoke the client with the input and return the response."""
+
+    def _parse_response(self, response: Any) -> str | dict:  # noqa: ANN401
+        """Get the desired attribute from the response object."""
+        return response.content
+
     def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
-        client = OpenAICompletion(
-            client=OpenAI(base_url=self.endpoint_url),
-            model=self.model or self.endpoint_url,
-            **self.parameters or {},
-        )
-        response: OpenAIChatResponse = client(input)
-        prompt_tokens = response.usage.get('prompt_tokens')
-        completion_tokens = response.usage.get('completion_tokens')
-        total_tokens = response.usage.get('total_tokens')
+        response = self._invoke_client_callable(input)
+        prompt_tokens = response.usage.get("prompt_tokens")
+        completion_tokens = response.usage.get("completion_tokens")
+        total_tokens = response.usage.get("total_tokens")
 
-        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model)
+        cost_per_token = self.model_cost_per_token
         if cost_per_token and prompt_tokens and completion_tokens:
-            prompt_cost = cost_per_token['input'] * prompt_tokens
-            completion_cost = cost_per_token['output'] * completion_tokens
+            prompt_cost = cost_per_token["input"] * prompt_tokens
+            completion_cost = cost_per_token["output"] * completion_tokens
             total_cost = prompt_cost + completion_cost
         else:
             prompt_cost = None
             completion_cost = None
             total_cost = None
 
+        parsed_response = self._parse_response(response)
+        completion_characters = (
+            len(parsed_response) if isinstance(parsed_response, str) else None
+        )
         return CandidateResponse(
-            response=response.content,
+            response=parsed_response,
             metadata={
-                'prompt_tokens': prompt_tokens,
-                'completion_tokens': completion_tokens,
-                'total_tokens': total_tokens,
-                'prompt_cost': prompt_cost,
-                'completion_cost': completion_cost,
-                'total_cost': total_cost,
-                'completion_characters': len(response.content),
+                "type": (
+                    "tools"
+                    if isinstance(response, OpenAIToolsResponse)
+                    else "completion"
+                ),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "prompt_cost": prompt_cost,
+                "completion_cost": completion_cost,
+                "total_cost": total_cost,
+                "completion_characters": completion_characters,
             },
         )
 
@@ -246,14 +301,14 @@ class OpenAICandidate(Candidate):
         """Return a dictionary representation of the Candidate."""
         value = super().to_dict()
         if self.model:
-            value['model'] = self.model
+            value["model"] = self.model
         if self.endpoint_url:
-            value['endpoint_url'] = self.endpoint_url
+            value["endpoint_url"] = self.endpoint_url
         return value
 
 
-@Candidate.register(CandidateType.OPENAI_TOOLS)
-class OpenAIToolsCandidate(Candidate):
+@Candidate.register(CandidateType.OPENAI)
+class OpenAICandidate(ServiceCandidate):
     """
     Wrapper around the OpenAI API that allows the user to create an OpenAI candidate from a
     dictionary.
@@ -261,14 +316,48 @@ class OpenAIToolsCandidate(Candidate):
     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
+    @property
+    def model_cost_per_token(self) -> float | None:
+        """
+        Return the cost per token for the model. This is used to calculate the cost of the
+        completion.
+        """
+        return OPENAI_MODEL_COST_PER_TOKEN.get(self.model)
+
+    @property
+    def client_callable(self) -> OpenAICompletion:
+        """Return the client for the OpenAI service."""
+        return OpenAICompletion(
+            client=OpenAI(base_url=self.endpoint_url),
+            model=self.model,
+            **self.parameters or {},
+        )
+
+    def _invoke_client_callable(
+        self, input: list[dict[str, str]],  # noqa: A002
+    ) -> OpenAICompletionResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(input)
+
+
+@Candidate.register(CandidateType.OPENAI_TOOLS)
+class OpenAIToolsCandidate(OpenAICandidate):
+    """
+    Wrapper around the OpenAI Tools API that allows the user to create an OpenAI candidate from a
+    dictionary.
+
+    NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
+    """
+
     def __init__(  # noqa: D417
-            self,
-            tools: list[dict],
-            tool_choice: Literal['none', 'auto', 'required'] | dict[str] = 'required',
-            model: str | None = None,
-            endpoint_url: str | None = None,
-            metadata: dict | None = None,
-            parameters: dict | None = None) -> None:
+        self,
+        tools: list[dict],
+        tool_choice: Literal["none", "auto", "required"] | dict[str] = "required",
+        model: str | None = None,
+        endpoint_url: str | None = None,
+        metadata: dict | None = None,
+        parameters: dict | None = None,
+    ) -> None:
         """
         Initialize a OpenAIToolsCandidate object.
 
@@ -290,60 +379,157 @@ class OpenAIToolsCandidate(Candidate):
             parameters:
                 A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
-        super().__init__(metadata=metadata, parameters=parameters)
-        assert model or endpoint_url, "model or endpoint_url must be provided"
-        self.model = model
-        self.endpoint_url = endpoint_url
+        super().__init__(
+            model=model,
+            endpoint_url=endpoint_url,
+            metadata=metadata,
+            parameters=parameters,
+        )
         self.tools = tools
         self.tool_choice = tool_choice
 
-    def __call__(self, input: dict) -> CandidateResponse:  # noqa: A002
-        """Invokes the underlying model with the input/tools and returns the response."""
-        client = OpenAICompletion(
-            client=OpenAI(base_url=self.endpoint_url),
-            model=self.model or self.endpoint_url,
-            **self.parameters or {},
-        )
-        response: OpenAIToolsResponse | OpenAICompletionResponse = client(
+    def _invoke_client_callable(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> OpenAIToolsResponse | OpenAICompletionResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(
             messages=input,
             tools=self.tools,
             tool_choice=self.tool_choice,
         )
-        prompt_tokens = response.usage.get('prompt_tokens')
-        completion_tokens = response.usage.get('completion_tokens')
-        total_tokens = response.usage.get('total_tokens')
 
-        cost_per_token = MODEL_COST_PER_TOKEN.get(self.model)
-        if cost_per_token and prompt_tokens and completion_tokens:
-            prompt_cost = cost_per_token['input'] * prompt_tokens
-            completion_cost = cost_per_token['output'] * completion_tokens
-            total_cost = prompt_cost + completion_cost
-        else:
-            prompt_cost = None
-            completion_cost = None
-            total_cost = None
-
-        content = response.tools if isinstance(response, OpenAIToolsResponse) else response.content
-        return CandidateResponse(
-            response=content,
-            metadata={
-                'type': 'tools' if isinstance(response, OpenAIToolsResponse) else 'completion',
-                'prompt_tokens': prompt_tokens,
-                'completion_tokens': completion_tokens,
-                'total_tokens': total_tokens,
-                'prompt_cost': prompt_cost,
-                'completion_cost': completion_cost,
-                'total_cost': total_cost,
-            },
+    def _parse_response(
+        self,
+        response: OpenAIToolsResponse | OpenAICompletionResponse,
+    ) -> str | dict:
+        """Get the desired attribute from the response object."""
+        return (
+            response.tools
+            if isinstance(response, OpenAIToolsResponse)
+            else response.content
         )
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
         value = super().to_dict()
-        if self.model:
-            value['model'] = self.model
-        if self.endpoint_url:
-            value['endpoint_url'] = self.endpoint_url
-        value['tools'] = self.tools
-        value['tool_choice'] = self.tool_choice
+        value["tools"] = self.tools
+        value["tool_choice"] = self.tool_choice
         return value
+
+
+@Candidate.register(CandidateType.MISTRALAI)
+class MistralAICandidate(ServiceCandidate):
+    """
+    Wrapper around the MistralAI API that allows the user to create an MistralAI candidate from a
+    dictionary.
+
+    NOTE: the `MISTRAL_API_KEY` environment variable must be set to use this class.
+    """
+
+    @property
+    def client_callable(self) -> MistralAICompletion:
+        """Return the client for the OpenAI service."""
+        from mistralai import Mistral
+        from llm_eval.mistralai import MistralAICompletion
+
+        parameters = self.parameters or {}
+        api_key = parameters.pop("api_key", os.getenv("MISTRAL_API_KEY"))
+        return MistralAICompletion(
+            client=Mistral(api_key=api_key, server_url=self.endpoint_url),
+            model=self.model,
+            **parameters,
+        )
+
+    @property
+    def model_cost_per_token(self) -> float | None:
+        """
+        Return the cost per token for the model. This is used to calculate the cost of the
+        completion.
+        """
+        from llm_eval.mistralai import (
+            MODEL_COST_PER_TOKEN as MISTRAL_MODEL_COST_PER_TOKEN,
+        )
+
+        return MISTRAL_MODEL_COST_PER_TOKEN.get(self.model)
+
+    def _invoke_client_callable(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> MistralAICompletionResponse | MistralAIToolsResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(messages=input)
+
+
+@Candidate.register(CandidateType.MISTRALAI_TOOLS)
+class MistralAIToolsCandidate(MistralAICandidate):
+    """
+    Wrapper around the MistralAI Tools API that allows the user to create an MistralAI candidate
+    from a dictionary.
+
+    NOTE: the `MISTRAL_API_KEY` environment variable must be set to use this class.
+    """
+
+    def __init__(  # noqa: D417
+        self,
+        tools: list[dict],
+        tool_choice: Literal["auto", "any", "none"] | dict[str] = "auto",
+        model: str | None = None,
+        endpoint_url: str | None = None,
+        metadata: dict | None = None,
+        parameters: dict | None = None,
+    ) -> None:
+        """
+        Initialize a MistralAIToolsCandidate object.
+
+        Args:
+            tools:
+                A list of tools to use with the MistralAI model. See
+                https://docs.mistral.ai/capabilities/function_calling/ for more
+                information.
+            tool_choice:
+                Select from "auto", "any", "none"; for more information, see
+                https://docs.mistral.ai/capabilities/function_calling/#tool_choice.
+            model:
+                The name of the MistralAI model to use (e.g. 'mistral-large-latest').
+            endpoint_url:
+                This parameter is used when running against a local MistralAI-compatible API
+                endpoint.
+            metadata:
+                A dictionary of metadata about the Candidate.
+
+        Parameters
+                A dictionary of model-specific parameters (e.g. `temperature`).
+        """
+        super().__init__(
+            model=model,
+            endpoint_url=endpoint_url,
+            metadata=metadata,
+            parameters=parameters,
+        )
+        self.tools = tools
+        self.tool_choice = tool_choice
+
+    def _invoke_client_callable(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> MistralAICompletionResponse | MistralAIToolsResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(
+            messages=input,
+            tools=self.tools,
+            tool_choice=self.tool_choice,
+        )
+
+    def _parse_response(
+        self,
+        response: MistralAICompletionResponse | MistralAIToolsResponse,
+    ) -> str | dict:
+        """Get the desired attribute from the response object."""
+        from llm_eval.mistralai import MistralAIToolsResponse
+
+        return (
+            response.tools
+            if isinstance(response, MistralAIToolsResponse)
+            else response.content
+        )
