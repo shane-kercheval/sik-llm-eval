@@ -9,3 +9,4 @@ ruff~=0.6
 tensorflow~=2.15
 tomlkit~=0.12
 ruamel.yaml~=0.18
+mistralai~=1.1
