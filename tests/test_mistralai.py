@@ -1,6 +1,7 @@
 """Tests Mistral classes."""
 
 import os
+import pytest
 from mistralai import Mistral
 from pydantic import BaseModel
 from llm_eval.mistralai import (
@@ -49,7 +50,7 @@ def test__MistralAIResponse__BaseModel_metadata_model_dump():  # noqa
         "finish_reason": None,
     }
 
-
+@pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test__MistralAICompletionWrapper() -> None:  # noqa
     client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
     expected_response = "testing testing"
@@ -85,7 +86,7 @@ def test__MistralAICompletionWrapper() -> None:  # noqa
     assert response.usage["completion_tokens"] == 1
     assert response.usage["total_tokens"] > 0
 
-
+@pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test__MistralAICompletionWrapper__streaming() -> None:  # noqa
     # test valid parameters for streaming
     callback_chunks = []
@@ -132,7 +133,7 @@ def test__MistralAICompletionWrapper__streaming() -> None:  # noqa
     assert response.finish_reason == "length"
     assert callback_chunks[-1].finish_reason == "length"
 
-
+@pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test_Function__get_current_weather__to_dict(function_weather: Function):  # noqa
     assert function_weather.to_dict() == {
         "type": "function",
@@ -153,7 +154,7 @@ def test_Function__get_current_weather__to_dict(function_weather: Function):  # 
         },
     }
 
-
+@pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test_Function__get_current_stocks__to_dict(function_stocks: Function):  # noqa
     assert function_stocks.to_dict() == {
         "type": "function",
@@ -173,7 +174,7 @@ def test_Function__get_current_stocks__to_dict(function_stocks: Function):  # no
         },
     }
 
-
+@pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test_MistralAITools(function_weather: Function, function_stocks: Function):  # noqa
     tools = [
         function_weather.to_dict(),
@@ -214,7 +215,7 @@ def test_MistralAITools(function_weather: Function, function_stocks: Function): 
         "unit": "fahrenheit",
     }
 
-
+@pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test_MistralAITools__unrelated_prompt__auto(  # noqa
     function_weather: Function,
     function_stocks: Function,
@@ -248,7 +249,7 @@ def test_MistralAITools__unrelated_prompt__auto(  # noqa
     assert response.usage["total_tokens"] > 0
     assert response.content
 
-
+@pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test_MistralAITools__unrelated_prompt__required(  # noqa
     function_weather: Function,
     function_stocks: Function,
@@ -272,7 +273,7 @@ def test_MistralAITools__unrelated_prompt__required(  # noqa
     )
     assert isinstance(response, MistralAIToolsResponse)
 
-
+@pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test_MistralAITools__unrelated_prompt__none(  # noqa
     function_weather: Function,
     function_stocks: Function,

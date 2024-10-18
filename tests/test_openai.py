@@ -444,7 +444,6 @@ async def test__async_MockOpenAI_object_streaming__legacy_structure() -> None:  
 def test_num_tokens():  # noqa
     assert num_tokens(model='gpt-3.5-turbo-0613', value="This should be six tokens.") == 6
 
-
 def test_Function__get_current_weather__to_dict(function_weather: Function):  # noqa
     assert function_weather.to_dict() == {
         "type": "function",
@@ -539,7 +538,6 @@ def test_OpenAITools__unrelated_prompt__auto(function_weather: Function, functio
     assert response.usage['completion_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.content
-
 
 def test_OpenAITools__unrelated_prompt__required(function_weather: Function, function_stocks: Function):  # noqa
     """
