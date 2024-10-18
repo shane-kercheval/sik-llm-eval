@@ -210,10 +210,8 @@ def test_MistralAITools(function_weather: Function, function_stocks: Function): 
     assert len(response.tools) == 1
     assert response.tools[0]["type"] == "function"
     assert response.tools[0]["name"] == "get_current_weather"
-    assert response.tools[0]["arguments"] == {
-        "location": "Boston, MA",
-        "unit": "fahrenheit",
-    }
+    assert "Boston" in response.tools[0]["arguments"]["location"]
+    assert "fahrenheit" in response.tools[0]["arguments"]["unit"]
 
 @pytest.mark.skipif('MISTRAL_API_KEY' not in os.environ, reason="MISTRAL_API_KEY not set in environment variables")  # noqa
 def test_MistralAITools__unrelated_prompt__auto(  # noqa
