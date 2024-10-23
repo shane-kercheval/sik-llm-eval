@@ -24,6 +24,7 @@ Candidates can also be passed to the EvalHarness (or Eval object) directory as a
 can be serialized into a dictionary and the information can be saved in the EvalResult object
 (evals.py).
 """
+
 from __future__ import annotations
 
 import os
@@ -56,6 +57,12 @@ if TYPE_CHECKING:
             MistralAICompletionResponse,
             MistralAIToolsResponse,
         )
+    with contextlib.suppress(ImportError):
+        from llm_eval.anthropic import (
+            AnthropicCompletion,
+            AnthropicCompletionResponse,
+            AnthropicToolsResponse,
+        )
 
 
 @staticmethod
@@ -75,6 +82,8 @@ class CandidateType(EnumMixin, Enum):
     OPENAI_TOOLS = auto()
     MISTRALAI = auto()
     MISTRALAI_TOOLS = auto()
+    ANTHROPIC = auto()
+    ANTROPIC_TOOLS = auto()
 
 
 class CandidateResponse(BaseModel):
@@ -251,7 +260,9 @@ class ServiceCandidate(Candidate, ABC):
         """
 
     @abstractmethod
-    def _invoke_client_callable(self, input: list[dict[str, str]]) -> Any:  # noqa: ANN401, A002
+    def _invoke_client_callable(
+        self, input: list[dict[str, str]],  # noqa: A002
+    ) -> Any:  # noqa: ANN401
         """Invoke the client with the input and return the response."""
 
     def _parse_response(self, response: Any) -> str | dict:  # noqa: ANN401
@@ -334,7 +345,8 @@ class OpenAICandidate(ServiceCandidate):
         )
 
     def _invoke_client_callable(
-        self, input: list[dict[str, str]],  # noqa: A002
+        self,
+        input: list[dict[str, str]],  # noqa: A002
     ) -> OpenAICompletionResponse:
         """Invoke the client with the input and return the response."""
         return self.client_callable(input)
@@ -429,7 +441,7 @@ class MistralAICandidate(ServiceCandidate):
 
     @property
     def client_callable(self) -> MistralAICompletion:
-        """Return the client for the OpenAI service."""
+        """Return the client for the MistralAI service."""
         from mistralai import Mistral
         from llm_eval.mistralai import MistralAICompletion
 
@@ -531,5 +543,125 @@ class MistralAIToolsCandidate(MistralAICandidate):
         return (
             response.tools
             if isinstance(response, MistralAIToolsResponse)
+            else response.content
+        )
+
+
+class AnthropicCandidate(ServiceCandidate):
+    """
+    Wrapper around the Anthropic API that allows the user to create an Anthropic candidate from
+    a dictionary.
+
+    NOTE: the `ANTHROPIC_API_KEY` environment variable must be set to use this class.
+    """
+
+    @property
+    def client_callable(self) -> AnthropicCompletion:
+        """Return the client for the Anthropic service."""
+        from anthropic import Anthropic
+        from llm_eval.anthropic import AnthropicCompletion
+
+        parameters = self.parameters or {}
+        api_key = parameters.pop("api_key", os.getenv("ANTHROPIC_API_KEY"))
+        return AnthropicCompletion(
+            client=Anthropic(api_key=api_key),
+            model=self.model,
+            max_tokens=parameters.pop("max_tokens", 2048),
+            **parameters,
+        )
+
+    @property
+    def model_cost_per_token(self) -> float | None:
+        """
+        Return the cost per token for the model. This is used to calculate the cost of the
+        completion.
+        """
+        from llm_eval.anthropic import (
+            MODEL_COST_PER_TOKEN as ANTHROPIC_MODEL_COST_PER_TOKEN,
+        )
+
+        return ANTHROPIC_MODEL_COST_PER_TOKEN.get(self.model)
+
+    def _invoke_client_callable(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> AnthropicCompletionResponse | AnthropicToolsResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(messages=input)
+
+
+@Candidate.register(CandidateType.ANTROPIC_TOOLS)
+class AnthropicToolsCandidate(AnthropicCandidate):
+    """
+    Wrapper around the Anthropic Tools API that allows the user to create an Anthropic candidate
+    from a dictionary.
+
+    NOTE: the `ANTHROPIC_API_KEY` environment variable must be set to use this class.
+    """
+
+    def __init__(  # noqa: D417
+        self,
+        tools: list[dict],
+        tool_choice: Literal["auto", "any", "none"] | dict[str] = "auto",
+        model: str | None = None,
+        endpoint_url: str | None = None,
+        metadata: dict | None = None,
+        parameters: dict | None = None,
+    ) -> None:
+        """
+        Initialize an AnthropicToolsCandidate object.
+
+        Args:
+            tools:
+                A list of tools to use with the Anthropic model. See
+                https://docs.anthropic.com/en/docs/tools-overview for more information.
+            tool_choice:
+                Select from "auto", "any", "none"; for more information, see
+                https://docs.anthropic.com/en/docs/tools-overview
+            model:
+                The name of the Anthropic model to use (e.g. 'gpt-4o-mini').
+            endpoint_url:
+                This parameter is used when running against a local Anthropic-compatible API
+                endpoint.
+            metadata:
+                A dictionary of metadata about the Candidate.
+
+        Parameters
+                A dictionary of model-specific parameters (e.g. `temperature`).
+        """
+        super().__init__(
+            model=model,
+            endpoint_url=endpoint_url,
+            metadata=metadata,
+            parameters=parameters,
+        )
+        self.tools = tools
+        self.tool_choice = tool_choice
+
+    def _invoke_client_callable(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> AnthropicCompletionResponse | AnthropicToolsResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(
+            messages=input,
+            tools=self.tools,
+            tool_choice=(
+                {"type": self.tool_choice}
+                if isinstance(self.tool_choice, str)
+                else self.tool_choice
+            ),
+        )
+
+    def _parse_response(
+        self,
+        response: AnthropicCompletionResponse | AnthropicToolsResponse,
+    ) -> str | dict:
+        """Get the desired attribute from the response object."""
+        from llm_eval.anthropic import AnthropicToolsResponse
+
+        return (
+            response.tools
+            if isinstance(response, AnthropicToolsResponse)
             else response.content
         )

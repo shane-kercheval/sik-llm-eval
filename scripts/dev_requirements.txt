@@ -10,3 +10,4 @@ tensorflow~=2.15
 tomlkit~=0.12
 ruamel.yaml~=0.18
 mistralai~=1.1
+anthropic~=0.37.1
