@@ -178,12 +178,12 @@ class FakeRetryHandler:
 
 
 @pytest.fixture
-def fake_retry_handler():  # noqa
+def fake_retry_handler():
     return FakeRetryHandler()
 
 
 @pytest.fixture
-def fake_hugging_face_response_json():  # noqa
+def fake_hugging_face_response_json():
     fake = Faker()
     num_words = fake.random_int(min=8, max=10)
     if num_words == 8:

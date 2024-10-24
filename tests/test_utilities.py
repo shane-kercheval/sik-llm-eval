@@ -11,14 +11,26 @@ from llm_eval.internal_utilities import (
     extract_valid_parameters,
     extract_variables,
     generate_dict_combinations,
+    get_value_from_path,
     has_method,
     has_property,
     retry_handler,
     Timer,
 )
+from llm_eval.utilities import (
+    f1_score_tokens,
+    precision_score,
+    precision_score2,
+    recall_score,
+    recall_score2,
+    f_score,
+    f1_score,
+    precision_score_tokens,
+    recall_score_tokens,
+)
 
 
-def test_timer_seconds():  # noqa
+def test__timer_seconds():
     with Timer() as timer:
         sleep(1.1)
 
@@ -29,7 +41,7 @@ def test_timer_seconds():  # noqa
     with pytest.raises(ValueError):  # noqa
         timer.formatted(units='days')
 
-def test_create_hash():  # noqa
+def test__create_hash():
     value_a = create_hash('Test value 1')
     assert value_a
     value_b = create_hash('Test value 2')
@@ -38,7 +50,7 @@ def test_create_hash():  # noqa
     value_c = create_hash('Test value 1')
     assert value_c == value_a
 
-def test_retry_handler():  # noqa
+def test__retry_handler():
     r = retry_handler()
     actual_value = r(
         lambda x, y: (x, y),
@@ -47,7 +59,7 @@ def test_retry_handler():  # noqa
     )
     assert actual_value == ('A', 'B')
 
-def test_has_method_has_property():  # noqa
+def test__has_method_has_property():
     class Fake:
         def __init__(self) -> None:
             self.variable_c = 'c'
@@ -69,7 +81,7 @@ def test_has_method_has_property():  # noqa
     assert has_property(Fake(), 'variable_c')
     assert not has_property(lambda x: x, 'test')
 
-def test__extract_code_blocks__no_code_blocks():  # noqa
+def test__extract_code_blocks__no_code_blocks():
     result = extract_code_blocks(None)
     assert result == []
     result = extract_code_blocks("")
@@ -81,7 +93,7 @@ def test__extract_code_blocks__no_code_blocks():  # noqa
     result = extract_code_blocks("This is a test ```python")
     assert result == []
 
-def test__extract_code_blocks__conversation_sum(conversation_sum):  # noqa
+def test__extract_code_blocks__conversation_sum(conversation_sum: dict):
     extracted_code_blocks = extract_code_blocks(conversation_sum['model_1']['responses'][0])
     assert len(extracted_code_blocks) == 2
     assert extracted_code_blocks[0] == dedent("""
@@ -120,7 +132,7 @@ def test__extract_code_blocks__conversation_sum(conversation_sum):  # noqa
         assert sum_two_numbers(100, 200) == 300, "Should be 300"
         """).strip()
 
-def test__extract_code_blocks__conversation_mask_emails(conversation_mask_email):  # noqa
+def test__extract_code_blocks__conversation_mask_emails(conversation_mask_email: str):
     extracted_code_blocks = extract_code_blocks(conversation_mask_email['model_1']['responses'][0])
     assert len(extracted_code_blocks) == 2
     assert extracted_code_blocks[0] == dedent("""
@@ -172,7 +184,7 @@ def test__extract_code_blocks__conversation_mask_emails(conversation_mask_email)
         assert mask_email("test@test.com") == "t****t@test.com"
         """).strip()
 
-def test__extract_code_blocks__llama_response():  # noqa
+def test__extract_code_blocks__llama_response():
     # output from llama response that doesn't contain `python` or multiple new lines between code
     with open('tests/fake_data/fake_llama_response_with_code_block.txt') as f:
         response = f.read()
@@ -184,7 +196,7 @@ def test__extract_code_blocks__llama_response():  # noqa
     assert extracted_code_blocks[2].startswith('(0, 0)')
     assert extracted_code_blocks[2].endswith('(5, -4)')
 
-def test__execute_code_blocks__without_env_namespace(conversation_sum):  # noqa
+def test__execute_code_blocks__without_env_namespace(conversation_sum: dict):
     code_blocks = extract_code_blocks(conversation_sum['model_1']['responses'][0])
     code_blocks.append('assert sum_numbers(5, 3) == 8')
     code_blocks.append('assert sum_numbers(5, 3) != 8')
@@ -203,7 +215,7 @@ def test__execute_code_blocks__without_env_namespace(conversation_sum):  # noqa
     assert isinstance(results[0], NameError)
     assert str(results[0]) == "name 'sum_numbers' is not defined"
 
-def test__execute_code_blocks__with_env_namespace(conversation_sum):  # noqa
+def test__execute_code_blocks__with_env_namespace(conversation_sum: dict):
     code_blocks = extract_code_blocks(conversation_sum['model_1']['responses'][0])
     code_blocks.append('assert sum_numbers(5, 3) == 8')
     code_blocks.append('assert sum_numbers(5, 3) != 8')
@@ -228,7 +240,7 @@ def test__execute_code_blocks__with_env_namespace(conversation_sum):  # noqa
     assert results[0] is None
     assert isinstance(results[1], AssertionError)
 
-def test__execute_code_blocks__with_env_namespace__test_dependencies():  # noqa
+def test__execute_code_blocks__with_env_namespace__test_dependencies():
     code_blocks = [
         'my_value = 10',
         'def add_my_value(num1):\n    return num1 + my_value',
@@ -257,7 +269,7 @@ def test__execute_code_blocks__with_env_namespace__test_dependencies():  # noqa
     assert isinstance(errors[0], AssertionError)
     assert errors[1] is None
 
-def test__execute_code_blocks__with_env_namespace__test_import_dependencies():  # noqa
+def test__execute_code_blocks__with_env_namespace__test_import_dependencies():
     code_blocks = [
         'import itertools',
         "s=[[ 'a', 'b', 'c'], ['d'], ['e', 'f']]",
@@ -278,7 +290,7 @@ def test__execute_code_blocks__with_env_namespace__test_import_dependencies():  
     assert 'num_combinations' in env_namespace
     assert env_namespace['num_combinations'] == 6
 
-def test__execute_code_blocks__with_env_namespace__inject_objects_into_namespace():  # noqa
+def test__execute_code_blocks__with_env_namespace__inject_objects_into_namespace():
     func = dedent("""
     def get_combinations(list_of_lists: list[list[str]]):
         import itertools
@@ -307,7 +319,7 @@ def test__execute_code_blocks__with_env_namespace__inject_objects_into_namespace
     assert '__list_of_lists__' in env_namespace
     assert env_namespace['__list_of_lists__'] == list_to_inject
 
-def test__execute_code_blocks__timeout():  # noqa
+def test__execute_code_blocks__timeout():
     code_blocks = [
         """
         import time
@@ -346,7 +358,7 @@ def test__execute_code_blocks__timeout():  # noqa
     assert 'my_value_2' not in namespace
     assert namespace['my_value_3'] == 'test3'
 
-def test__generate_dict_combinations():  # noqa
+def test__generate_dict_combinations():
     # test all single parameters; should return a list with one dict
     test_params = {
         'param_1': 'param_a',
@@ -402,7 +414,7 @@ def test__generate_dict_combinations():  # noqa
     assert len(generated_combinations) == len(expected_output)
     assert generated_combinations == expected_output
 
-def test__extract_variables():  # noqa
+def test__extract_variables():
     assert extract_variables('') == set()
     assert extract_variables('This is an email shane@email.com not a variable.') == set()
     assert extract_variables('This is not an email shane@email and not a variable.') == set()
@@ -483,7 +495,7 @@ def test__extract_variables():  # noqa
     results = extract_variables(text)
     assert results == {'var_symbols'}
 
-def test__extract_valid_parameters():  # noqa
+def test__extract_valid_parameters():
     def my_func(x, y):  # noqa
         return x + y
 
@@ -508,7 +520,7 @@ def test__extract_valid_parameters():  # noqa
     possible_parameters = {}
     assert extract_valid_parameters(my_func, possible_parameters) == {}
 
-def test__create_function_from_string():  # noqa
+def test__create_function_from_string():
     # basic case
     func = """
     def sum_numbers(num1, num2):
@@ -581,3 +593,198 @@ def test__create_function_from_string():  # noqa
     """
     sum_func = create_function(func_str, func_name='sum_numbers')
     assert sum_func(5, 3) == 8 + 5
+
+def test__get_value_from_path_dict():
+    data = {
+        'a': {
+            'b': {
+                'c': 5,
+            },
+        },
+    }
+    assert get_value_from_path("['a']['b']['c']", data) == 5
+
+def test__get_value_from_path_non_existent_key():
+    data = {'a': {'b': 10}}
+    with pytest.raises(KeyError):
+        get_value_from_path("['a']['c']", data)
+
+def test__get_value_from_path_list():
+    data = [10, 20, 30]
+    assert get_value_from_path("[1]", data) == 20
+
+def test__get_value_from_path_list_out_of_range():
+    data = [10, 20, 30]
+    with pytest.raises(IndexError):
+        get_value_from_path("[5]", data)
+
+def test__get_value_from_path_tuple():
+    data = (100, 200, 300)
+    assert get_value_from_path("[2]", data) == 300
+
+def test__get_value_from_path_tuple_out_of_range():
+    data = (100, 200, 300)
+    with pytest.raises(IndexError):
+        get_value_from_path("[5]", data)
+
+def test__get_value_from_path_mixed():
+    data = {
+        'x': [1, 2, {'y': 10}],
+    }
+    assert get_value_from_path("['x'][2]['y']", data) == 10
+
+def test__get_value_from_path_custom_object():
+    class CustomObject:
+        def __init__(self, name, age):  # noqa
+            self.name = name
+            self.age = age
+
+    obj = CustomObject(name="Alice", age=30)
+    assert get_value_from_path(".name", obj) == "Alice"
+    assert get_value_from_path(".age", obj) == 30
+
+def test__get_value_from_path_non_existent_attribute():
+    class CustomObject:
+        def __init__(self, name, age):  # noqa
+            self.name = name
+            self.age = age
+
+    obj = CustomObject(name="Bob", age=40)
+    with pytest.raises(AttributeError):
+        get_value_from_path(".address", obj)
+
+def test__get_value_from_path_invalid_path():
+    data = {'a': {'b': 10}}
+    with pytest.raises(KeyError):
+        get_value_from_path("['x']['b'].x", data)
+
+def test__get_value_from_path_negative_index():
+    data = [10, 20, 30]
+    assert get_value_from_path("[-1]", data) == 30
+    assert get_value_from_path("[-2]", data) == 20
+
+def test__get_value_from_path_nested_list_and_dict():
+    data = [{'a': [1, 2, {'b': 3}]}]
+    assert get_value_from_path("[0]['a'][2]['b']", data) == 3
+
+def test__get_value_from_path_with_none():
+    data = {'a': None}
+    assert get_value_from_path("['a']", data) is None
+
+def test__get_value_from_path_dict_with_integer_key():
+    data = {1: 'one', 2: 'two'}
+    assert get_value_from_path("[1]", data) == 'one'
+    assert get_value_from_path("[2]", data) == 'two'
+
+def test__get_value_from_path_deeply_nested():
+    data = {'a': {'b': {'c': {'d': {'e': {'f': 100}}}}}}
+    assert get_value_from_path("['a']['b']['c']['d']['e']['f']", data) == 100
+
+def test__get_value_from_path_empty_data():
+    data = {}
+    with pytest.raises(KeyError):
+        get_value_from_path("['a']", data)
+
+def test__get_value_from_path_non_string_dict_keys():
+    data = {1: {'a': 10}, 2: {'b': 20}}
+    assert get_value_from_path("[1]['a']", data) == 10
+    assert get_value_from_path("[2]['b']", data) == 20
+
+def test__get_value_from_path_list_of_lists():
+    data = [[1, 2, 3], [4, 5, 6]]
+    assert get_value_from_path("[1][2]", data) == 6
+    assert get_value_from_path("[0][0]", data) == 1
+
+def test__get_value_from_path_using_lamda():
+    data = {'a': {'b': {'c': 5}}}
+    assert get_value_from_path("lambda x: x['a']['b']['c']", data) == 5
+
+    data = {'a': [1, 2, {'b': 'foo'}]}
+    assert get_value_from_path("lambda x: x['a'][2]['b'].upper()", data) == 'FOO'
+
+def test__precision_score():
+    assert precision_score(true_pos=10, false_pos=0) == 1.0
+    assert precision_score2(true_pos=10, pred_pos=10) == precision_score(true_pos=10, false_pos=0)
+    assert precision_score(true_pos=0, false_pos=10) == 0.0
+    assert precision_score2(true_pos=0, pred_pos=10) == precision_score(true_pos=0, false_pos=10)
+    assert precision_score(true_pos=10,false_pos=5) == pytest.approx(0.6666667, 0.0000001)
+    assert precision_score2(true_pos=10, pred_pos=15) == precision_score(true_pos=10, false_pos=5)
+    assert precision_score(true_pos=0, false_pos=0) == 0.0
+    assert precision_score2(true_pos=0, pred_pos=0) == precision_score(true_pos=0, false_pos=0)
+    assert precision_score2(true_pos=10, pred_pos=0) == 0.0
+
+def test__recall_score():
+    assert recall_score(true_pos=10,false_neg=0) == 1.0
+    assert recall_score2(true_pos=10, actual_pos=10) == recall_score(true_pos=10, false_neg=0)
+    assert recall_score(true_pos=0, false_neg=10) == 0.0
+    assert recall_score2(true_pos=0, actual_pos=10) == recall_score(true_pos=0, false_neg=10)
+    assert recall_score(true_pos=10,false_neg=5) == pytest.approx(0.6666667, 0.0000001)
+    assert recall_score2(true_pos=10, actual_pos=15) == recall_score(true_pos=10, false_neg=5)
+    assert recall_score(true_pos=0, false_neg=0) == 0.0
+    assert recall_score2(true_pos=0, actual_pos=0) == recall_score(true_pos=0, false_neg=0)
+    assert recall_score2(true_pos=10, actual_pos=0) == 0.0
+
+def test__f_score():
+    assert f_score(precision=0.0, recall=0.0, beta=1) == 0.0
+    assert f_score(precision=0.0, recall=1.0, beta=0) == 0.0
+    assert f_score(precision=1.0, recall=0.1, beta=0) == 1.0
+    assert f_score(precision=1.0, recall=1.0, beta=1) == 1.0
+    assert f_score(precision=1.0, recall=1.0, beta=1) == f1_score(precision=1.0, recall=1.0)
+    assert f_score(precision=1.0, recall=0.0, beta=1) == 0.0
+    assert f_score(precision=1.0, recall=0.0, beta=1) == f1_score(precision=1.0, recall=0.0)
+    assert f_score(precision=0.0, recall=1.0, beta=1) == 0.0
+    assert f_score(precision=0.0, recall=1.0, beta=1) == f1_score(precision=0.0, recall=1.0)
+    assert f_score(precision=0.5, recall=0.5, beta=1) == 0.5
+    assert f_score(precision=0.5, recall=0.5, beta=1) == f1_score(precision=0.5, recall=0.5)
+    assert f_score(precision=0.5, recall=0.5, beta=2) == 0.5
+
+    # weights recall higher than precision
+    true_pos = 25
+    # true_neg = 50
+    false_pos = 10
+    false_neg = 15
+    precision = precision_score(true_pos=true_pos, false_pos=false_pos)
+    assert precision == pytest.approx(0.7143, 0.0001)
+    assert precision == precision_score2(true_pos=true_pos, pred_pos=true_pos + false_pos)
+
+    recall = recall_score(true_pos=true_pos, false_neg=false_neg)
+    assert recall == pytest.approx(0.625, 0.0001)
+    assert recall == recall_score2(true_pos=true_pos, actual_pos=true_pos + false_neg)
+
+    f1 = f_score(precision=precision, recall=recall, beta=1)
+    assert f1 == pytest.approx(0.6667, 0.0001)
+    assert f1 == f1_score(precision=precision, recall=recall)
+
+    # weighs recall higher than precision
+    f2 = f_score(precision=precision, recall=recall, beta=2)
+    assert f2 == pytest.approx(0.6410, 0.0001)
+    #  weighs precision higher than recall
+    f05 = f_score(precision=precision, recall=recall, beta=0.5)
+    assert f05 == pytest.approx(0.6944, 0.0001)
+
+def test__precision_score_tokens():
+    assert precision_score_tokens(expected_tokens=['a', 'b'], actual_tokens=['a', 'b']) == 1.0
+    assert precision_score_tokens(expected_tokens=['a', 'b', 'c'], actual_tokens=['a', 'b']) == 1.0
+    assert precision_score_tokens(expected_tokens=['c', 'd'], actual_tokens=['a', 'b']) == 0.0
+    score = precision_score_tokens(expected_tokens=['a', 'b'], actual_tokens=['a', 'b', 'c'])
+    assert score == pytest.approx(0.6666667, 0.0000001)
+    assert score == precision_score_tokens(expected_tokens=['a', 'b', 'a'], actual_tokens=['a', 'b', 'c', 'c'])  # noqa
+
+def test__recall_score_tokens():
+    assert recall_score_tokens(expected_tokens=['a', 'b'], actual_tokens=['a', 'b']) == 1.0
+    assert recall_score_tokens(expected_tokens=['a', 'a', 'b'], actual_tokens=['a', 'b', 'b']) == 1.0  # noqa
+    assert recall_score_tokens(expected_tokens=['a', 'b'], actual_tokens=['a', 'b', 'c', 'd']) == 1.0  # noqa
+    assert recall_score_tokens(expected_tokens=['c', 'd'], actual_tokens=['a', 'b']) == 0.0
+    score = recall_score_tokens(expected_tokens=['a', 'b', 'c'], actual_tokens=['a', 'b'])
+    assert score == pytest.approx(0.6666667, 0.0000001)
+    assert score == recall_score_tokens(expected_tokens=['a', 'b', 'c', 'c', 'b'], actual_tokens=['a', 'b', 'b'])  # noqa
+
+def test__f1_score_tokens():
+    assert f1_score_tokens(expected_tokens=['a', 'b'], actual_tokens=['a', 'b']) == 1.0
+    assert f1_score_tokens(expected_tokens=['a', 'b', 'c'], actual_tokens=['f', 'd']) == 0.0
+    precision = precision_score_tokens(expected_tokens=['a', 'b', 'c'], actual_tokens=['a', 'b'])
+    assert precision == 1
+    recall = recall_score_tokens(expected_tokens=['a', 'b', 'c'], actual_tokens=['a', 'b'])
+    assert recall == pytest.approx(0.6666667, 0.0000001)
+    expected_f1 = f_score(precision=precision, recall=recall, beta=1)
+    assert expected_f1 == f1_score_tokens(expected_tokens=['a', 'b', 'c'], actual_tokens=['a', 'b'])  # noqa: E501

@@ -45,7 +45,7 @@ class MockCandidate(Candidate):
         """Invokes the underlying model with the input and returns the response."""
         return CandidateResponse(response=self.model(input))
 
-def test_filter_tags(  # noqa: PLR0915
+def test_filter_tags(
         fake_eval_8f9fbf37: dict,
         fake_eval_subtract_two_numbers: dict,
         fake_eval_sum_two_numbers: dict,

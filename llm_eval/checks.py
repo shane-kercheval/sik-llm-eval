@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, auto
+from functools import singledispatch
 from inspect import getsource
 import re
 from textwrap import dedent
@@ -25,8 +26,14 @@ from llm_eval.internal_utilities import (
     Registry,
     execute_code_blocks,
     extract_code_blocks,
+    get_value_from_path,
 )
-
+from llm_eval.utilities import (
+    f1_score_tokens,
+    precision_score_tokens,
+    recall_score_tokens,
+    default_tokenizer,
+)
 
 class CheckType(EnumMixin, Enum):
     """Provides a typesafe representation of the built-in types of Check classes."""
@@ -41,6 +48,9 @@ class CheckType(EnumMixin, Enum):
     LLM = auto()
     TOXICITY = auto()
     TOOL_CALL = auto()
+    PRECISION = auto()
+    RECALL = auto()
+    F1_SCORE = auto()
 
 
 class CheckResultsType(EnumMixin, Enum):
@@ -183,6 +193,52 @@ class ResponseData:
     response_metadata: dict[str, Any] | None = None
     ideal_response: str | Any | None = None
 
+@singledispatch
+def extract_value_from_path(value_path: object, data: ResponseData) -> tuple[Any, str | None]:  # noqa
+    """Extracts the value from the ResponseData object based on the value_path."""
+    raise ValueError(f"Unsupported type {type(value_path)}")
+
+@extract_value_from_path.register(str)
+def _(value_path: str, data: ResponseData) -> tuple[Any, str | None]:
+    """
+    Extracts the value from the ResponseData object based on the value_path, which is a string
+    specifying the path to the value in the ResponseData object.
+    """
+    check_value = None
+    error = None
+    try:
+        # the most common case is 'response'; it's faster to simply check for this value
+        # then call get_value_from_path every time
+        if value_path == 'response':
+            check_value = data.response
+        elif value_path == '':
+            check_value = data
+        else:
+            check_value = get_value_from_path(value_path, data)
+    except Exception as e:
+        # if there is an error extracting the value from the ResponseData object based on the
+        # value_extractor, the value passed to the check will be None
+        # we still need to do the check, but the check will fail
+        error = str(e)
+    return check_value, error
+
+@extract_value_from_path.register(dict)
+def _(value_path: dict[str, str], data: ResponseData) -> tuple[dict, str | None]:
+    """
+    Extracts the value from the ResponseData object based on the value_path, which is a dictionary
+    specifying the paths to the values in the ResponseData object. The values extracted from the
+    ResponseData object will be passed to the Check subclass `_call` method as keyword arguments.
+    """
+    check_values = {}
+    error = None
+    for key, path in value_path.items():
+        try:
+            check_values[key] = get_value_from_path(path, data)
+        except Exception as e:
+            check_values[key] = None
+            error = str(e)  # NOTE: only stores the last error
+    return check_values, error
+
 
 class Check(BaseModel, ABC):
     """
@@ -202,8 +258,11 @@ class Check(BaseModel, ABC):
     value_extractor: str = Field(
         default=None,
         description="""
-        A string specifying how to extract the value from ResponseData. The value is the
-        attribute/field that the check will be applied to in the ResponseData object.
+        A string or dictionary specifying how to extract the value from ResponseData.
+
+        If the value is a string, then a single value is extracted from the ResponseData object
+        according to the specified path. The path is a string that specifies the attribute access,
+        dictionary key access, or list index access to the value in the ResponseData object.
 
         The default value_extractor is 'response', which extracts the `response` attribute from
         the ResponseData object.
@@ -226,6 +285,26 @@ class Check(BaseModel, ABC):
         NOTE: Integer values used in brackets (e.g. [0]) will be converted to integers for support
         of list indexing. This means that dictionaries with integer keys will work as expected,
         but dictionaries with string keys that are digits will not index correctly.
+
+        If the value_extractor is a dictionary, the dictionary dictionary keys should correspond to
+        the names of the parameters in the Check subclass `_call` method. The values in the
+        dictionary should be the paths to the values in the ResponseData object (in the same format
+        as the string value_extractor, described above). The values extracted from the ResponseData
+        object will be passed to the Check subclass `_call` method as keyword arguments.
+
+        Example:
+
+        ```
+        value_extractor = {
+            'response': 'response['content']',
+            'metadata': 'response.metadata',
+        }
+        class MyCheck(Check):
+            def _call(self, response: str, metadata: dict[str, Any]) -> CheckResult:
+                # response will be the value at response['content']
+                # metadata will be the value at response.metadata
+                pass
+        ```
         """,
     )
     metadata: dict[str, Any] = {}
@@ -235,7 +314,7 @@ class Check(BaseModel, ABC):
         if self.value_extractor is None:
             self.value_extractor = self.default_value_extractor
             assert self.value_extractor is not None, \
-                "value_extractor must be set by `get_default_value_extractor` method to non-None value"  # noqa
+                "value_extractor must be set by `default_value_extractor` property to non-None value"  # noqa
 
     @property
     def default_value_extractor(self) -> str:
@@ -261,27 +340,19 @@ class Check(BaseModel, ABC):
 
     def __call__(self, data: ResponseData) -> CheckResult:
         """Invokes the check on the ResponseData object returned."""
-        try:
-            if self.value_extractor == 'response':
-                # most common case is 'response'; faster to simply check for this value
-                # then call _get_value_from_path every time
-                check_value = data.response
-            elif self.value_extractor == '':
-                check_value = data
-            else:
-                check_value = self._get_value_from_path(self.value_extractor, data)
-            value_extractor_error = None
-        except Exception as e:
-            # if there is an error extracting the value from the ResponseData object based on the
-            # value_extractor, the value passed to the check will be None
-            check_value = None
-            value_extractor_error = str(e)
-        result = self._call(check_value)
-        if self.value_extractor != 'response':
+        check_value, error = extract_value_from_path(self.value_extractor, data)
+        if isinstance(self.value_extractor, dict):
+            # if the value_extractor is a dictionary, the keys correspond to the names of the
+            # parameters in the Check subclass `_call` method and the values are the paths to the
+            # values in the ResponseData object; so we will pass as keyword arguments
+            result = self._call(**check_value)
+        else:
+            result = self._call(check_value)
+        if error or (self.value_extractor != self.default_value_extractor):
             result.metadata['value_extractor'] = self.value_extractor
             result.metadata['value_extracted'] = check_value
-        if value_extractor_error:
-            result.metadata['value_extractor_error'] = value_extractor_error
+        if error:
+            result.metadata['value_extractor_error'] = error
         return result
 
     @classmethod
@@ -313,23 +384,6 @@ class Check(BaseModel, ABC):
         if value['value_extractor'] == self.default_value_extractor:
             del value['value_extractor']
         return value
-
-    @staticmethod
-    def _get_value_from_path(value_path: str, data: ResponseData) -> Any:  # noqa: ANN401
-        """Retrieves the value from the ResponseData object based on the specified path."""
-        current = data
-        parts = re.findall(r'\[.*?\]|\w+', value_path)
-        for part in parts:
-            if part.startswith('[') and part.endswith(']'):
-                # Dictionary or list access
-                key = part[1:-1].strip("'\"")
-                # Check if key is a digit (including negative numbers)
-                if key.lstrip('-').isdigit():
-                    key = int(key)  # Convert key to int if it's a digit
-                current = current[key]
-            else:
-                current = getattr(current, part)
-        return current
 
     @property
     def check_type(self) -> str:
@@ -980,3 +1034,190 @@ class ToolCallsCheck(Check):
     def __str__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}(arguments='{self.arguments}', metadata={self.metadata})"
+
+
+@Check.register(CheckType.PRECISION)
+class PrecisionScore(SerializableCheck):
+    """
+    Calculate the precision score for token comparison.
+
+    Precision measures the accuracy of the generated tokens. It answers the question:
+    "Of the tokens we generated, what fraction were found in the expected (ideal) tokens?"
+
+    A high precision score indicates that when the model generates tokens, they are
+    often correct, but it doesn't tell us about tokens the model might have missed.
+    """
+
+    success_threshold: int | float | None = Field(
+        default=None,
+        description="""
+        In high-stakes applications (e.g., medical diagnosis, fraud detection), precision should be
+        very high, ideally above 0.9. This ensures that positive predictions are highly reliable.
+        In less critical applications, a precision score above 0.7 or 0.8 may be acceptable.
+        """,
+    )
+
+    @property
+    def default_value_extractor(self) -> dict:
+        """
+        The value extractor needs to extract both the actual response and the ideal response.
+        Users can override this value and set `value_extractor` to a set of custom paths.
+        It must be a dictionary with keys `actual_response` and `ideal_response` and corresponding
+        paths.
+
+        For example:
+        ```
+        {
+            'actual_response': "response["generated_text"]",
+            'ideal_response': "ideal_response",  # this will not change unless the user uses a
+            # different key in the Eval
+        }
+        ```
+        """
+        return {'actual_response': 'response', 'ideal_response': 'ideal_response'}
+
+    def _call(self, actual_response: str, ideal_response: str) -> ScoreResult:
+        """
+        Args:
+            actual_response: The response generated by the LLM.
+            ideal_response: The ideal response that the LLM should have generated.
+        """
+        generated_tokens = default_tokenizer(actual_response)
+        expected_tokens = default_tokenizer(ideal_response)
+        precision_score = precision_score_tokens(
+            expected_tokens=expected_tokens,
+            actual_tokens=generated_tokens,
+        )
+        return ScoreResult(
+            value=precision_score,
+            success_threshold=self.success_threshold,
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}()"
+
+
+@Check.register(CheckType.RECALL)
+class RecallScore(SerializableCheck):
+    """
+    Calculate the recall score for token comparison.
+
+    Recall measures the completeness of the generated tokens. It answers the question:
+    "Of the tokens that should have been generated, what fraction did we actually generate?"
+
+    A high recall score indicates that the model is good at finding all the correct tokens,
+    but it doesn't tell us if it also included incorrect tokens.
+    """
+
+    success_threshold: int | float | None = Field(
+        default=None,
+        description="""
+        For applications where catching all positives is crucial (e.g., identifying spam, detecting
+        potential security threats), recall should ideally be above 0.9. If false negatives are
+        less critical, a recall of 0.7 or 0.8 might be considered sufficient.
+        """,
+    )
+
+    @property
+    def default_value_extractor(self) -> dict:
+        """
+        The value extractor needs to extract both the actual response and the ideal response.
+        Users can override this value and set `value_extractor` to a set of custom paths.
+        It must be a dictionary with keys `actual_response` and `ideal_response` and corresponding
+        paths.
+
+        For example:
+        ```
+        {
+            'actual_response': "response["generated_text"]",
+            'ideal_response': "ideal_response",  # this will not change unless the user uses a
+            # different key in the Eval
+        }
+        ```
+        """
+        return {'actual_response': 'response', 'ideal_response': 'ideal_response'}
+
+    def _call(self, actual_response: str, ideal_response: str) -> ScoreResult:
+        """
+        Args:
+            actual_response: The response generated by the LLM.
+            ideal_response: The ideal response that the LLM should have generated.
+        """
+        generated_tokens = default_tokenizer(actual_response)
+        expected_tokens = default_tokenizer(ideal_response)
+        recall_score = recall_score_tokens(
+            expected_tokens=expected_tokens,
+            actual_tokens=generated_tokens,
+        )
+        return ScoreResult(
+            value=recall_score,
+            success_threshold=self.success_threshold,
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}()"
+
+
+@Check.register(CheckType.F1_SCORE)
+class F1Score(SerializableCheck):
+    """
+    Calculate the F1 score for token comparison.
+
+    The F1 score is the harmonic mean of precision and recall, providing a single score
+    that balances both metrics. It answers the question:
+    "What is the overall quality of the generated tokens, considering both accuracy and
+    completeness?"
+
+    A high F1 score indicates that the model has both good precision and good recall.
+    It's particularly useful when you need a balance between precision and recall.
+    """
+
+    success_threshold: int | float | None = Field(
+        default=None,
+        description="""
+        An F1-score above 0.8 is typically good, indicating a strong balance between precision and
+        recall. For less critical applications, an F1-score of 0.7 or 0.75 may be acceptable.
+        """,
+    )
+
+    @property
+    def default_value_extractor(self) -> dict:
+        """
+        The value extractor needs to extract both the actual response and the ideal response.
+        Users can override this value and set `value_extractor` to a set of custom paths.
+        It must be a dictionary with keys `actual_response` and `ideal_response` and corresponding
+        paths.
+
+        For example:
+        ```
+        {
+            'actual_response': "response["generated_text"]",
+            'ideal_response': "ideal_response",  # this will not change unless the user uses a
+            # different key in the Eval
+        }
+        ```
+        """
+        return {'actual_response': 'response', 'ideal_response': 'ideal_response'}
+
+    def _call(self, actual_response: str, ideal_response: str | list[str]) -> ScoreResult:
+        """
+        Args:
+            actual_response: The response generated by the LLM.
+            ideal_response: The ideal response that the LLM should have generated.
+        """
+        generated_tokens = default_tokenizer(actual_response)
+        expected_tokens = default_tokenizer(ideal_response)
+        f1_score = f1_score_tokens(
+            expected_tokens=expected_tokens,
+            actual_tokens=generated_tokens,
+        )
+        return ScoreResult(
+            value=f1_score,
+            success_threshold=self.success_threshold,
+        )
+
+    def __str__(self) -> str:
+        """String representation."""
+        return f"{self.__class__.__name__}()"

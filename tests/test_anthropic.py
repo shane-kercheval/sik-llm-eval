@@ -14,7 +14,7 @@ from llm_eval.anthropic import (
 from llm_eval.openai import Function
 
 
-def test__AnthropicResponse__dict_metadata_model_dump():  # noqa
+def test__AnthropicResponse__dict_metadata_model_dump():
     response = AnthropicResponse(
         object_name="test name",
         model="test model",
@@ -31,7 +31,7 @@ def test__AnthropicResponse__dict_metadata_model_dump():  # noqa
     }
 
 
-def test__AnthropicResponse__BaseModel_metadata_model_dump():  # noqa
+def test__AnthropicResponse__BaseModel_metadata_model_dump():
     class Metadata(BaseModel):
         test_1: str
         test_2: int
@@ -51,7 +51,7 @@ def test__AnthropicResponse__BaseModel_metadata_model_dump():  # noqa
     }
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test__AnthropicCompletionWrapper() -> None:  # noqa
+def test__AnthropicCompletionWrapper() -> None:
     client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     expected_response = "testing testing"
     messages = [{"role": "user", "content": f"Repeat: '{expected_response}'"}]
@@ -87,7 +87,7 @@ def test__AnthropicCompletionWrapper() -> None:  # noqa
     assert response.usage["total_tokens"] > 0
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test__AnthropicCompletionWrapper__streaming() -> None:  # noqa
+def test__AnthropicCompletionWrapper__streaming() -> None:
     # test valid parameters for streaming
     callback_chunks = []
 
@@ -134,7 +134,7 @@ def test__AnthropicCompletionWrapper__streaming() -> None:  # noqa
     assert callback_chunks[-1].finish_reason == "max_tokens"
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test_Function__get_weather__to_dict(function_weather: Function):  # noqa
+def test__Function__get_weather__to_dict(function_weather: Function):
     assert function_weather.to_dict() == {
         "type": "function",
         "function": {
@@ -155,7 +155,7 @@ def test_Function__get_weather__to_dict(function_weather: Function):  # noqa
     }
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test_Function__get_current_stocks__to_dict(function_stocks: Function):  # noqa
+def test__Function__get_current_stocks__to_dict(function_stocks: Function):
     assert function_stocks.to_dict() == {
         "type": "function",
         "function": {
@@ -175,7 +175,7 @@ def test_Function__get_current_stocks__to_dict(function_stocks: Function):  # no
     }
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test_AnthropicTools():  # noqa
+def test__AnthropicTools():
     tools = [
         {
             "name": "get_weather",
@@ -232,8 +232,7 @@ def test_AnthropicTools():  # noqa
     assert "fahrenheit" in response.tools[0]["arguments"]["unit"]
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test_AnthropicTools__unrelated_prompt__auto(  # noqa
-) -> None:
+def test__AnthropicTools__unrelated_prompt__auto() -> None:
     """
     When the prompt is unrelated to any tool and the tool_choice is 'auto', then we will get
     a AnthropicCompletionResponse object rather than a AnthropicToolResponse object.
@@ -276,8 +275,7 @@ def test_AnthropicTools__unrelated_prompt__auto(  # noqa
     assert response.content
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test_AnthropicTools__unrelated_prompt__required(  # noqa
-) -> None:
+def test__AnthropicTools__unrelated_prompt__required() -> None:
     """
     When the prompt is unrelated to any tool and the tool_choice is 'required', then we will get
     a AnthropicToolResponse object, because `required` means that a tool must be returned.

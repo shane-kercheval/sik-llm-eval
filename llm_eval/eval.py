@@ -36,7 +36,7 @@ class Eval(DictionaryEqualsMixin):
             self,
             input: str | dict | list | Any,  # noqa: A002, ANN401
             checks: list[Check | dict | Callable[[Any], CheckResult]] | None = None,
-            ideal_response: str | None = None,
+            ideal_response: str | list | None = None,
             metadata: dict | None = None) -> None:
         """
         Initializes the Eval.
@@ -51,9 +51,9 @@ class Eval(DictionaryEqualsMixin):
                 the Check subclasses need to be registered via `Check.register(...)`, and the
                 dictionary needs a `check_type` key with the registration value.
             ideal_response:
-                The ideal response that the Candidate/LLM should return. This is optional and not
-                currently used in the evaluation process, but it can be used in user-defined checks
-                and candidates.
+                The ideal response or list of ideal responses that the Candidate/LLM should return.
+                This is optional and not currently used in the evaluation process, but it can be
+                used in user-defined checks and candidates.
             metadata:
                 Metadata associated with the Eval.
         """

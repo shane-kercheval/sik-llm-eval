@@ -31,7 +31,7 @@ from llm_eval.openai import user_message
 from tests.conftest import MockCandidate
 
 
-def test__Eval__creation():  # noqa
+def test__Eval__creation():
     messages = [user_message('test')]
     eval_obj = Eval(input=messages)
     eval_dict = eval_obj.to_dict()
@@ -67,7 +67,7 @@ def test__Eval__creation():  # noqa
     }
     assert Eval(**eval_dict) == eval_obj
 
-def test__eval_obj__clone(fake_eval_8f9fbf37):  #noqa
+def test__eval_obj__clone(fake_eval_8f9fbf37: dict):
     config = deepcopy(fake_eval_8f9fbf37)
     eval_obj = Eval(**config)
     eval_cloned = eval_obj.clone()
@@ -83,7 +83,7 @@ def test__eval_obj__clone(fake_eval_8f9fbf37):  #noqa
     assert eval_obj.metadata == eval_cloned.metadata
     assert eval_obj.metadata is not eval_cloned.metadata
 
-def test__Eval__call__result__to_from_dict():  # noqa
+def test__Eval__call__result__to_from_dict():
     """
     Tests the basic case of calling an Eval object and converting it to/from a dict. No checks are
     passed to the eval.
@@ -108,7 +108,7 @@ def test__Eval__call__result__to_from_dict():  # noqa
     assert EvalResult(**result_dict) == result
     assert EvalResult(**result_dict).to_dict() == result.to_dict()
 
-def test__Eval__from_objects__minimal():  # noqa
+def test__Eval__from_objects__minimal():
     def mock_llm(x):  # noqa
         return f'response: {x}'
     prompt = "This is a prompt."
@@ -126,7 +126,7 @@ def test__Eval__from_objects__minimal():  # noqa
     assert result.total_time_seconds >= 0
 
 @pytest.mark.parametrize('use_async', [True, False])
-def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_8f9fbf37: dict):  # noqa
+def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_8f9fbf37: dict):
     eval_dict = fake_eval_8f9fbf37.copy()
     eval_obj = Eval(**eval_dict)
     assert eval_obj.to_dict() == eval_dict
@@ -186,7 +186,7 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
     assert recreated_eval.candidate_obj
     assert recreated_eval.check_results == eval_result.check_results
 
-def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run):  # noqa
+def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run: dict):  # noqa: E501
     """
     Use Mock LLM with multiple code blocks (over multiple responses) to ensure code blocks run and
     the check results return the expected values.
@@ -285,7 +285,7 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     }
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers, openai_candidate_template):  # noqa
+def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers: dict, openai_candidate_template: dict):  # noqa: E501
     eval_config = fake_eval_sum_two_numbers.copy()
     eval_obj = Eval(**eval_config)
     result = eval_obj(openai_candidate_template)
@@ -322,7 +322,13 @@ def callback(x: EvalResult) -> None:
 @pytest.mark.parametrize("candidate_type", ["AsyncMockCandidate", "MockCandidate"])
 @pytest.mark.parametrize("num_cpus", [-1, 1])
 @pytest.mark.parametrize("async_batch_size", [1, 50])
-def test__async__EvalHarness__multiple_candidates__multiple_evals(candidate_type, num_cpus, async_batch_size, fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+def test__async__EvalHarness__multiple_candidates__multiple_evals(
+        candidate_type: str,
+        num_cpus: int,
+        async_batch_size: int,
+        fake_eval_subtract_two_numbers: dict,
+        fake_eval_sum_two_numbers: dict,
+    ):
     subtract_config = fake_eval_subtract_two_numbers.copy()
     sum_config = fake_eval_sum_two_numbers.copy()
 
@@ -486,7 +492,11 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(candidate_type
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
 
 @pytest.mark.parametrize("candidate_type", ["AsyncMockCandidate", "MockCandidate"])
-def test__evals__num_samples__greater_than_one__async__via_constructor(candidate_type, fake_eval_subtract_two_numbers, fake_eval_sum_two_numbers):  # noqa
+def test__evals__num_samples__greater_than_one__async__via_constructor(
+        candidate_type: str,
+        fake_eval_subtract_two_numbers: dict,
+        fake_eval_sum_two_numbers: dict,
+    ):
     """Tests num_samples > 1 for async evals and when we pass num_samples to constructor."""
     subtract_config = fake_eval_subtract_two_numbers.copy()
     sum_config = fake_eval_sum_two_numbers.copy()
@@ -690,7 +700,7 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(candidate
     assert cand_2_results_sum.perc_successful_checks == 1
     assert cand_2_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
-def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values):  # noqa
+def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values: dict):
     """Test that numeric values are converted to strings when loading an Eval object."""
     eval_config = deepcopy(fake_eval_non_string_values)
     eval_obj = Eval(**eval_config)
@@ -734,7 +744,10 @@ multi_processing_error_handler = ErrorCallbackHandler(error_callback_global_list
 multi_processing_error_callback = multi_processing_error_handler.callback
 
 @pytest.mark.parametrize('num_cpus', [1, None])
-def test__EvalHarness__candidate_has_error_generating_response_multi_processing(num_cpus, fake_eval_sum_two_numbers_code_blocks_run):  # noqa
+def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
+        num_cpus: int | None,
+        fake_eval_sum_two_numbers_code_blocks_run: dict,
+    ):
     """
     Tests that the EvalHarness captures errors generated by the candidate. If no error_callback
     is set, the harness should raise the error and stop processing the evals. If an error_callback
@@ -848,7 +861,11 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
         assert results[1][i].check_results[-1].metadata['num_code_tests_successful'] > 0
 
 
-def test__MultiProcessing_openai_candidates(openai_candidate_template, fake_eval_sum_two_numbers, fake_eval_subtract_two_numbers):  # noqa
+def test__MultiProcessing_openai_candidates(
+        openai_candidate_template: dict,
+        fake_eval_sum_two_numbers: dict,
+        fake_eval_subtract_two_numbers: dict,
+    ):
     """
     The purpose of this test is mainly to ensure we can pickle the openai candidate object when
     using multiprocessing. For example, defining the OpenAI class in the __init__ method of the
@@ -897,7 +914,7 @@ class UnregisteredCandidate(Candidate):  # noqa
         return CandidateResponse(response={'prompt': prompt, 'response': self.response})
 
 
-def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa
+def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_and_response():
     """
     We should be able to use unregistered Check and Candidate classes with non-string prompts and
     responses. These classes won't be able to be saved/loaded from a dictionary, and so we can't
@@ -926,7 +943,7 @@ def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_an
     assert result.to_dict()['candidate_obj'] == UnregisteredCandidate(42).to_dict()
     assert result.to_dict()['check_results'][0] == check_result.to_dict()
 
-def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa
+def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa: E501
         harness = EvalHarness(
             # num_cpus=1, async_batch_size=1,
             evals=[
@@ -986,7 +1003,7 @@ def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_pr
         assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
         assert results[1][1].to_dict()['check_results'][0] == results[1][1].check_results[0].to_dict()  # noqa
 
-def test__Eval__callable_check__callable_candidate__non_string_prompt_and_response():  # noqa
+def test__Eval__callable_check__callable_candidate__non_string_prompt_and_response():
     """
     We should be able to use callable Checks and Candidates (e.g. functions) with non-string
     prompts and responses. Lambdas can't be pickled, so we can't use them with EvalHarness (with
@@ -1033,7 +1050,7 @@ def test__Eval__callable_check__callable_candidate__non_string_prompt_and_respon
     assert result.to_dict()['check_results'][1] == check_result_2.to_dict()
 
 @pytest.mark.parametrize('use_async', [True, False])
-def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(use_async):  # noqa
+def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(use_async: bool):  # noqa: E501
     if use_async:
         async def async_candidate_1(prompt):  # noqa
             return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response1'})  # noqa
@@ -1120,7 +1137,7 @@ def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and
     assert results[1][num_samples].to_dict()['candidate_obj']
     assert results[1][num_samples].to_dict()['check_results'][0] == results[1][num_samples].check_results[0].to_dict()  # noqa: E501
 
-def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template):  #noqa
+def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template: dict):
     """Integration test that tests Evaling a real OpenAITool API call against the ToolsCheck."""
     candidate = Candidate.from_dict(openai_tools_candidate_template)
     eval_ = Eval(

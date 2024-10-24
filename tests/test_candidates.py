@@ -45,7 +45,7 @@ class MockCandidate(Candidate):
         return self.model(input)
 
 
-def test__is_async_candidate():  # noqa
+def test__is_async_candidate():
     async def async_function():  # noqa
         pass
     def sync_function():  # noqa
@@ -62,12 +62,12 @@ def test__is_async_candidate():  # noqa
     assert is_async_candidate(AsyncCallable())
     assert not is_async_candidate(SyncCallable())
 
-def test__Candidate__from_yaml(openai_candidate_template: dict):  # noqa
+def test__Candidate__from_yaml(openai_candidate_template: dict):
     candidate = Candidate.from_yaml('examples/candidates/openai_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.to_dict() == openai_candidate_template
 
-def test__candidate__registration():  # noqa
+def test__candidate__registration():
     assert 'MOCK_MODEL' in Candidate.registry
     assert 'mock_model' in Candidate.registry
 
@@ -98,7 +98,7 @@ def test__candidate__registration():  # noqa
     assert response == 'test_3'
     assert candidate.model.prompts == ['test_1', 'test_2']
 
-def test__candidate__to_from_dict():  # noqa
+def test__candidate__to_from_dict():
     candidate_dict = {
         'candidate_type': 'MOCK_MODEL',
         'metadata': {'name': 'test name'},
@@ -130,7 +130,7 @@ def test__candidate__to_from_dict():  # noqa
     assert candidate.model.prompts == ['test']
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__default__no_parameters(openai_model):  # noqa
+def test__OpenAI__default__no_parameters(openai_model: str):
     candidate = OpenAICandidate(model=openai_model)
     assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model': openai_model}  # noqa
     messages = [user_message("What is the capital of France?")]
@@ -152,7 +152,7 @@ def test__OpenAI__default__no_parameters(openai_model):  # noqa
     response = recreated_candidate(messages)
     assert 'Berlin' in response.response
 
-def test__OpenAI__config():  # noqa
+def test__OpenAI__config():
     """Test that the various config options for an OpenAI candidate work."""
     config = {
         'metadata': {'name': 'Test Name'},
@@ -172,7 +172,7 @@ def test__OpenAI__config():  # noqa
     assert candidate.from_dict(candidate.to_dict()) == candidate
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__template__parameters(openai_candidate_template):  # noqa
+def test__OpenAI__template__parameters(openai_candidate_template: dict):
     """Test that the template for an OpenAI candidate works."""
     template = deepcopy(openai_candidate_template)
     expected_model_param_names = ['temperature', 'max_tokens']
@@ -189,7 +189,7 @@ def test__OpenAI__template__parameters(openai_candidate_template):  # noqa
     assert 'Paris' in response.response
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__invalid_parameters(openai_candidate_template):  # noqa
+def test__OpenAI__invalid_parameters(openai_candidate_template: dict):
     """Test invalid parameters so that we know we're actually sending them."""
     template = deepcopy(openai_candidate_template)
     template['parameters']['temperature'] = -10  # invalid value
@@ -198,7 +198,10 @@ def test__OpenAI__invalid_parameters(openai_candidate_template):  # noqa
     with pytest.raises(BadRequestError):
         _ = candidate(messages)
 
-def test__OpenAIToolsCandidate__from_yaml(openai_tools_candidate_template: dict, function_weather: Function, function_stocks: Function):  # noqa
+def test__OpenAIToolsCandidate__from_yaml(
+            openai_tools_candidate_template: dict,
+            function_weather: Function, function_stocks: Function,
+        ):
     candidate = Candidate.from_yaml('examples/candidates/openai_tools_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI_TOOLS.name
     assert candidate.to_dict() == openai_tools_candidate_template

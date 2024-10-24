@@ -265,6 +265,59 @@ def get_callable_info(callable_obj: Callable) -> str:
     raise ValueError(f"Unsupported callable object: {callable_obj}")
 
 
+def get_value_from_path(value_path: str, data: Any) -> Any:  # noqa: ANN401
+    """
+    Retrieves the value from the data object based on the specified path.
+
+    For example:
+
+    ```
+    data = {
+        'a': {
+            'b': {
+                'c': 5
+            }
+        }
+    }
+    value = get_value_from_path("['a']['b']['c']", data)
+    assert value == 5
+
+    data = [10, 20, 30]
+    value = get_value_from_path("[1]", data)
+    assert value == 20
+    ```
+
+    This function also works with a lambda that is passed as a string:
+
+    ```
+    data = {
+        'a': {
+            'b': {
+                'c': 'foo',
+            }
+        }
+    }
+    value = get_value_from_path("lambda x: x['a']['b']['c'].upper()", data)
+    assert value(data) == 'FOO'
+    ```
+    """
+    if value_path.startswith('lambda'):
+        return eval(value_path)(data)
+    current = data
+    parts = re.findall(r'\[.*?\]|\w+', value_path)
+    for part in parts:
+        if part.startswith('[') and part.endswith(']'):
+            # Dictionary or list access
+            key = part[1:-1].strip("'\"")
+            # Check if key is a digit (including negative numbers)
+            if key.lstrip('-').isdigit():
+                key = int(key)  # Convert key to int if it's a digit
+            current = current[key]
+        else:
+            current = getattr(current, part)
+    return current
+
+
 T = TypeVar('T')
 
 class Registry:

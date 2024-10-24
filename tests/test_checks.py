@@ -24,10 +24,11 @@ from llm_eval.checks import (
     ToolCallsCheck,
     ToxicityCheck,
 )
+from llm_eval.internal_utilities import get_value_from_path
 from llm_eval.openai import user_message
 
 
-def test__CheckType__mixin_behaviors():  # noqa
+def test__CheckType__mixin_behavior():
     assert CheckType.MATCH == 'MATCH'
     assert CheckType.MATCH == 'match'
     assert CheckType.MATCH != 1
@@ -38,7 +39,7 @@ def test__CheckType__mixin_behaviors():  # noqa
     with pytest.raises(ValueError):  # noqa: PT011
         CheckType.to_enum('foo')
 
-def test__register_check__success__str__ensure_creation():  # noqa
+def test__register_check__success__str__ensure_creation():
     """Test successful registration of a check."""
     @Check.register('FakeCheck')
     class FakeCheck(Check):
@@ -104,7 +105,7 @@ def test__register_check__success__str__ensure_creation():  # noqa
             def __call__(self, data: ResponseData) -> CheckResult:
                 return PassFailResult(value=True, metadata={'response': data.response})
 
-def test__register_check__success__ensure_creation__with_required_params():  # noqa
+def test__register_check__success__ensure_creation__with_required_params():
     """Test successful registration of a check."""
 
     @Check.register('FakeParamCheck')
@@ -143,7 +144,7 @@ def test__register_check__success__ensure_creation__with_required_params():  # n
     assert check.metadata == {'foo': 'bar'}
     assert check.required_field == 'foo'
 
-def test__register_check__duplicate__str__():  # noqa
+def test__register_check__duplicate__str__():
     """Test registering a check with a duplicate name raises an error."""
     with pytest.raises(AssertionError):
         @Check.register(CheckType.MATCH.name)
@@ -162,7 +163,7 @@ def test__register_check__duplicate__str__():  # noqa
             def __call__(self, data: ResponseData) -> CheckResult:
                 return data.response
 
-def test__register_check__duplicate__CheckType():  # noqa
+def test__register_check__duplicate__CheckType():
     """Test registering a check with a duplicate name raises an error."""
     with pytest.raises(AssertionError):
         @Check.register(CheckType.MATCH)
@@ -172,7 +173,7 @@ def test__register_check__duplicate__CheckType():  # noqa
             def __call__(self, data: ResponseData) -> CheckResult:
                 return data.response
 
-def test__CheckType():  # noqa
+def test__CheckType():
     assert CheckType.MATCH.name == 'MATCH'
     assert CheckType.to_enum('MATCH') == CheckType.MATCH
     assert CheckType.to_enum('match') == CheckType.MATCH
@@ -181,7 +182,7 @@ def test__CheckType():  # noqa
     with pytest.raises(ValueError):  # noqa: PT011
         CheckType.to_enum('foo')
 
-def test__CheckResult__registration():  # noqa
+def test__CheckResult__registration():
     assert CheckResultsType.PASS_FAIL in CheckResult.registry  # enum
     assert CheckResultsType.PASS_FAIL.name in CheckResult.registry  # string upper
     assert CheckResultsType.PASS_FAIL.name.lower() in CheckResult.registry  # string lower
@@ -189,7 +190,7 @@ def test__CheckResult__registration():  # noqa
     assert CheckResultsType.SCORE.name in CheckResult.registry  # string upper
     assert CheckResultsType.SCORE.name.lower() in CheckResult.registry  # string lower
 
-def test__PassFailResult():  # noqa
+def test__PassFailResult():
     assert not PassFailResult(value=False).success
     assert PassFailResult(value=False).metadata == {}
     assert PassFailResult(value=True).success
@@ -202,7 +203,7 @@ def test__PassFailResult():  # noqa
     assert str(PassFailResult(value=True))
     assert str(PassFailResult(value=False, metadata={'foo': 'bar'}))
 
-def test__PassFailResult__serialize():  # noqa
+def test__PassFailResult__serialize():
     result = PassFailResult(value=True)
     result_dict = result.to_dict()
     # ensure metadata isn't included in the dict since it's empty
@@ -242,7 +243,7 @@ def test__PassFailResult__serialize():  # noqa
     assert isinstance(recreated, PassFailResult)
     assert recreated == result
 
-def test__ScoreResult():  # noqa
+def test__ScoreResult():
     assert ScoreResult(value=0.5).value == 0.5
     assert str(ScoreResult(value=0.5))
     assert ScoreResult(value=0.5).success is None
@@ -283,7 +284,7 @@ def test__ScoreResult():  # noqa
     assert result.metadata == {'foo': 'bar'}
     assert str(result)
 
-def test__ScoreResult__serialize():  # noqa
+def test__ScoreResult__serialize():
     result = ScoreResult(value=0.5)
     result_dict = result.to_dict()
     # ensure metadata and success_threshold isn't included in the dict since it's empty
@@ -334,7 +335,7 @@ def test__ScoreResult__serialize():  # noqa
     assert isinstance(recreated, ScoreResult)
     assert recreated == result
 
-def test__Check__value_extractor__get_value_from_path():  # noqa
+def test__Check__value_extractor__get_value_from_path():
     expected_response = {'foo': {'bar': 'baz'}}
     expected_prompt = 'the prompt'
     expected_metadata = {'foo': 'bar'}
@@ -343,19 +344,19 @@ def test__Check__value_extractor__get_value_from_path():  # noqa
         response=expected_response,
         response_metadata=expected_metadata,
     )
-    value = Check._get_value_from_path(value_path='input', data=response_data)
+    value = get_value_from_path(value_path='input', data=response_data)
     assert value == expected_prompt
 
-    value = Check._get_value_from_path(value_path='response', data=response_data)
+    value = get_value_from_path(value_path='response', data=response_data)
     assert value == expected_response
 
-    value = Check._get_value_from_path(value_path='response["foo"]', data=response_data)
+    value = get_value_from_path(value_path='response["foo"]', data=response_data)
     assert value == expected_response['foo']
 
-    value = Check._get_value_from_path(value_path='response["foo"]["bar"]', data=response_data)
+    value = get_value_from_path(value_path='response["foo"]["bar"]', data=response_data)
     assert value == expected_response['foo']['bar']
 
-    value = Check._get_value_from_path(value_path='response_metadata', data=response_data)
+    value = get_value_from_path(value_path='response_metadata', data=response_data)
     assert value == expected_metadata
 
     # test nested objects
@@ -365,16 +366,16 @@ def test__Check__value_extractor__get_value_from_path():  # noqa
 
     expected_response = MockObject(value={'foo': MockObject(value={'bar': 'baz'})})
     response_data = ResponseData(response=expected_response)
-    value = Check._get_value_from_path(value_path='response.value', data=response_data)
+    value = get_value_from_path(value_path='response.value', data=response_data)
     assert value == expected_response.value
 
-    value = Check._get_value_from_path(value_path='response.value["foo"]', data=response_data)
+    value = get_value_from_path(value_path='response.value["foo"]', data=response_data)
     assert value == expected_response.value['foo']
 
-    value = Check._get_value_from_path(value_path='response.value["foo"].value', data=response_data)  # noqa
+    value = get_value_from_path(value_path='response.value["foo"].value', data=response_data)
     assert value == expected_response.value['foo'].value
 
-def test__Check__value_extractor():  # noqa
+def test__Check__value_extractor():
     """The default value_extractor should use the response in the check."""
     @Check.register('FAKECHECK__VALUE_EXTRACT')
     class FakeCheck(Check):
@@ -383,7 +384,7 @@ def test__Check__value_extractor():  # noqa
         def _call(self, value: str) -> bool:
             return PassFailResult(
                 value=value is not None,
-                metadata=self.metadata,
+                metadata={'value': value},
             )
     try:
         check = FakeCheck()
@@ -392,37 +393,38 @@ def test__Check__value_extractor():  # noqa
         result = check(ResponseData(response='foo'))
         assert result.value
         assert result.success
-        assert result.metadata == {}
-        # should fail because default is still looking in response but we are using prompt
+        assert result.metadata == {'value': 'foo'}
+        # should fail because default is still looking in response but we are using input
         # so response will default to None and check will fail
+        # but the value extraction did not fail so there should not be a value_extractor_error
+        # also we are using the default value_extractor so metadata should not be populated with
+        # value_extractor and value_extracted
         result = check(ResponseData(input='foo'))
         assert not result.value
         assert not result.success
-        assert result.metadata == {}
+        assert result.metadata == {'value': None}
 
         check = FakeCheck(value_extractor='input')
-        # should fail because we are extracting prompt but prompt is None
+        # should fail because we are extracting input but input is None
         result = check(ResponseData(response='foo'))
         assert not result.value
         assert not result.success
-        # now, because we are using prompt, which is not the default value_extractor,
+        assert result.metadata['value'] is None
+        # now, because we are using input, which is not the default value_extractor,
         # metadata will be populated with the value_extractor and value_extracted
-        assert result.metadata == {
-            'value_extractor': 'input',
-            'value_extracted': None,  # None because prompt is None
-        }
-        # should be successful because we are extracting prompt and 'foo' is not None
+        assert result.metadata['value_extractor'] == 'input'
+        assert result.metadata['value_extracted'] is None
+        # should be successful because we are extracting input and 'foo' is not None
         result = check(ResponseData(input='foo'))
         assert result.value
         assert result.success
-        assert result.metadata == {
-            'value_extractor': 'input',
-            'value_extracted': 'foo',  # 'foo' is the value of prompt
-        }
+        assert result.metadata['value'] == 'foo'
+        assert result.metadata['value_extractor'] == 'input'
+        assert result.metadata['value_extracted'] == 'foo'
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
 
-def test__Check__value_extractor__override():  # noqa
+def test__Check__value_extractor__override():
     """The default value_extractor should use the response in the check."""
     @Check.register('FAKECHECK__VALUE_EXTRACT')
     class FakeCheck(Check):
@@ -436,29 +438,34 @@ def test__Check__value_extractor__override():  # noqa
             assert isinstance(data, ResponseData)
             return PassFailResult(
                 value=data.response is not None and data.input is not None,
-                metadata=self.metadata,
+                metadata={
+                    'input': data.input,
+                    'response': data.response,
+                },
             )
     try:
         check = FakeCheck()
         result = check(ResponseData(input='foo', response='bar'))
         assert result.value
         assert result.success
-        assert result.metadata == {
-            'value_extractor': '',
-            'value_extracted': ResponseData(input='foo', response='bar'),
-        }
+        # since we have defined default_value_extractor as empty string and using the default
+        # then metadata should not be populated with value_extractor and value_extracted
+        assert 'value_extractor' not in result.metadata
+        assert 'value_extracted' not in result.metadata
+        assert 'value_extractor_error' not in result.metadata
+        assert result.metadata == {'input': 'foo', 'response': 'bar'}
 
         result = check(ResponseData(input='foo'))
         assert not result.value
         assert not result.success
-        assert result.metadata == {
-            'value_extractor': '',
-            'value_extracted': ResponseData(input='foo'),
-        }
+        assert 'value_extractor' not in result.metadata
+        assert 'value_extracted' not in result.metadata
+        assert 'value_extractor_error' not in result.metadata
+        assert result.metadata == {'input': 'foo', 'response': None}
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
 
-def test__Check__value_extractor__error_extracting_value():  # noqa
+def test__Check__value_extractor__error_extracting_value():
     """
     The expected behavior when we get an error extracting the variable is that the check should
     fail (but not throw an exception) and the metadata should be populated with the error message.
@@ -481,6 +488,7 @@ def test__Check__value_extractor__error_extracting_value():  # noqa
         assert result.metadata['value_extractor'] == 'response["foo"]'
         assert result.metadata['value_extracted'] is None
         assert 'value_extractor_error' in result.metadata
+        assert 'NoneType' in result.metadata['value_extractor_error']
 
         check = FakeCheck(value_extractor='response["foo"]')
         # foo does not exist in response so this should fail
@@ -493,7 +501,190 @@ def test__Check__value_extractor__error_extracting_value():  # noqa
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
 
-def test__MatchCheck__has_check_type():  # noqa
+def test__Check__dictionary_value_extractor():
+    """
+    The value_extractor should be able to extract values from a dictionary and pass them to the
+    check as keyword arguments.
+    """
+    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
+    @Check.register(registration_value)
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        expected_input_1: str
+        expected_input_2: str
+
+        @property
+        def default_value_extractor(self) -> str:
+            return {'input_1': 'response["foobar"]', 'input_2': 'ideal_response'}
+
+        def _call(self, input_1: str, input_2: str) -> PassFailResult:
+            return PassFailResult(
+                value=input_1 == self.expected_input_1 and input_2 == self.expected_input_2,
+                metadata={'1': input_1, '2': input_2},
+            )
+    try:
+        check = FakeCheck(expected_input_1='foo', expected_input_2='bar')
+        result = check(ResponseData(response={'foobar': 'foo'}, ideal_response='bar'))
+        assert result.value
+        assert result.metadata['1'] == 'foo'
+        assert result.metadata['2'] == 'bar'
+        # since we are using the default value_extractor, metadata will not be populated with
+        # value_extractor and value_extracted
+        assert 'value_extractor' not in result.metadata
+        assert 'value_extracted' not in result.metadata
+        assert 'value_extractor_error' not in result.metadata
+    finally:
+        Check.registry._registry.pop(registration_value)
+
+def test__Check__dictionary_value_extractor__test_all_fields():
+    """
+    The value_extractor should be able to extract values from a dictionary and pass them to the
+    check as keyword arguments.
+    """
+    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
+    @Check.register(registration_value)
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        expected_my_response: str
+        expected_the_ideal_response: str
+        expected_the_input: str
+        expected_the_metadata: str
+
+        @property
+        def default_value_extractor(self) -> str:
+            return {
+                'my_response': 'response["foobar"]',
+                'the_ideal_response': 'ideal_response[1]',
+                'the_input': 'input',
+                'the_metadata': 'response_metadata["foo"]',
+
+            }
+
+        def _call(
+                self,
+                my_response: str,
+                the_ideal_response: str,
+                the_input: str,
+                the_metadata: str) -> PassFailResult:
+            return PassFailResult(value=(
+                self.expected_my_response == my_response
+                and self.expected_the_ideal_response == the_ideal_response
+                and self.expected_the_input == the_input
+                and self.expected_the_metadata == the_metadata
+            ))
+    try:
+        check = FakeCheck(
+            expected_my_response='foo',
+            expected_the_ideal_response='bar',
+            expected_the_input='baz',
+            expected_the_metadata='qux',
+        )
+        result = check(ResponseData(
+            response={'foobar': 'foo'},
+            ideal_response=['wrong', 'bar'],
+            input='baz',
+            response_metadata={'foo': 'qux'},
+        ))
+        assert result.value
+        assert 'value_extractor' not in result.metadata
+        assert 'value_extracted' not in result.metadata
+        assert 'value_extractor_error' not in result.metadata
+    finally:
+        Check.registry._registry.pop(registration_value)
+
+def test__Check__dictionary_value_extractor__error():
+    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
+    @Check.register(registration_value)
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        expected_input_1: str
+        expected_input_2: str
+
+        @property
+        def default_value_extractor(self) -> str:
+            return {'input_1': 'response["foobar"]', 'input_2': 'ideal_response'}
+
+        def _call(self, input_1: str, input_2: str) -> PassFailResult:
+            return PassFailResult(
+                value=input_1 == self.expected_input_1 and input_2 == self.expected_input_2,
+                metadata={'1': input_1, '2': input_2},
+            )
+    try:
+        check = FakeCheck(expected_input_1='foo', expected_input_2='bar')
+        # this will fail because input_1's value path is response["foobar"] but response does not
+        # have a key 'foobar'
+        # however, input_2 should be extracted correctly
+        result = check(ResponseData(response={'does_not_exist': 'foo'}, ideal_response='bar'))
+        assert not result.value
+        assert result.metadata['1'] is None
+        assert result.metadata['2'] == 'bar'
+        assert result.metadata['value_extractor'] == check.default_value_extractor
+        assert result.metadata['value_extracted'] == {'input_1': None, 'input_2': 'bar'}
+        assert 'value_extractor_error' in result.metadata
+    finally:
+        Check.registry._registry.pop(registration_value)
+
+def test__Check__lambda_string_value_extractor():
+    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_LAMBDA'
+    @Check.register(registration_value)
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        expected_input: str
+
+        @property
+        def default_value_extractor(self) -> str:
+            return 'lambda data: data.response["foobar"].upper()'
+
+        def _call(self, input: str) -> PassFailResult:  # noqa
+            return PassFailResult(
+                value=input == self.expected_input,
+                metadata={'input': input},
+            )
+    try:
+        check = FakeCheck(expected_input='FOO')
+        result = check(ResponseData(response={'foobar': 'foo'}))
+        assert result.value
+        assert result.metadata['input'] == 'FOO'
+        assert 'value_extractor' not in result.metadata
+        assert 'value_extracted' not in result.metadata
+        assert 'value_extractor_error' not in result.metadata
+    finally:
+        Check.registry._registry.pop(registration_value)
+
+def test__Check__lambda_string_value_extractor__error():
+    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_LAMBDA'
+    @Check.register(registration_value)
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        expected_input: str
+
+        @property
+        def default_value_extractor(self) -> str:
+            return 'lambda data: data.response["bar"].function_does_not_exist()'
+
+        def _call(self, input: str) -> PassFailResult:  # noqa: A002
+            return PassFailResult(
+                value=input == self.expected_input,
+                metadata={'input': input},
+            )
+    try:
+        check = FakeCheck(expected_input='FOO')
+        result = check(ResponseData(response={'bar': 'foo'}))
+        assert not result.value
+        assert result.metadata['input'] is None
+        assert 'value_extractor' in result.metadata
+        assert 'value_extracted' in result.metadata
+        assert 'value_extractor_error' in result.metadata
+        assert 'function_does_not_exist' in result.metadata['value_extractor_error']
+    finally:
+        Check.registry._registry.pop(registration_value)
+
+def test__MatchCheck__has_check_type():
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -508,7 +699,7 @@ def test__MatchCheck__has_check_type():  # noqa
     assert MatchCheck(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-def test__MatchCheck__to_from_dict():  # noqa
+def test__MatchCheck__to_from_dict():
     check = MatchCheck(value='foo')
     assert Check.from_dict(check.to_dict()) == check
     check = MatchCheck(value='foo', negate=True, metadata={'foo': 'bar'})
@@ -520,7 +711,7 @@ def test__MatchCheck__to_from_dict():  # noqa
     'negate',
     [True, False],
 )
-def test__MatchCheck(negate: bool):  # noqa
+def test__MatchCheck(negate: bool):
     assert CheckType.MATCH.name in Check.registry
     assert CheckType.MATCH in Check.registry
 
@@ -639,7 +830,7 @@ def test__MatchCheck(negate: bool):  # noqa
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
-def test__MatchCheck__value_extractor():  # noqa
+def test__MatchCheck__value_extractor():
     response = {'foo': 'bar'}
     check = MatchCheck(value='bar', value_extractor='response["foo"]')
     result = check(ResponseData(response=response))
@@ -654,7 +845,7 @@ def test__MatchCheck__value_extractor():  # noqa
     assert not result.success
     assert not result.value
 
-def test__ContainsCheck__has_check_type():  # noqa
+def test__ContainsCheck__has_check_type():
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -673,7 +864,7 @@ def test__ContainsCheck__has_check_type():  # noqa
     'negate',
     [True, False],
 )
-def test__ContainsCheck(negate: bool):  # noqa
+def test__ContainsCheck(negate: bool):
     assert CheckType.CONTAINS.name in Check.registry
     assert CheckType.CONTAINS in Check.registry
 
@@ -793,7 +984,7 @@ def test__ContainsCheck(negate: bool):  # noqa
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
-def test__ContainsCheck__value_extractor():  # noqa
+def test__ContainsCheck__value_extractor():
     response = {'foo': 'the bar'}
     check = ContainsCheck(value='bar', value_extractor='response["foo"]')
     result = check(ResponseData(response=response))
@@ -808,7 +999,7 @@ def test__ContainsCheck__value_extractor():  # noqa
     assert not result.success
     assert not result.value
 
-def test__RegexCheck__has_check_type():  # noqa
+def test__RegexCheck__has_check_type():
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -827,7 +1018,7 @@ def test__RegexCheck__has_check_type():  # noqa
     'negate',
     [True, False],
 )
-def test__RegexCheck(negate: bool):  # noqa
+def test__RegexCheck(negate: bool):
     assert CheckType.REGEX.name in Check.registry
     assert CheckType.REGEX in Check.registry
 
@@ -940,7 +1131,7 @@ def test__RegexCheck(negate: bool):  # noqa
     assert check(ResponseData(response='123foo')).success == (not negate)
     assert check(ResponseData(response='Foo')).success == (not negate)
 
-def test__RegexCheck__multiline_response():  # noqa
+def test__RegexCheck__multiline_response():
     response = r"""
     Here's a Python function called mask_emails that uses regex to mask all emails:
 
@@ -992,7 +1183,7 @@ def test__RegexCheck__multiline_response():  # noqa
     result = check(ResponseData(response=response))
     assert not result.success
 
-def test__RegexCheck__value_extractor():  # noqa
+def test__RegexCheck__value_extractor():
     response = {'foo': 'the bar'}
     check = RegexCheck(pattern='bar', value_extractor='response["foo"]')
     result = check(ResponseData(response=response))
@@ -1007,7 +1198,7 @@ def test__RegexCheck__value_extractor():  # noqa
     assert not result.success
     assert not result.value
 
-def test__LambdaCheck__has_check_type():  # noqa
+def test__LambdaCheck__has_check_type():
     check = LambdaCheck(lambda_str='lambda x: x == 1')
     assert check.check_type == CheckType.LAMBDA.name
     check_dict = check.to_dict()
@@ -1018,7 +1209,7 @@ def test__LambdaCheck__has_check_type():  # noqa
     assert LambdaCheck(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-def test__LambdaCheck():  # noqa
+def test__LambdaCheck():
     check = LambdaCheck(lambda_str='lambda x: x == 1', metadata={'foo': 'bar'})
     result = check(ResponseData(response=1))
     assert result.success
@@ -1056,7 +1247,7 @@ def test__LambdaCheck():  # noqa
     assert result.metadata['check_metadata'] == {'foo': 'bar'}
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__value_extractor__double_quotes_key():  # noqa
+def test__LambdaCheck__value_extractor__double_quotes_key():
     check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor='response["foo"]')
     result = check(ResponseData(response={'foo': [1, 2, 3]}))
     assert result.success
@@ -1083,7 +1274,7 @@ def test__LambdaCheck__value_extractor__double_quotes_key():  # noqa
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__value_extractor__single_quotes_key():  # noqa
+def test__LambdaCheck__value_extractor__single_quotes_key():
     check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor="response['foo']")
     result = check(ResponseData(response={'foo': [1, 2, 3]}))
     assert result.success
@@ -1110,7 +1301,7 @@ def test__LambdaCheck__value_extractor__single_quotes_key():  # noqa
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__value_extractor__with_numeric_indexes__dict():  # noqa
+def test__LambdaCheck__value_extractor__with_numeric_indexes__dict():
     # test list
     # test dictionary
     check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor='response[100]')
@@ -1139,7 +1330,7 @@ def test__LambdaCheck__value_extractor__with_numeric_indexes__dict():  # noqa
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__value_extractor__with_numeric_indexes__list():  # noqa
+def test__LambdaCheck__value_extractor__with_numeric_indexes__list():
     # test list
     # test dictionary
     response = [0, 1, 2, 3, 4, 5]
@@ -1180,7 +1371,7 @@ def test__LambdaCheck__value_extractor__with_numeric_indexes__list():  # noqa
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__value_extractor__from_dict():  # noqa
+def test__LambdaCheck__value_extractor__from_dict():
     check_dict = {
         'check_type': CheckType.LAMBDA.name,
         'lambda_str': 'lambda x: x[0] == 1',
@@ -1211,7 +1402,7 @@ def test__LambdaCheck__value_extractor__from_dict():  # noqa
     assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__error_handling__lambda():  # noqa
+def test__LambdaCheck__error_handling__lambda():
     check = LambdaCheck(lambda_str='lambda x: y == 1', metadata={'foo': 'bar'})
     result = check(ResponseData(response=1))
     assert not result.success
@@ -1221,17 +1412,7 @@ def test__LambdaCheck__error_handling__lambda():  # noqa
     assert result.metadata['check_metadata'] == {'foo': 'bar'}
     assert 'lambda_error' in result.metadata
 
-def test__LambdaCheck__error_handling__lambda():  # noqa
-    check = LambdaCheck(lambda_str='lambda x: y == 1', metadata={'foo': 'bar'})
-    result = check(ResponseData(response=1))
-    assert not result.success
-    assert not result.value
-    assert result.metadata['lambda_str'] == 'lambda x: y == 1'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {'foo': 'bar'}
-    assert 'lambda_error' in result.metadata
-
-def test__PythonCodeBlocksPresent__has_check_type():  # noqa
+def test__PythonCodeBlocksPresent__has_check_type():
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -1243,7 +1424,7 @@ def test__PythonCodeBlocksPresent__has_check_type():  # noqa
     assert PythonCodeBlocksPresent(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-def test__test__PythonCodeBlocksPresent():  # noqa
+def test__test__PythonCodeBlocksPresent():
     check = PythonCodeBlocksPresent(min_code_blocks=1)
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 1
@@ -1342,7 +1523,7 @@ def test__test__PythonCodeBlocksPresent():  # noqa
     assert result.metadata['min_code_blocks'] == 2
     assert result.metadata['code_blocks'] ==expected_code_blocks
 
-def test__PythonCodeBlockTests__has_check_type():  # noqa
+def test__PythonCodeBlockTests__has_check_type():
     """
     Test that the check has a check_type upon object creation (without using create_instance from
     the registry).
@@ -1354,7 +1535,6 @@ def test__PythonCodeBlockTests__has_check_type():  # noqa
     assert PythonCodeBlockTests(**check_dict) == check
     assert Check.from_dict(check_dict) == check
 
-
 def _code_blocks_to_response(code_blocks: list[str]) -> str:
     """
     Takes code blocks and returns a response that will generate the code blocks when extracting
@@ -1362,7 +1542,7 @@ def _code_blocks_to_response(code_blocks: list[str]) -> str:
     """
     return '\n\n'.join(f"```\n{dedent(c).strip()}\n```" for c in code_blocks)
 
-def test__PythonCodeBlockTests__no_code_blocks():  # noqa
+def test__PythonCodeBlockTests__no_code_blocks():
     check = PythonCodeBlockTests()
     assert check.success_threshold == 1
     assert check.code_setup is None
@@ -1400,7 +1580,7 @@ def test__PythonCodeBlockTests__no_code_blocks():  # noqa
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-def test__PythonCodeBlockTests__no_code_blocks__with_code_tests():  # noqa
+def test__PythonCodeBlockTests__no_code_blocks__with_code_tests():
     code_test = [
         'assert True',
         'assert my_value == 1',
@@ -1443,7 +1623,7 @@ def test__PythonCodeBlockTests__no_code_blocks__with_code_tests():  # noqa
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-def test__PythonCodeBlockTests__no_setup__no_functions():  # noqa
+def test__PythonCodeBlockTests__no_setup__no_functions():
     check = PythonCodeBlockTests()
     assert check.success_threshold == 1
     assert check.code_setup is None
@@ -1473,7 +1653,7 @@ def test__PythonCodeBlockTests__no_setup__no_functions():  # noqa
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-def test__PythonCodeBlockTests__with_setup():  # noqa
+def test__PythonCodeBlockTests__with_setup():
     check = PythonCodeBlockTests(
         success_threshold=0.5,
         code_setup='my_value = 1',  # my_value is depended on the code_blocks
@@ -1506,7 +1686,7 @@ def test__PythonCodeBlockTests__with_setup():  # noqa
     assert Check.from_dict(check.to_dict()) == check
     assert CheckResult.from_dict(result.to_dict()) == result
 
-def test__PythonCodeBlockTests__with_code_tests():  # noqa
+def test__PythonCodeBlockTests__with_code_tests():
     def check_code_blocks(code_blocks):  # noqa
         return code_blocks == ['assert my_value != 1', 'assert my_value == 1']
     def my_value_equals_1(code_blocks):  # noqa
@@ -1573,7 +1753,7 @@ def test__PythonCodeBlockTests__with_code_tests():  # noqa
     assert result.metadata['code_test_errors'][3] is None
     assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
 
-def test__PythonCodeBlockTests__with_code_tests__str():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__str():
     # same test as `test__PythonCodeBlockTests__with_code_tests` except the code_tests are strings
     # rather than functions
     check_code_blocks = """
@@ -1656,7 +1836,7 @@ def test__PythonCodeBlockTests__with_code_tests__str():  # noqa
     assert result.metadata['code_test_errors'][3] is None
     assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
 
-def test__PythonCodeBlockTests__failing_code_setup_raises_error():  # noqa
+def test__PythonCodeBlockTests__failing_code_setup_raises_error():
     """
     If one of the code_tests (that is checking the results) raises an error, the entire check
     should fail.
@@ -1672,7 +1852,7 @@ def test__PythonCodeBlockTests__failing_code_setup_raises_error():  # noqa
     with pytest.raises(AssertionError):
         check(response)
 
-def test__PythonCodeBlockTests__with_code_tests__failing_function_does_not_raise_error():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__failing_function_does_not_raise_error():
     """
     If one of the code_tests (that is checking the results) raises an error, the entire check
     should fail.
@@ -1701,7 +1881,7 @@ def test__PythonCodeBlockTests__with_code_tests__failing_function_does_not_raise
     assert result.metadata['code_blocks'] == ['1 == 1']
     assert result.metadata['code_block_errors'][0] is None
 
-def test__PythonCodeBlockTests__with_code_tests__all_code_blocks_fail__test_numbers_are_correct():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__all_code_blocks_fail__test_numbers_are_correct():
     """Make sure the number of code tests is still accurate if all code blocks fail to run."""
     code_tests = ["def failing_function(code_blocks):\n    return variable_does_not_exist == 1"]
     check = PythonCodeBlockTests(code_tests=code_tests)
@@ -1728,7 +1908,7 @@ def test__PythonCodeBlockTests__with_code_tests__all_code_blocks_fail__test_numb
     assert result.metadata['code_test_results'] == [False]
     assert result.metadata['code_test_errors'][0] == {'error': 'NameError', 'message': "name 'variable_does_not_exist' is not defined"}  # noqa
 
-def test__PythonCodeBlockTests__with_code_tests__all_tests_with_same_name():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__all_tests_with_same_name():
     # same test as `test__PythonCodeBlockTests__with_code_tests` except all functions are named the
     # same `test_function`
     check_code_blocks = """
@@ -1811,7 +1991,7 @@ def test__PythonCodeBlockTests__with_code_tests__all_tests_with_same_name():  # 
     assert result.metadata['code_test_errors'][3] is None
     assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
 
-def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():
     # code blocks depend on this setup code
     code_setup = dedent("""
         required_variable = 2
@@ -2009,7 +2189,7 @@ def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():
     assert result.metadata['code_test_results'] == expected_test_results
     assert result.metadata['code_test_errors'] == expected_errors
 
-def test__PythonCodeBlockTests__with_code_tests__invalid_test_raises_exception():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__invalid_test_raises_exception():
     # we are only expecting a single line of code for non-functions
     code_tests = ['assert True\nassert True']
     check = PythonCodeBlockTests(code_tests=code_tests)
@@ -2031,7 +2211,7 @@ def test__PythonCodeBlockTests__with_code_tests__invalid_test_raises_exception()
     with pytest.raises(AssertionError, match=re.escape('Test must return a boolean value:\ndef __code_test__(code_blocks: list[str]) -> bool:\n    return None')):  # noqa
         check(ResponseData(response='```\n1 == 1\n```'))
 
-def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():
     expected_code_blocks = [
         """
         import time
@@ -2097,7 +2277,7 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():  #
     assert result.metadata['code_test_errors'][2] is None
     assert result.metadata['code_test_errors'][3] is None
 
-def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_blocks():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_blocks():
     expected_code_blocks = [
         """
         import time
@@ -2163,7 +2343,7 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert result.metadata['code_test_errors'][2] is None
     assert result.metadata['code_test_errors'][3] is None
 
-def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_tests():  # noqa
+def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_tests():
     expected_code_blocks = [
         """
         import time
@@ -2229,7 +2409,7 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert result.metadata['code_test_errors'][2] == {'error': 'TimeoutError', 'message': ''}
     assert result.metadata['code_test_errors'][3] is None
 
-def test__PythonCodeBlockTests__with_env_namespace():  # noqa
+def test__PythonCodeBlockTests__with_env_namespace():
     code = dedent("""
     import pandas as pd
     # df = pd.DataFrame({'col_1': [20, 5, 50], 'col_2': ['a', 'a', 'b']})
@@ -2282,7 +2462,7 @@ def test__PythonCodeBlockTests__with_env_namespace():  # noqa
     assert Check.from_dict(check.to_dict()) == check
     assert CheckResult.from_dict(result.to_dict()) == result
 
-def test__ToolCallsCheck():  # noqa
+def test__ToolCallsCheck():
     """Test that the template for an OpenAI candidate works."""
     check = ToolCallsCheck(
         function_name='get_current_weather',
@@ -2302,7 +2482,7 @@ def test__ToolCallsCheck():  # noqa
     assert result.metadata['allow_regex'] is False
     assert result.metadata['check_type'] == CheckType.TOOL_CALL
 
-def test__ToolCallsCheck__multiple_functions():  # noqa
+def test__ToolCallsCheck__multiple_functions():
     """Test that the template for an OpenAI candidate works."""
     check = ToolCallsCheck(
         function_name='get_current_weather',
@@ -2328,7 +2508,7 @@ def test__ToolCallsCheck__multiple_functions():  # noqa
     assert result.metadata['allow_regex'] is False
     assert result.metadata['check_type'] == CheckType.TOOL_CALL
 
-def test__ToolCallsCheck__allow_regex():  # noqa
+def test__ToolCallsCheck__allow_regex():
     check = ToolCallsCheck(
         function_name='get_current_weather',
         function_arguments={
@@ -2364,7 +2544,7 @@ def test__ToolCallsCheck__allow_regex():  # noqa
     assert result.metadata['allow_regex'] is True
     assert result.metadata['check_type'] == CheckType.TOOL_CALL
 
-def test__ToolCallsCheck__penalize_extraneous_arguments():  # noqa
+def test__ToolCallsCheck__penalize_extraneous_arguments():
     """Test that the template for an OpenAI candidate works."""
     check = ToolCallsCheck(
         function_name='get_current_weather',
@@ -2389,7 +2569,7 @@ def test__ToolCallsCheck__penalize_extraneous_arguments():  # noqa
     assert result.metadata['check_type'] == CheckType.TOOL_CALL
     assert result.metadata['penalize_extraneous_arguments']
 
-def test__ToolCallsCheck__incorrect_function_name():  # noqa
+def test__ToolCallsCheck__incorrect_function_name():
     check = ToolCallsCheck(
         function_name='get_current_weather',
         function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
@@ -2402,7 +2582,7 @@ def test__ToolCallsCheck__incorrect_function_name():  # noqa
     assert result.success is False
     assert result.value == 0
 
-def test__ToolCallsCheck__allow_regex_partial_correct():  # noqa
+def test__ToolCallsCheck__allow_regex_partial_correct():
     check = ToolCallsCheck(
         function_name='get_current_weather',
         function_arguments={
@@ -2438,7 +2618,7 @@ def test__ToolCallsCheck__allow_regex_partial_correct():  # noqa
     assert result.metadata['allow_regex'] is True
     assert result.metadata['check_type'] == CheckType.TOOL_CALL
 
-def test__ToolCallsCheck__empty_string_response():  # noqa
+def test__ToolCallsCheck__empty_string_response():
     check = ToolCallsCheck(
         function_name='get_current_weather',
         function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
@@ -2448,7 +2628,7 @@ def test__ToolCallsCheck__empty_string_response():  # noqa
     assert result.success is False
     assert result.value == 0
 
-def test__ToolCallsCheck__empty_list_response():  # noqa
+def test__ToolCallsCheck__empty_list_response():
     check = ToolCallsCheck(
         function_name='get_current_weather',
         function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
@@ -2458,7 +2638,7 @@ def test__ToolCallsCheck__empty_list_response():  # noqa
     assert result.success is False
     assert result.value == 0
 
-def test__ToolCallsCheck__string_response():  # noqa
+def test__ToolCallsCheck__string_response():
     check = ToolCallsCheck(
         function_name='get_current_weather',
         function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
@@ -2468,7 +2648,7 @@ def test__ToolCallsCheck__string_response():  # noqa
     assert result.success is False
     assert result.value == 0
 
-def test__LLMCheck__openai(openai_candidate_template):  # noqa
+def test__LLMCheck__openai(openai_candidate_template: dict):
     """Test that the template for an OpenAI candidate works."""
     template = deepcopy(openai_candidate_template)
     candidate = Candidate.from_dict(template)
@@ -2486,7 +2666,7 @@ def test__LLMCheck__openai(openai_candidate_template):  # noqa
     assert '42' in result.value
     assert result.metadata['response_metadata']['total_cost'] > 0
 
-def test__ToxicityCheck__openai(openai_candidate_template):  # noqa
+def test__ToxicityCheck__openai(openai_candidate_template: dict):
     """Test that the template for an OpenAI candidate works."""
     template = deepcopy(openai_candidate_template)
     check = ToxicityCheck(evaluator=Candidate.from_dict(template))
