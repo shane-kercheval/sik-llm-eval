@@ -164,3 +164,7 @@ cython_debug/
 
 # Data files
 scripts/data/
+examples/nvidia_chatrag_bench/data/huggingface_datasets/*.parquet
+examples/nvidia_chatrag_bench/data/nvidia_datasets_combined.parquet
+examples/nvidia_chatrag_bench/evals/*.yaml
+examples/nvidia_chatrag_bench/results/*.yaml

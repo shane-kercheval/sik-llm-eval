@@ -1,9 +1,11 @@
 """Tests the utilities.py file."""
+from enum import Enum, auto
 from time import sleep
 import re
 import pytest
 from textwrap import dedent
 from llm_eval.internal_utilities import (
+    Registry,
     create_function,
     create_hash,
     execute_code_blocks,
@@ -27,6 +29,7 @@ from llm_eval.utilities import (
     f1_score,
     precision_score_tokens,
     recall_score_tokens,
+    simple_tokenizer,
 )
 
 
@@ -702,6 +705,98 @@ def test__get_value_from_path_using_lamda():
     data = {'a': [1, 2, {'b': 'foo'}]}
     assert get_value_from_path("lambda x: x['a'][2]['b'].upper()", data) == 'FOO'
 
+class SampleEnum(Enum):
+    """Enum for testing Registry."""
+
+    TYPE1 = auto()
+    TYPE2 = auto()
+
+class SampleClass1:
+    """Sample class for testing Registry."""
+
+    def __init__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+
+class SampleClass2:
+    """Sample class for testing Registry."""
+
+    def __init__(self, name: str):
+        self.name = name
+
+def test__Registry__register_and_get_with_string():
+    """Test registering and retrieving a class using a string type name."""
+    registry = Registry()
+    registry.register("sample_class_1", SampleClass1)
+    assert "sample_class_1" in registry
+    assert "SAMPLE_CLASS_1" in registry
+    assert registry.get("sample_class_1") == SampleClass1
+    assert registry.get("SAMPLE_CLASS_1") == SampleClass1
+
+def test__Registry__register_and_get_with_enum():
+    """Test registering and retrieving a class using an Enum type name."""
+    registry = Registry()
+    registry.register(SampleEnum.TYPE1, SampleClass1)
+    assert SampleEnum.TYPE1 in registry
+    assert "TYPE1" in registry
+    assert "type1" in registry
+    assert registry.get("TYPE1") == SampleClass1
+    assert registry.get(SampleEnum.TYPE1) == SampleClass1
+
+def test__Registry__duplicate_registration_raises_error():
+    """Test that registering a type name twice raises an assertion error."""
+    registry = Registry()
+    registry.register("duplicate", SampleClass1)
+    with pytest.raises(AssertionError, match="Type 'DUPLICATE' already registered."):
+        registry.register("duplicate", SampleClass2)
+
+def test__Registry__create_instance_with_string():
+    registry = Registry()
+    """Test creating an instance using a string type name."""
+    registry.register("sample_class_1", SampleClass1)
+    instance = registry.create_instance("sample_class_1", x=10, y=20)
+    assert isinstance(instance, SampleClass1)
+    assert instance.x == 10
+    assert instance.y == 20
+
+    registry.register("sample_class_2", SampleClass2)
+    instance = registry.create_instance("sample_class_2", name="test")
+    assert isinstance(instance, SampleClass2)
+    assert instance.name == "test"
+
+def test__Registry__create_instance_with_enum():
+    """Test creating an instance using an Enum type name."""
+    registry = Registry()
+    registry.register(SampleEnum.TYPE1, SampleClass1)
+    instance = registry.create_instance(SampleEnum.TYPE1, x=30, y=40)
+    assert isinstance(instance, SampleClass1)
+    assert instance.x == 30
+    assert instance.y == 40
+
+    instance = registry.create_instance("TYPE1", x=50, y=60)
+    assert isinstance(instance, SampleClass1)
+    assert instance.x == 50
+    assert instance.y == 60
+
+    registry.register(SampleEnum.TYPE2, SampleClass2)
+    instance = registry.create_instance(SampleEnum.TYPE2, name="test")
+    assert isinstance(instance, SampleClass2)
+    assert instance.name == "test"
+
+def test__Registry__create_instance_unregistered_type_raises_error():
+    registry = Registry()
+    """Test that trying to create an instance of an unregistered type raises a ValueError."""
+    with pytest.raises(ValueError, match="Unknown type `sample_class_2`"):
+        registry.create_instance("sample_class_2", name="test")
+
+def test__Registry__clean_type_name_with_string():
+    """Test the _clean_type_name method with a string input."""
+    assert Registry._clean_type_name("sample") == "SAMPLE"
+
+def test__Registry__clean_type_name_with_enum():
+    """Test the _clean_type_name method with an Enum input."""
+    assert Registry._clean_type_name(SampleEnum.TYPE1) == "TYPE1"
+
 def test__precision_score():
     assert precision_score(true_pos=10, false_pos=0) == 1.0
     assert precision_score2(true_pos=10, pred_pos=10) == precision_score(true_pos=10, false_pos=0)
@@ -788,3 +883,41 @@ def test__f1_score_tokens():
     assert recall == pytest.approx(0.6666667, 0.0000001)
     expected_f1 = f_score(precision=precision, recall=recall, beta=1)
     assert expected_f1 == f1_score_tokens(expected_tokens=['a', 'b', 'c'], actual_tokens=['a', 'b'])  # noqa: E501
+
+def test__simple_tokenizer__empty_string():
+    assert simple_tokenizer('') == []
+    assert simple_tokenizer(' ') == []
+    assert simple_tokenizer(None) == []
+
+def test__simple_tokenizer__only_stop_words():
+    assert simple_tokenizer('the and in') == []
+
+def test__simple_tokenizer__with_punctuation():
+    assert simple_tokenizer('Hello, world!') == ['hello', 'world']
+
+def test__simple_tokenizer__with_apostrophe_stop_word():
+    assert simple_tokenizer("Wouldn't and shouldn't SHOULDN'T show up") == ['show']
+
+def test__simple_tokenizer__mixed_content():
+    assert simple_tokenizer('This is a test, with punctuation!') == ['test', 'punctuation']
+
+def test__simple_tokenizer__multiple_spaces():
+    assert simple_tokenizer('This    is  a   test') == ['test']
+
+def test__simple_tokenizer__no_stop_words():
+    assert simple_tokenizer('Python programming language') == ['python', 'programming', 'language']
+
+def test__simple_tokenizer__uppercase_words():
+    assert simple_tokenizer('HELLO WORLD') == ['hello', 'world']
+
+def test__simple_tokenizer__with_numbers():
+    assert simple_tokenizer('Python 3.8 is awesome') == ['python', '38', 'awesome']
+
+def test__simple_tokenizer__mixed_case_stop_words():
+    assert simple_tokenizer('The quick brown fox') == ['quick', 'brown', 'fox']
+
+def test__simple_tokenizer__hyphenated_words():
+    assert simple_tokenizer('state-of-the-art technology') == ['stateoftheart', 'technology']
+
+def test__simple_tokenizer__non_ascii_characters():
+    assert simple_tokenizer('Café müßig') == ['café', 'müßig']

@@ -6,6 +6,11 @@ A Candidate is a callable object that takes input (e.g. OpenAI-style messages) a
 response. The input and response can be any type of object that can be serialized/de-serialized
 (e.g. string, dictionary, list, etc.).
 
+IMPORTANT: Candidate objects should be stateless, such that the objects should not retain any
+state between calls (__call__ invocations). This is because the Candidate objects are reused
+between different evals and tests, and the state of the object should not be retained/used between
+different evals/tests.
+
 The purpose of a Candidate is to provide a standard interface that A) allows the user to define
 evals in a consistent manner and B) allows the results of the evals to be evaluated (checked) in a
 consistent manner. A Candidate is essentially an adapter that takes the input from the Eval and
@@ -146,6 +151,11 @@ class Candidate(DictionaryEqualsMixin, ABC):
         return decorator
 
     @classmethod
+    def is_registered(cls, candidate_type: str | Enum) -> bool:  # noqa: ANN102
+        """Check if a candidate type is registered."""
+        return candidate_type in cls.registry
+
+    @classmethod
     def from_dict(
         cls: type[Candidate],
         data: dict,
@@ -159,9 +169,9 @@ class Candidate(DictionaryEqualsMixin, ABC):
         """
         data = deepcopy(data)
         candidate_type = data.pop("candidate_type", "")
-        if candidate_type in cls.registry:
+        if cls.is_registered(candidate_type):
             return cls.registry.create_instance(type_name=candidate_type, **data)
-        raise ValueError(f"Unknown type {candidate_type}")
+        raise ValueError(f"Unknown Candidate type `{candidate_type}`")
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
@@ -260,9 +270,7 @@ class ServiceCandidate(Candidate, ABC):
         """
 
     @abstractmethod
-    def _invoke_client_callable(
-        self, input: list[dict[str, str]],  # noqa: A002
-    ) -> Any:  # noqa: ANN401
+    def _invoke_client_callable(self, input: list[dict[str, str]]) -> Any:  # noqa: A002, ANN401
         """Invoke the client with the input and return the response."""
 
     def _parse_response(self, response: Any) -> str | dict:  # noqa: ANN401

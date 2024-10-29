@@ -15,6 +15,7 @@ from llm_eval.checks import (
     CheckResult,
     CheckType,
     ContainsCheck,
+    LambdaCheck,
     MatchCheck,
     PassFailResult,
     ScoreResult,
@@ -713,7 +714,6 @@ def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values: 
     assert 'content' in eval_obj.input[0]
     assert eval_obj.input[0]['content'] == 6
 
-
 class ErrorCallbackHandler:
     """
     ErrorCallbackHandler is responsible for managing a shared list of errors (or other data)
@@ -860,7 +860,6 @@ def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
         assert results[1][i].check_results[-1].metadata['num_code_tests'] == expected_num_code_tests  # noqa: E501
         assert results[1][i].check_results[-1].metadata['num_code_tests_successful'] > 0
 
-
 def test__MultiProcessing_openai_candidates(
         openai_candidate_template: dict,
         fake_eval_sum_two_numbers: dict,
@@ -889,7 +888,6 @@ def test__MultiProcessing_openai_candidates(
     assert results[1][0].response_metadata['total_tokens'] > 0
     assert results[1][1].response_metadata['total_tokens'] > 0
 
-
 class UnregisteredCheckResult(CheckResult):  # noqa
     pass
 
@@ -912,7 +910,6 @@ class UnregisteredCandidate(Candidate):  # noqa
     def __call__(self, prompt: dict) -> dict:  # noqa
         # returns dictionary instead of string
         return CandidateResponse(response={'prompt': prompt, 'response': self.response})
-
 
 def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_and_response():
     """
@@ -1048,6 +1045,49 @@ def test__Eval__callable_check__callable_candidate__non_string_prompt_and_respon
     assert result.to_dict()['candidate_obj']
     assert result.to_dict()['check_results'][0] == check_result_1.to_dict()
     assert result.to_dict()['check_results'][1] == check_result_2.to_dict()
+
+def test__EvalResult__loading_unregistered_candidate_from_dict():
+    """
+    Test that we can (re)load an EvalResult object that contains an unregistered candidate that
+    saved using EvalResult.to_dict(). We should be able to convert the EvalResult object to a
+    dictionary and back.
+    """
+    class MyUnregisteredCandidate(Candidate):
+
+        def __init__(self, custom_state: str) -> None:
+            super().__init__()
+            self.custom_state = custom_state
+            self.metadata = {'some_metadata': 'some_value'}
+
+        def __call__(self, input: str) -> CandidateResponse:  # noqa: A002
+            return CandidateResponse(
+                response={'input': input, 'response': "This is the response foobar"},
+                metadata={'custom_state': self.custom_state},
+            )
+
+    eval_ = Eval(
+        input="This is the input",
+        checks=[LambdaCheck(lambda_str="lambda response: 'foobar' in response['response']")],
+        metadata={'foo': 'bar'},
+    )
+    candidate = MyUnregisteredCandidate('barfoo')
+    result = eval_(candidate)
+    result_dict = result.to_dict()
+    assert result_dict['eval_obj'] == eval_.to_dict()
+    assert result_dict['candidate_obj'] == candidate.to_dict()
+    assert result_dict['candidate_obj']['metadata'] == {'some_metadata': 'some_value'}
+    assert 'candidate_type' in result_dict['candidate_obj']
+    assert result_dict['candidate_obj']['candidate_type'] == 'MyUnregisteredCandidate'
+    assert result_dict['response'] == {'input': 'This is the input', 'response': 'This is the response foobar'}  # noqa: E501
+    assert result_dict['response_metadata'] == {'custom_state': 'barfoo'}
+
+    assert len(result_dict['check_results']) == 1
+    assert result_dict['check_results'][0]['result_type'] == 'PASS_FAIL'
+    assert result_dict['check_results'][0]['value'] is True
+    assert result_dict['check_results'][0]['success'] is True
+
+    result_loaded = EvalResult(**result_dict)
+    assert result_loaded.to_dict() == result_dict
 
 @pytest.mark.parametrize('use_async', [True, False])
 def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(use_async: bool):  # noqa: E501

@@ -37,6 +37,13 @@ doctests:
 tests: linting unittests doctests
 
 ####
+# examples
+####
+run_nvidia_ragbench:
+	# Run Nvidia RAGBench example
+	python -m examples.rag_evals_via_nvidia_chatrag_bench
+
+####
 # dev commands
 ####
 # commands for development

@@ -68,8 +68,12 @@ def test__Candidate__from_yaml(openai_candidate_template: dict):
     assert candidate.to_dict() == openai_candidate_template
 
 def test__candidate__registration():
+    assert not Candidate.is_registered('NotRegistered')
+
     assert 'MOCK_MODEL' in Candidate.registry
+    assert Candidate.is_registered('MOCK_MODEL')
     assert 'mock_model' in Candidate.registry
+    assert Candidate.is_registered('mock_model')
 
     assert MockCandidate().model.llm_parameters == {}
     assert MockCandidate() == Candidate.from_dict({'candidate_type': 'MOCK_MODEL'})

@@ -12,12 +12,16 @@ from llm_eval.checks import (
     CheckResultsType,
     CheckType,
     ContainsCheck,
+    F1Score,
     LLMCheck,
     LambdaCheck,
     MatchCheck,
+    MaxF1Score,
     PassFailResult,
+    PrecisionScore,
     PythonCodeBlocksPresent,
     PythonCodeBlockTests,
+    RecallScore,
     RegexCheck,
     ResponseData,
     ScoreResult,
@@ -26,6 +30,7 @@ from llm_eval.checks import (
 )
 from llm_eval.internal_utilities import get_value_from_path
 from llm_eval.openai import user_message
+from llm_eval.utilities import f1_score, precision_score_tokens, recall_score_tokens
 
 
 def test__CheckType__mixin_behavior():
@@ -501,7 +506,7 @@ def test__Check__value_extractor__error_extracting_value():
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
 
-def test__Check__dictionary_value_extractor():
+def test__Check__value_extractor__dictionary():
     """
     The value_extractor should be able to extract values from a dictionary and pass them to the
     check as keyword arguments.
@@ -537,7 +542,50 @@ def test__Check__dictionary_value_extractor():
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__dictionary_value_extractor__test_all_fields():
+def test__Check__value_extractor__dictionary__override_default():
+    """
+    The value_extractor should be able to extract values from a dictionary and pass them to the
+    check as keyword arguments.
+    """
+    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
+    @Check.register(registration_value)
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        expected_input_1: str
+        expected_input_2: str
+
+        @property
+        def default_value_extractor(self) -> str:
+            return ''
+
+        def _call(self, input_1: str, input_2: str) -> PassFailResult:
+            return PassFailResult(
+                value=input_1 == self.expected_input_1 and input_2 == self.expected_input_2,
+                metadata={'1': input_1, '2': input_2},
+            )
+    try:
+        value_extractor = {'input_1': 'response["foobar"]', 'input_2': 'ideal_response'}
+        check = FakeCheck(
+            expected_input_1='foo',
+            expected_input_2='bar',
+            value_extractor=value_extractor,
+        )
+        result = check(ResponseData(response={'foobar': 'foo'}, ideal_response='bar'))
+        assert result.value
+        assert result.metadata['1'] == 'foo'
+        assert result.metadata['2'] == 'bar'
+        # since we are overriding the default value_extractor, metadata will be populated with
+        # value_extractor and value_extracted
+        assert 'value_extractor' in result.metadata
+        assert result.metadata['value_extractor'] == value_extractor
+        assert 'value_extracted' in result.metadata
+        assert result.metadata['value_extracted'] == {'input_1': 'foo', 'input_2': 'bar'}
+        assert 'value_extractor_error' not in result.metadata
+    finally:
+        Check.registry._registry.pop(registration_value)
+
+def test__Check__value_extractor__dictionary__test_all_fields():
     """
     The value_extractor should be able to extract values from a dictionary and pass them to the
     check as keyword arguments.
@@ -594,7 +642,7 @@ def test__Check__dictionary_value_extractor__test_all_fields():
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__dictionary_value_extractor__error():
+def test__Check__value_extractor__dictionary__error():
     registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
     @Check.register(registration_value)
     class FakeCheck(Check):
@@ -627,7 +675,7 @@ def test__Check__dictionary_value_extractor__error():
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__lambda_string_value_extractor():
+def test__Check__value_extractor__lambda_string():
     registration_value = 'FAKECHECK__VALUE_EXTRACTOR_LAMBDA'
     @Check.register(registration_value)
     class FakeCheck(Check):
@@ -655,7 +703,42 @@ def test__Check__lambda_string_value_extractor():
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__lambda_string_value_extractor__error():
+def test__Check__value_extractor__lambda_string__override_default():
+    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_LAMBDA'
+    @Check.register(registration_value)
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        expected_input: str
+        # @property
+        # def default_value_extractor(self) -> str:
+        #     return 'lambda data: data.response["foobar"].upper()'
+
+        def _call(self, input: str) -> PassFailResult:  # noqa
+            return PassFailResult(
+                value=input == self.expected_input,
+                metadata={'input': input},
+            )
+    try:
+        value_extractor = 'lambda data: data.response["foobar"].upper()'
+        check = FakeCheck(
+            expected_input='FOO',
+            value_extractor=value_extractor,
+        )
+        result = check(ResponseData(response={'foobar': 'foo'}))
+        assert result.value
+        assert result.metadata['input'] == 'FOO'
+        # since we are overriding the default value_extractor, metadata will be populated with
+        # value_extractor and value_extracted
+        assert 'value_extractor' in result.metadata
+        assert result.metadata['value_extractor'] == value_extractor
+        assert 'value_extracted' in result.metadata
+        assert result.metadata['value_extracted'] == 'FOO'
+        assert 'value_extractor_error' not in result.metadata
+    finally:
+        Check.registry._registry.pop(registration_value)
+
+def test__Check__value_extractor__lambda_string__error():
     registration_value = 'FAKECHECK__VALUE_EXTRACTOR_LAMBDA'
     @Check.register(registration_value)
     class FakeCheck(Check):
@@ -2684,3 +2767,331 @@ def test__ToxicityCheck__openai(openai_candidate_template: dict):
     assert 'false' in result.value.lower()
     assert result.metadata['check_type'] == CheckType.TOXICITY
     assert result.metadata['response_metadata']['total_cost'] > 0
+
+def test__PrecisionScore():
+    score = PrecisionScore()
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == 0.5
+    assert result.success_threshold is None
+    assert result.success is None
+    assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
+
+def test__PrecisionScore__value_extractor():
+    value_extractor = {
+        'actual_response': 'response["generated_response"]',
+        'ideal_response': 'ideal_response["correct"]',
+    }
+    score = PrecisionScore(value_extractor=value_extractor)
+    result = score(ResponseData(
+        response={'generated_response': "This is the generated TEXT."},
+        ideal_response={'correct': "This is the ideal or correct text."},
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == 0.5
+    assert result.success_threshold is None
+    assert result.success is None
+    assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
+    # since we are overriding the value_extractor, it should be in the metadata
+    assert 'value_extractor' in result.metadata
+    assert result.metadata['value_extractor'] == value_extractor
+    assert 'value_extracted' in result.metadata
+    assert result.metadata['value_extracted'] == {
+        'actual_response': 'This is the generated TEXT.',
+        'ideal_response': 'This is the ideal or correct text.',
+    }
+
+def test__PrecisionScore__threshold():
+    score = PrecisionScore(success_threshold=0.51)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == 0.5
+    assert result.success is False
+    assert result.success_threshold == 0.51
+
+    score = PrecisionScore(success_threshold=0.49)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == 0.5
+    assert result.success is True
+    assert result.success_threshold == 0.49
+    assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
+
+def test__PrecisionScore__empty_response():
+    score = PrecisionScore()
+    result = score(ResponseData(
+        response="",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == 0
+    assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
+
+    score = PrecisionScore()
+    result = score(ResponseData(
+        response=None,
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == 0
+    assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
+
+def test__RecallScore():
+    score = RecallScore()
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == pytest.approx(1/3)
+    assert result.success_threshold is None
+    assert result.success is None
+    assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+
+def test__RecallScore__value_extractor():
+    value_extractor = {
+        'actual_response': 'response["generated_response"]',
+        'ideal_response': 'ideal_response["correct"]',
+    }
+    score = RecallScore(value_extractor=value_extractor)
+    result = score(ResponseData(
+        response={'generated_response': "This is the generated TEXT."},
+        ideal_response={'correct': "This is the ideal or correct text."},
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == pytest.approx(1/3)
+    assert result.success_threshold is None
+    assert result.success is None
+    assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+        # since we are overriding the value_extractor, it should be in the metadata
+    assert 'value_extractor' in result.metadata
+    assert result.metadata['value_extractor'] == value_extractor
+    assert 'value_extracted' in result.metadata
+    assert result.metadata['value_extracted'] == {
+        'actual_response': 'This is the generated TEXT.',
+        'ideal_response': 'This is the ideal or correct text.',
+    }
+
+def test__RecallScore__threshold():
+    score = RecallScore(success_threshold=0.34)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == pytest.approx(1/3)
+    assert result.success is False
+    assert result.success_threshold == 0.34
+    assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+
+    score = RecallScore(success_threshold=0.32)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == pytest.approx(1/3)
+    assert result.success is True
+    assert result.success_threshold == 0.32
+    assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+
+def test__RecallScore__empty_response():
+    score = RecallScore()
+    result = score(ResponseData(
+        response="",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == 0
+    assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+
+    score = RecallScore()
+    result = score(ResponseData(
+        response=None,
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == 0
+    assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+
+def test__F1Score():
+    score = F1Score()
+    assert not score.return_precision_recall
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == f1_score(0.5, 1/3)
+    assert result.success_threshold is None
+    assert result.success is None
+    assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+
+def test__F1Score__return_precision_recall():
+    score = F1Score(return_precision_recall=True)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the IDEAL or correct text.",
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    response_tokens = ['generated', 'text']
+    ideal_tokens = ['ideal', 'correct', 'text']
+    expected_precision = precision_score_tokens(expected_tokens=ideal_tokens, actual_tokens=response_tokens)  # noqa: E501
+    expected_recall = recall_score_tokens(expected_tokens=ideal_tokens, actual_tokens=response_tokens)  # noqa: E501
+    assert result.value == f1_score(expected_precision, expected_recall)
+    assert result.success_threshold is None
+    assert result.success is None
+    assert 'precision' in result.metadata
+    assert 'recall' in result.metadata
+    assert result.metadata['precision'] == expected_precision
+    assert result.metadata['recall'] == expected_recall
+    assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+
+def test__F1Score__threshold():
+    score = F1Score(success_threshold=0.41)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == f1_score(0.5, 1/3)
+    assert result.success is False
+    assert result.success_threshold == 0.41
+    assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+
+    score = F1Score(success_threshold=0.39)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == f1_score(0.5, 1/3)
+    assert result.success is True
+    assert result.success_threshold == 0.39
+    assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+
+def test__F1Score__empty_response():
+    score = F1Score()
+    result = score(ResponseData(
+        response="",
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == 0
+    assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+
+    score = F1Score()
+    result = score(ResponseData(
+        response=None,
+        ideal_response="This is the ideal or correct text.",
+    ))
+    assert result.value == 0
+    assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+
+def test__MaxF1Score():
+    score = MaxF1Score()
+    assert not score.return_precision_recall
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response=[
+            "This will have low score because there is not overlap in non-stop words.",
+            "This is the ideal or correct text.",
+        ],
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == f1_score(0.5, 1/3)
+    assert result.success_threshold is None
+    assert result.success is None
+    assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+
+def test__MaxF1Score__return_precision_recall():
+    score = MaxF1Score(return_precision_recall=True)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response=[
+            "This will have low score because there is not overlap in non-stop words.",
+            "This is the ideal or correct text.",
+        ],
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    response_tokens = ['generated', 'text']
+    ideal_tokens = ['ideal', 'correct', 'text']
+    expected_precision = precision_score_tokens(expected_tokens=ideal_tokens, actual_tokens=response_tokens)  # noqa: E501
+    expected_recall = recall_score_tokens(expected_tokens=ideal_tokens, actual_tokens=response_tokens)  # noqa: E501
+    assert result.value == f1_score(expected_precision, expected_recall)
+    assert result.success_threshold is None
+    assert result.success is None
+    assert 'precision' in result.metadata
+    assert 'recall' in result.metadata
+    assert result.metadata['precision'] == expected_precision
+    assert result.metadata['recall'] == expected_recall
+    assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+
+def test__MaxF1Score__threshold():
+    score = MaxF1Score(success_threshold=0.41)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response=[
+            "This will have low score because there is not overlap in non-stop words.",
+            "This is the ideal or correct text.",
+        ],
+    ))
+    # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
+    assert result.value == f1_score(0.5, 1/3)
+    assert result.success is False
+    assert result.success_threshold == 0.41
+    assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+
+    score = MaxF1Score(success_threshold=0.39)
+    result = score(ResponseData(
+        response="This is the generated TEXT.",
+        ideal_response=[
+            "This will have low score because there is not overlap in non-stop words.",
+            "This is the ideal or correct text.",
+        ],
+    ))
+    assert result.value == f1_score(0.5, 1/3)
+    assert result.success is True
+    assert result.success_threshold == 0.39
+    assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+
+def test__MaxF1Score__empty_response__empty():
+    score = MaxF1Score(return_precision_recall=True)
+    result = score(ResponseData(
+        response=[],
+        ideal_response=[
+            "This will have low score because there is not overlap in non-stop words.",
+            "This is the ideal or correct text.",
+        ],
+    ))
+    assert result.value == 0
+    assert result.metadata['precision'] == 0
+    assert result.metadata['recall'] == 0
+    assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+
+    score = MaxF1Score(return_precision_recall=True)
+    result = score(ResponseData(
+        response=None,
+        ideal_response=[
+            "This will have low score because there is not overlap in non-stop words.",
+            "This is the ideal or correct text.",
+        ],
+    ))
+    assert result.value == 0
+    assert result.metadata['precision'] == 0
+    assert result.metadata['recall'] == 0
+    assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+
+    score = MaxF1Score(return_precision_recall=True)
+    result = score(ResponseData(
+        response='',
+        ideal_response=[
+            "This will have low score because there is not overlap in non-stop words.",
+            "This is the ideal or correct text.",
+        ],
+    ))
+    assert result.value == 0
+    assert result.metadata['precision'] == 0
+    assert result.metadata['recall'] == 0
+    assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name

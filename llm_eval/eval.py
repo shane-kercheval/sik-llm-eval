@@ -284,11 +284,11 @@ class EvalResult(DictionaryEqualsMixin):
         if isinstance(candidate_obj, Candidate):
             self.candidate_obj = candidate_obj
         elif isinstance(candidate_obj, dict):
-            if 'candidate_type' in candidate_obj:
+            if 'candidate_type' in candidate_obj and Candidate.is_registered(candidate_obj['candidate_type']):  # noqa: E501
                 # loads the Candidate subclass from the registry
                 self.candidate_obj = Candidate.from_dict(candidate_obj)
             else:
-                self.candidate_obj = Candidate(**deepcopy(candidate_obj))
+                self.candidate_obj = deepcopy(candidate_obj)
         else:
             self.candidate_obj = str(candidate_obj)
         self.response = response
@@ -331,6 +331,8 @@ class EvalResult(DictionaryEqualsMixin):
         """Return a dictionary representation of the EvalResult."""
         if isinstance(self.candidate_obj, Candidate):
             candidate_obj = self.candidate_obj.to_dict()
+        elif isinstance(self.candidate_obj, dict):
+            candidate_obj = self.candidate_obj
         else:
             candidate_obj = str(self.candidate_obj)
         return {

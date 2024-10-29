@@ -1,16 +1,22 @@
 """Utility functions."""
+import re
 
-def default_tokenizer(value: str) -> list[str]:
+
+def simple_tokenizer(text: str) -> list[str]:
     """
-    Tokenize a string by splitting on whitespace.
+    Tokenizes a string by splitting on whitespace, removing punctuation, and removing common
+    English stopwords. The text is also converted to lowercase.
 
-    Args:
+    text:
         value: The string to tokenize.
-
-    Returns:
-        list[str]: A list of tokens.
     """
-    return value.split()
+    if not text:
+        return []
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    words = text.split()
+    return [word for word in words if word not in STOP_WORDS]
 
 
 def precision_score(true_pos: int, false_pos: int) -> float:
@@ -111,7 +117,8 @@ def f1_score(precision: float, recall: float) -> float:
     additional weights, valuing one of precision or recall more than the other.
 
     The highest possible value of an F-score is 1.0, indicating perfect precision and recall, and
-    the lowest possible value is 0, if precision and recall are zero." https://en.wikipedia.org/wiki/F-score
+    the lowest possible value is 0, if precision and recall are zero."
+    - https://en.wikipedia.org/wiki/F-score
 
     The beta value for the F1 score is 1, which means that precision and recall are weighted
     equally, the result is the harmonic mean of the two values.
@@ -123,7 +130,10 @@ def f1_score(precision: float, recall: float) -> float:
     return f_score(precision, recall, beta=1)
 
 
-def precision_score_tokens(expected_tokens: list[str] | set[str], actual_tokens: list[str] | set[str]) -> float:  # noqa
+def precision_score_tokens(
+        expected_tokens: list[str] | set[str],
+        actual_tokens: list[str] | set[str],
+    ) -> float:
     """
     Calculate the precision score for token comparison.
 
@@ -145,7 +155,10 @@ def precision_score_tokens(expected_tokens: list[str] | set[str], actual_tokens:
     )
 
 
-def recall_score_tokens(expected_tokens: list[str] | set[str], actual_tokens: list[str] | set[str]) -> float:  # noqa
+def recall_score_tokens(
+        expected_tokens: list[str] | set[str],
+        actual_tokens: list[str] | set[str],
+    ) -> float:
     """
     Calculate the recall score for token comparison.
 
@@ -170,7 +183,10 @@ def recall_score_tokens(expected_tokens: list[str] | set[str], actual_tokens: li
     )
 
 
-def f1_score_tokens(expected_tokens: list[str] | set[str], actual_tokens: list[str] | set[str]) -> float:  # noqa
+def f1_score_tokens(
+        expected_tokens: list[str] | set[str],
+        actual_tokens: list[str] | set[str],
+    ) -> float:
     """
     Calculate the F1 score for token comparison.
 
@@ -182,3 +198,193 @@ def f1_score_tokens(expected_tokens: list[str] | set[str], actual_tokens: list[s
         precision=precision_score_tokens(actual_tokens, expected_tokens),
         recall=recall_score_tokens(actual_tokens, expected_tokens),
     )
+
+
+# stop words were generated with nltk and saved here so that the code can be run without without
+# nltk as a dependency
+# import nltk
+# from nltk.corpus import stopwords
+# nltk.download('stopwords')
+# stop_words = set(stopwords.words('english'))
+STOP_WORDS = {
+    'a',
+    'about',
+    'above',
+    'after',
+    'again',
+    'against',
+    'ain',
+    'all',
+    'am',
+    'an',
+    'and',
+    'any',
+    'are',
+    'aren',
+    "aren't",
+    'as',
+    'at',
+    'be',
+    'because',
+    'been',
+    'before',
+    'being',
+    'below',
+    'between',
+    'both',
+    'but',
+    'by',
+    'can',
+    'couldn',
+    "couldn't",
+    'd',
+    'did',
+    'didn',
+    "didn't",
+    'do',
+    'does',
+    'doesn',
+    "doesn't",
+    'doing',
+    'don',
+    "don't",
+    'down',
+    'during',
+    'each',
+    'few',
+    'for',
+    'from',
+    'further',
+    'had',
+    'hadn',
+    "hadn't",
+    'has',
+    'hasn',
+    "hasn't",
+    'have',
+    'haven',
+    "haven't",
+    'having',
+    'he',
+    'her',
+    'here',
+    'hers',
+    'herself',
+    'him',
+    'himself',
+    'his',
+    'how',
+    'i',
+    'if',
+    'in',
+    'into',
+    'is',
+    'isn',
+    "isn't",
+    'it',
+    "it's",
+    'its',
+    'itself',
+    'just',
+    'll',
+    'm',
+    'ma',
+    'me',
+    'mightn',
+    "mightn't",
+    'more',
+    'most',
+    'mustn',
+    "mustn't",
+    'my',
+    'myself',
+    'needn',
+    "needn't",
+    'no',
+    'nor',
+    'not',
+    'now',
+    'o',
+    'of',
+    'off',
+    'on',
+    'once',
+    'only',
+    'or',
+    'other',
+    'our',
+    'ours',
+    'ourselves',
+    'out',
+    'over',
+    'own',
+    're',
+    's',
+    'same',
+    'shan',
+    "shan't",
+    'she',
+    "she's",
+    'should',
+    "should've",
+    'shouldn',
+    "shouldn't",
+    'so',
+    'some',
+    'such',
+    't',
+    'than',
+    'that',
+    "that'll",
+    'the',
+    'their',
+    'theirs',
+    'them',
+    'themselves',
+    'then',
+    'there',
+    'these',
+    'they',
+    'this',
+    'those',
+    'through',
+    'to',
+    'too',
+    'under',
+    'until',
+    'up',
+    've',
+    'very',
+    'was',
+    'wasn',
+    "wasn't",
+    'we',
+    'were',
+    'weren',
+    "weren't",
+    'what',
+    'when',
+    'where',
+    'which',
+    'while',
+    'who',
+    'whom',
+    'why',
+    'will',
+    'with',
+    'won',
+    "won't",
+    'wouldn',
+    "wouldn't",
+    'y',
+    'you',
+    "you'd",
+    "you'll",
+    "you're",
+    "you've",
+    'your',
+    'yours',
+    'yourself',
+    'yourselves',
+}
+STOP_WORDS |= {word.replace("'", "") for word in STOP_WORDS}
