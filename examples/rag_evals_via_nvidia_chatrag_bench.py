@@ -1,4 +1,25 @@
-"""TODO."""
+"""
+Demonstrates how to use the llm-eval framework to evaluate a RAG agent using Nvidia's ChatRAG
+benchmark and datasets.
+
+The datasets can be found here: https://huggingface.co/datasets/nvidia/ChatRAG-Bench/
+
+The `source.py` script has functions to download the datasets, process them, and build evals for
+llm-eval. The `source.py` script also contains the `SimpleRAGAgent` class which is a simple
+implementation of a RAG agent used demonstrate how an agent is evaluated using llm-eval.
+
+The F1 score, precision, and recall have been implemented in the llm-eval framework. The primary
+metrics that are used to evaluate the RAG agent are the F1 score and the retrieval accuracy. The
+retrieval accuracy is the percentage of times the agent retrieves the correct document. The ground
+truth document index is provided in the Nvidia datasets and is compared to the actual index that
+the agent retrieves.
+
+An exmample of how to analyze the results can be in
+`rag_evals_via_nvidia_chatrag_bench_analysis.ipynb`.
+
+This script can be run via `python -m examples.rag_evals_via_nvidia_chatrag_bench` from
+the main directory of the repository.
+"""
 import time
 import uuid
 import itertools
@@ -17,7 +38,7 @@ load_dotenv()
 
 download_datasets()  # download nvidia datasets from huggingface
 process_combine_datasets()  # combine datasets into single, consistant, dataset
-build_evals(sample_size_per_dataset=5)  # transform dataset into "evals" for llm-eval
+build_evals(sample_size_per_dataset=20)  # transform dataset into "evals" for llm-eval
 
 params = {
     'model_name': ('gpt-4o-mini', 'gpt-3.5-turbo-0125'),

@@ -18,7 +18,6 @@ import pandas as pd
 import uuid
 import chromadb
 from datasets import load_dataset
-from llm_eval.candidates import Candidate, CandidateResponse
 from llm_eval.eval import Eval
 from llm_eval.checks import MatchCheck, MaxF1Score
 
@@ -251,9 +250,10 @@ def build_evals(sample_size_per_dataset: int) -> None:
             print('Evals already exist. Skipping eval creation.')
             return
     df = pd.read_parquet(NVIDIA_DATASET_PATH)  # noqa: PD901
-    subset_df = df.groupby('dataset').apply(lambda x: x.sample(n=sample_size_per_dataset))
+    df['subset'] = df['subset'].fillna('')
+    subset_df = df.groupby(['dataset', 'subset']).apply(lambda x: x.sample(n=sample_size_per_dataset))  # noqa: E501
     for index, row in subset_df.iterrows():
-        print(f'Processing RAG agent for: {index}|{row["dataset"]}')
+        print(f'Creating eval for: {index}|{row["dataset"]}')
         message_list = row['input'].tolist()
         documents_list = row['documents'].tolist()
         _input = {
@@ -282,9 +282,10 @@ def build_evals(sample_size_per_dataset: int) -> None:
                 ),
             ]
         checks += [MaxF1Score(value_extractor=score_value_extractor, return_precision_recall=True)]
+        unique_id = str(uuid.uuid4())
         eval_ = Eval(
             metadata={
-                'uuid': str(uuid.uuid4()),
+                'uuid': unique_id,
                 'benchmark': 'Nvidia ChatRag-Bench',
                 'dataset': row['dataset'],
                 'uses_retrieval': row['uses_retrieval'],
@@ -297,8 +298,7 @@ def build_evals(sample_size_per_dataset: int) -> None:
             ideal_response=row['ground_truth_answers'].tolist(),
             checks=checks,
         )
-        name = f"{index[1]}_{row['dataset']}"
-        file_name = os.path.join(EVALS_DIR, f'{name}.yaml')
+        file_name = os.path.join(EVALS_DIR, f'{unique_id}.yaml')
         eval_.to_yaml(file_name)
         # ensure it can be saved and re-loaded
         assert Eval.from_yaml(file_name)
