@@ -23,12 +23,11 @@ from llm_eval.checks import (
     PythonCodeBlockTests,
     RecallScore,
     RegexCheck,
-    ResponseData,
+    ResponseModel,
     ScoreResult,
     ToolCallsCheck,
     ToxicityCheck,
 )
-from llm_eval.internal_utilities import get_value_from_path
 from llm_eval.openai import user_message
 from llm_eval.utilities import f1_score, precision_score_tokens, recall_score_tokens
 
@@ -50,65 +49,95 @@ def test__register_check__success__str__ensure_creation():
     class FakeCheck(Check):
         """Mock test for testing."""
 
-        def _call(self, value: str) -> bool:
+        def __call__(self, value: str) -> bool:
             return PassFailResult(
                 value=value is not None,
                 metadata=self.metadata,
             )
 
-    assert 'FAKECHECK' in Check.registry
-    assert 'fakecheck' in Check.registry
+    try:
+        assert 'FAKECHECK' in Check.registry
+        assert 'fakecheck' in Check.registry
 
-    check = Check.from_dict({'check_type': 'fakecheck'})
-    assert isinstance(check, FakeCheck)
-    assert check.check_type == 'FAKECHECK'
-    assert Check.from_dict(check.to_dict()) == check
-    result = check(ResponseData(response='foo'))
-    assert result.success
-    assert result.value
-    assert result.metadata == {}
+        check = Check.from_dict({'check_type': 'fakecheck'})
+        assert isinstance(check, FakeCheck)
+        assert check.check_type == 'FAKECHECK'
+        assert Check.from_dict(check.to_dict()) == check
+        result = check.run_on_model(ResponseModel(response='foo'))
+        assert result.success
+        assert result.value
+        assert result.metadata == {}
 
-    check = Check.from_dict({'check_type': 'FAKECHECK'})
-    assert isinstance(check, FakeCheck)
-    assert check.check_type == 'FAKECHECK'
-    assert Check.from_dict(check.to_dict()) == check
-    result = check(ResponseData(response='foo'))
-    assert result.success
-    assert result.value
-    assert result.metadata == {}
+        check = Check.from_dict({'check_type': 'FAKECHECK'})
+        assert isinstance(check, FakeCheck)
+        assert check.check_type == 'FAKECHECK'
+        assert Check.from_dict(check.to_dict()) == check
+        result = check.run_on_model(ResponseModel(response='foo'))
+        assert result.success
+        assert result.value
+        assert result.metadata == {}
 
-    check = Check.from_dict({'check_type': 'FAKECHECK', 'metadata': {'foo': 'bar'}})
-    assert isinstance(check, FakeCheck)
-    assert check.check_type == 'FAKECHECK'
-    assert check.metadata == {'foo': 'bar'}
-    assert Check.from_dict(check.to_dict()) == check
-    result = check(ResponseData(response='foo'))
-    assert result.success
-    assert result.value
-    assert result.metadata == {'foo': 'bar'}
+        check = Check.from_dict({'check_type': 'FAKECHECK', 'metadata': {'foo': 'bar'}})
+        assert isinstance(check, FakeCheck)
+        assert check.check_type == 'FAKECHECK'
+        assert check.metadata == {'foo': 'bar'}
+        assert Check.from_dict(check.to_dict()) == check
+        result = check.run_on_model(ResponseModel(response='foo'))
+        assert result.success
+        assert result.value
+        assert result.metadata == {'foo': 'bar'}
 
-    check = Check.from_dict({'check_type': 'FAKECHECK', 'metadata': {}})
-    assert isinstance(check, FakeCheck)
-    assert check.check_type == 'FAKECHECK'
-    assert check.metadata == {}
-    assert Check.from_dict(check.to_dict()) == check
-    result = check(ResponseData(response='foo'))
-    assert result.success
-    assert result.value
-    assert result.metadata == {}
+        check = Check.from_dict({'check_type': 'FAKECHECK', 'metadata': {}})
+        assert isinstance(check, FakeCheck)
+        assert check.check_type == 'FAKECHECK'
+        assert check.metadata == {}
+        assert Check.from_dict(check.to_dict()) == check
+        result = check.run_on_model(ResponseModel(response='foo'))
+        assert result.success
+        assert result.value
+        assert result.metadata == {}
 
-    # We should not be able to register a check with the same type
-    with pytest.raises(AssertionError):
-        @Check.register('fakecheck')
-        class TestCheck2(Check):
-            def __call__(self, data: ResponseData) -> CheckResult:
-                return PassFailResult(value=True, metadata={'response': data.response})
-    # We should not be able to register a check that isn't a Check object
-    with pytest.raises(AssertionError):
-        @Check.register('test2')
-        class TestCheck3:
-            def __call__(self, data: ResponseData) -> CheckResult:
-                return PassFailResult(value=True, metadata={'response': data.response})
+        # We should not be able to register a check with the same type
+        with pytest.raises(AssertionError):
+            @Check.register('fakecheck')
+            class TestCheck2(Check):
+                def __call__(self, data: ResponseModel) -> CheckResult:
+                    return PassFailResult(value=True, metadata={'response': data.response})
+        # We should not be able to register a check that isn't a Check object
+        with pytest.raises(AssertionError):
+            @Check.register('test2')
+            class TestCheck3:
+                def __call__(self, data: ResponseModel) -> CheckResult:
+                    return PassFailResult(value=True, metadata={'response': data.response})
+    finally:
+        Check.registry._registry.pop('FAKECHECK')
+
+def test__register_check__call():
+    """Test successful registration of a check."""
+    @Check.register('FakeCheck')
+    class FakeCheck(Check):
+        """Mock test for testing."""
+
+        def __call__(self, value: str) -> bool:
+            return PassFailResult(
+                value=value == 'foo',
+                metadata=self.metadata,
+            )
+
+    try:
+        assert 'FAKECHECK' in Check.registry
+        assert 'fakecheck' in Check.registry
+
+        check = Check.from_dict({'check_type': 'fakecheck'})
+        assert isinstance(check, FakeCheck)
+        assert check.check_type == 'FAKECHECK'
+        assert Check.from_dict(check.to_dict()) == check
+        result = check('foo')
+        assert result.success
+        assert result.value
+        assert result.metadata == {}
+    finally:
+        Check.registry._registry.pop('FAKECHECK')
 
 def test__register_check__success__ensure_creation__with_required_params():
     """Test successful registration of a check."""
@@ -119,7 +148,7 @@ def test__register_check__success__ensure_creation__with_required_params():
 
         required_field: str
 
-        def _call(self, value: str) -> CheckResult:
+        def __call__(self, value: str) -> CheckResult:
             return PassFailResult(
                 check_type=CheckType.PASS_FAIL,
                 passed=value is not None,
@@ -156,7 +185,7 @@ def test__register_check__duplicate__str__():
         class FakeCheck(Check):
             """Mock test for testing."""
 
-            def __call__(self, data: ResponseData) -> CheckResult:
+            def __call__(self, data: ResponseModel) -> CheckResult:
                 return data.response
 
 
@@ -165,7 +194,7 @@ def test__register_check__duplicate__str__():
         class FakeCheck(Check):
             """Mock test for testing."""
 
-            def __call__(self, data: ResponseData) -> CheckResult:
+            def __call__(self, data: ResponseModel) -> CheckResult:
                 return data.response
 
 def test__register_check__duplicate__CheckType():
@@ -175,7 +204,7 @@ def test__register_check__duplicate__CheckType():
         class FakeCheck(Check):
             """Mock test for testing."""
 
-            def __call__(self, data: ResponseData) -> CheckResult:
+            def __call__(self, data: ResponseModel) -> CheckResult:
                 return data.response
 
 def test__CheckType():
@@ -340,28 +369,35 @@ def test__ScoreResult__serialize():
     assert isinstance(recreated, ScoreResult)
     assert recreated == result
 
-def test__Check__value_extractor__get_value_from_path():
+def test__ResponseModel__extract_values():
     expected_response = {'foo': {'bar': 'baz'}}
     expected_prompt = 'the prompt'
     expected_metadata = {'foo': 'bar'}
-    response_data = ResponseData(
+    response_data = ResponseModel(
         input=expected_prompt,
         response=expected_response,
-        response_metadata=expected_metadata,
+        metadata=expected_metadata,
     )
-    value = get_value_from_path(value_path='input', data=response_data)
+
+    value = response_data.extract_values(path=None)
+    assert value == response_data
+
+    value = response_data.extract_values(path='')
+    assert value == response_data
+
+    value = response_data.extract_values(path='input')
     assert value == expected_prompt
 
-    value = get_value_from_path(value_path='response', data=response_data)
+    value = response_data.extract_values(path='response')
     assert value == expected_response
 
-    value = get_value_from_path(value_path='response["foo"]', data=response_data)
+    value = response_data.extract_values(path='response["foo"]')
     assert value == expected_response['foo']
 
-    value = get_value_from_path(value_path='response["foo"]["bar"]', data=response_data)
+    value = response_data.extract_values(path='response["foo"]["bar"]')
     assert value == expected_response['foo']['bar']
 
-    value = get_value_from_path(value_path='response_metadata', data=response_data)
+    value = response_data.extract_values(path='metadata')
     assert value == expected_metadata
 
     # test nested objects
@@ -370,23 +406,30 @@ def test__Check__value_extractor__get_value_from_path():
             self.value = value
 
     expected_response = MockObject(value={'foo': MockObject(value={'bar': 'baz'})})
-    response_data = ResponseData(response=expected_response)
-    value = get_value_from_path(value_path='response.value', data=response_data)
+    response_data = ResponseModel(response=expected_response)
+
+    value = response_data.extract_values(path=None)
+    assert value == response_data
+
+    value = response_data.extract_values(path='')
+    assert value == response_data
+
+    value = response_data.extract_values(path='response.value')
     assert value == expected_response.value
 
-    value = get_value_from_path(value_path='response.value["foo"]', data=response_data)
+    value = response_data.extract_values(path='response.value["foo"]')
     assert value == expected_response.value['foo']
 
-    value = get_value_from_path(value_path='response.value["foo"].value', data=response_data)
+    value = response_data.extract_values(path='response.value["foo"].value')
     assert value == expected_response.value['foo'].value
 
-def test__Check__value_extractor():
-    """The default value_extractor should use the response in the check."""
+def test__Check__data_path():
+    """The default data_path should use the response in the check."""
     @Check.register('FAKECHECK__VALUE_EXTRACT')
     class FakeCheck(Check):
         """Mock test for testing."""
 
-        def _call(self, value: str) -> bool:
+        def __call__(self, value: str) -> bool:
             return PassFailResult(
                 value=value is not None,
                 metadata={'value': value},
@@ -395,52 +438,52 @@ def test__Check__value_extractor():
         check = FakeCheck()
         # should be successful default is to look in response and which we are using
         # and 'foo' is not None
-        result = check(ResponseData(response='foo'))
+        result = check.run_on_model(ResponseModel(response='foo'))
         assert result.value
         assert result.success
         assert result.metadata == {'value': 'foo'}
         # should fail because default is still looking in response but we are using input
         # so response will default to None and check will fail
-        # but the value extraction did not fail so there should not be a value_extractor_error
-        # also we are using the default value_extractor so metadata should not be populated with
-        # value_extractor and value_extracted
-        result = check(ResponseData(input='foo'))
+        # but the value extraction did not fail so there should not be a data_path_error
+        # also we are using the default data_path so metadata should not be populated with
+        # data_path and value_extracted
+        result = check.run_on_model(ResponseModel(input='foo'))
         assert not result.value
         assert not result.success
         assert result.metadata == {'value': None}
 
-        check = FakeCheck(value_extractor='input')
+        check = FakeCheck(data_path='input')
         # should fail because we are extracting input but input is None
-        result = check(ResponseData(response='foo'))
+        result = check.run_on_model(ResponseModel(response='foo'))
         assert not result.value
         assert not result.success
         assert result.metadata['value'] is None
-        # now, because we are using input, which is not the default value_extractor,
-        # metadata will be populated with the value_extractor and value_extracted
-        assert result.metadata['value_extractor'] == 'input'
+        # now, because we are using input, which is not the default data_path,
+        # metadata will be populated with the data_path and value_extracted
+        assert result.metadata['data_path'] == 'input'
         assert result.metadata['value_extracted'] is None
         # should be successful because we are extracting input and 'foo' is not None
-        result = check(ResponseData(input='foo'))
+        result = check.run_on_model(ResponseModel(input='foo'))
         assert result.value
         assert result.success
         assert result.metadata['value'] == 'foo'
-        assert result.metadata['value_extractor'] == 'input'
+        assert result.metadata['data_path'] == 'input'
         assert result.metadata['value_extracted'] == 'foo'
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
 
-def test__Check__value_extractor__override():
-    """The default value_extractor should use the response in the check."""
+def test__Check__data_path__override():
+    """The default data_path should use the response in the check."""
     @Check.register('FAKECHECK__VALUE_EXTRACT')
     class FakeCheck(Check):
         """Mock test for testing."""
 
         @property
-        def default_value_extractor(self) -> str:
-            return ''  # should return the entire ResponseData object
+        def default_data_path(self) -> str:
+            return None  # should return the entire ResponseData object
 
-        def _call(self, data: ResponseData) -> bool:
-            assert isinstance(data, ResponseData)
+        def __call__(self, data: ResponseModel) -> bool:
+            assert isinstance(data, ResponseModel)
             return PassFailResult(
                 value=data.response is not None and data.input is not None,
                 metadata={
@@ -450,27 +493,27 @@ def test__Check__value_extractor__override():
             )
     try:
         check = FakeCheck()
-        result = check(ResponseData(input='foo', response='bar'))
+        result = check.run_on_model(ResponseModel(input='foo', response='bar'))
         assert result.value
         assert result.success
-        # since we have defined default_value_extractor as empty string and using the default
-        # then metadata should not be populated with value_extractor and value_extracted
-        assert 'value_extractor' not in result.metadata
+        # since we have defined default_data_path as empty string and using the default
+        # then metadata should not be populated with data_path and value_extracted
+        assert 'data_path' not in result.metadata
         assert 'value_extracted' not in result.metadata
-        assert 'value_extractor_error' not in result.metadata
+        assert 'data_path_error' not in result.metadata
         assert result.metadata == {'input': 'foo', 'response': 'bar'}
 
-        result = check(ResponseData(input='foo'))
+        result = check.run_on_model(ResponseModel(input='foo'))
         assert not result.value
         assert not result.success
-        assert 'value_extractor' not in result.metadata
+        assert 'data_path' not in result.metadata
         assert 'value_extracted' not in result.metadata
-        assert 'value_extractor_error' not in result.metadata
+        assert 'data_path_error' not in result.metadata
         assert result.metadata == {'input': 'foo', 'response': None}
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
 
-def test__Check__value_extractor__error_extracting_value():
+def test__Check__data_path__error_extracting_value():
     """
     The expected behavior when we get an error extracting the variable is that the check should
     fail (but not throw an exception) and the metadata should be populated with the error message.
@@ -479,39 +522,39 @@ def test__Check__value_extractor__error_extracting_value():
     class FakeCheck(Check):
         """Mock test for testing."""
 
-        def _call(self, value: str) -> bool:
+        def __call__(self, value: str) -> bool:
             return PassFailResult(
                 value=value is not None,
                 metadata=self.metadata,
             )
     try:
-        check = FakeCheck(value_extractor='response["foo"]')
+        check = FakeCheck(data_path='response["foo"]')
         # None cannot be indexed so this should fail
-        result = check(ResponseData())
+        result = check.run_on_model(ResponseModel())
         assert not result.value
         assert not result.success
-        assert result.metadata['value_extractor'] == 'response["foo"]'
+        assert result.metadata['data_path'] == 'response["foo"]'
         assert result.metadata['value_extracted'] is None
-        assert 'value_extractor_error' in result.metadata
-        assert 'NoneType' in result.metadata['value_extractor_error']
+        assert 'data_path_error' in result.metadata
+        assert 'NoneType' in result.metadata['data_path_error']
 
-        check = FakeCheck(value_extractor='response["foo"]')
+        check = FakeCheck(data_path='response["foo"]')
         # foo does not exist in response so this should fail
-        result = check(ResponseData(response='foo'))
+        result = check.run_on_model(ResponseModel(response='foo'))
         assert not result.value
         assert not result.success
-        assert result.metadata['value_extractor'] == 'response["foo"]'
+        assert result.metadata['data_path'] == 'response["foo"]'
         assert result.metadata['value_extracted'] is None
-        assert 'value_extractor_error' in result.metadata
+        assert 'data_path_error' in result.metadata
     finally:
         Check.registry._registry.pop('FAKECHECK__VALUE_EXTRACT')
 
-def test__Check__value_extractor__dictionary():
+def test__Check__data_path__dictionary():
     """
-    The value_extractor should be able to extract values from a dictionary and pass them to the
+    The data_path should be able to extract values from a dictionary and pass them to the
     check as keyword arguments.
     """
-    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
+    registration_value = 'FAKECHECK__DATA_PATH_DICT'
     @Check.register(registration_value)
     class FakeCheck(Check):
         """Mock test for testing."""
@@ -520,34 +563,46 @@ def test__Check__value_extractor__dictionary():
         expected_input_2: str
 
         @property
-        def default_value_extractor(self) -> str:
+        def default_data_path(self) -> str:
             return {'input_1': 'response["foobar"]', 'input_2': 'ideal_response'}
 
-        def _call(self, input_1: str, input_2: str) -> PassFailResult:
+        def __call__(self, input_1: str, input_2: str) -> PassFailResult:
             return PassFailResult(
                 value=input_1 == self.expected_input_1 and input_2 == self.expected_input_2,
                 metadata={'1': input_1, '2': input_2},
             )
     try:
         check = FakeCheck(expected_input_1='foo', expected_input_2='bar')
-        result = check(ResponseData(response={'foobar': 'foo'}, ideal_response='bar'))
+        result = check.run_on_model(ResponseModel(response={'foobar': 'foo'}, ideal_response='bar'))  # noqa: E501
         assert result.value
         assert result.metadata['1'] == 'foo'
         assert result.metadata['2'] == 'bar'
-        # since we are using the default value_extractor, metadata will not be populated with
-        # value_extractor and value_extracted
-        assert 'value_extractor' not in result.metadata
+        # since we are using the default data_path, metadata will not be populated with
+        # data_path and value_extracted
+        assert 'data_path' not in result.metadata
         assert 'value_extracted' not in result.metadata
-        assert 'value_extractor_error' not in result.metadata
+        assert 'data_path_error' not in result.metadata
+
+        result = check(input_1='foo', input_2='bar')
+        assert result.value
+        assert result.metadata['1'] == 'foo'
+        assert result.metadata['2'] == 'bar'
+        # since we are using the default data_path, metadata will not be populated with
+        # data_path and value_extracted
+        assert 'data_path' not in result.metadata
+        assert 'value_extracted' not in result.metadata
+        assert 'data_path_error' not in result.metadata
+
+
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__value_extractor__dictionary__override_default():
+def test__Check__data_path__dictionary__override_default():
     """
-    The value_extractor should be able to extract values from a dictionary and pass them to the
+    The data_path should be able to extract values from a dictionary and pass them to the
     check as keyword arguments.
     """
-    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
+    registration_value = 'FAKECHECK__DATA_PATH_DICT'
     @Check.register(registration_value)
     class FakeCheck(Check):
         """Mock test for testing."""
@@ -556,41 +611,41 @@ def test__Check__value_extractor__dictionary__override_default():
         expected_input_2: str
 
         @property
-        def default_value_extractor(self) -> str:
-            return ''
+        def default_data_path(self) -> str:
+            return None
 
-        def _call(self, input_1: str, input_2: str) -> PassFailResult:
+        def __call__(self, input_1: str, input_2: str) -> PassFailResult:
             return PassFailResult(
                 value=input_1 == self.expected_input_1 and input_2 == self.expected_input_2,
                 metadata={'1': input_1, '2': input_2},
             )
     try:
-        value_extractor = {'input_1': 'response["foobar"]', 'input_2': 'ideal_response'}
+        data_path = {'input_1': 'response["foobar"]', 'input_2': 'ideal_response'}
         check = FakeCheck(
             expected_input_1='foo',
             expected_input_2='bar',
-            value_extractor=value_extractor,
+            data_path=data_path,
         )
-        result = check(ResponseData(response={'foobar': 'foo'}, ideal_response='bar'))
+        result = check.run_on_model(ResponseModel(response={'foobar': 'foo'}, ideal_response='bar'))  # noqa: E501
         assert result.value
         assert result.metadata['1'] == 'foo'
         assert result.metadata['2'] == 'bar'
-        # since we are overriding the default value_extractor, metadata will be populated with
-        # value_extractor and value_extracted
-        assert 'value_extractor' in result.metadata
-        assert result.metadata['value_extractor'] == value_extractor
+        # since we are overriding the default data_path, metadata will be populated with
+        # data_path and value_extracted
+        assert 'data_path' in result.metadata
+        assert result.metadata['data_path'] == data_path
         assert 'value_extracted' in result.metadata
         assert result.metadata['value_extracted'] == {'input_1': 'foo', 'input_2': 'bar'}
-        assert 'value_extractor_error' not in result.metadata
+        assert 'data_path_error' not in result.metadata
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__value_extractor__dictionary__test_all_fields():
+def test__Check__data_path__dictionary__test_all_fields():
     """
-    The value_extractor should be able to extract values from a dictionary and pass them to the
+    The data_path should be able to extract values from a dictionary and pass them to the
     check as keyword arguments.
     """
-    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
+    registration_value = 'FAKECHECK__DATA_PATH_DICT'
     @Check.register(registration_value)
     class FakeCheck(Check):
         """Mock test for testing."""
@@ -601,16 +656,16 @@ def test__Check__value_extractor__dictionary__test_all_fields():
         expected_the_metadata: str
 
         @property
-        def default_value_extractor(self) -> str:
+        def default_data_path(self) -> str:
             return {
                 'my_response': 'response["foobar"]',
                 'the_ideal_response': 'ideal_response[1]',
                 'the_input': 'input',
-                'the_metadata': 'response_metadata["foo"]',
+                'the_metadata': 'metadata["foo"]',
 
             }
 
-        def _call(
+        def __call__(
                 self,
                 my_response: str,
                 the_ideal_response: str,
@@ -629,21 +684,21 @@ def test__Check__value_extractor__dictionary__test_all_fields():
             expected_the_input='baz',
             expected_the_metadata='qux',
         )
-        result = check(ResponseData(
+        result = check.run_on_model(ResponseModel(
             response={'foobar': 'foo'},
             ideal_response=['wrong', 'bar'],
             input='baz',
-            response_metadata={'foo': 'qux'},
+            metadata={'foo': 'qux'},
         ))
         assert result.value
-        assert 'value_extractor' not in result.metadata
+        assert 'data_path' not in result.metadata
         assert 'value_extracted' not in result.metadata
-        assert 'value_extractor_error' not in result.metadata
+        assert 'data_path_error' not in result.metadata
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__value_extractor__dictionary__error():
-    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_DICT'
+def test__Check__data_path__dictionary__error():
+    registration_value = 'FAKECHECK__DATA_PATH_DICT'
     @Check.register(registration_value)
     class FakeCheck(Check):
         """Mock test for testing."""
@@ -652,10 +707,10 @@ def test__Check__value_extractor__dictionary__error():
         expected_input_2: str
 
         @property
-        def default_value_extractor(self) -> str:
+        def default_data_path(self) -> str:
             return {'input_1': 'response["foobar"]', 'input_2': 'ideal_response'}
 
-        def _call(self, input_1: str, input_2: str) -> PassFailResult:
+        def __call__(self, input_1: str, input_2: str) -> PassFailResult:
             return PassFailResult(
                 value=input_1 == self.expected_input_1 and input_2 == self.expected_input_2,
                 metadata={'1': input_1, '2': input_2},
@@ -665,18 +720,18 @@ def test__Check__value_extractor__dictionary__error():
         # this will fail because input_1's value path is response["foobar"] but response does not
         # have a key 'foobar'
         # however, input_2 should be extracted correctly
-        result = check(ResponseData(response={'does_not_exist': 'foo'}, ideal_response='bar'))
+        result = check.run_on_model(ResponseModel(response={'does_not_exist': 'foo'}, ideal_response='bar'))  # noqa: E501
         assert not result.value
         assert result.metadata['1'] is None
-        assert result.metadata['2'] == 'bar'
-        assert result.metadata['value_extractor'] == check.default_value_extractor
-        assert result.metadata['value_extracted'] == {'input_1': None, 'input_2': 'bar'}
-        assert 'value_extractor_error' in result.metadata
+        assert result.metadata['2'] is None
+        assert result.metadata['data_path'] == check.default_data_path
+        assert result.metadata['value_extracted'] == {'input_1': None, 'input_2': None}
+        assert 'data_path_error' in result.metadata
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__value_extractor__lambda_string():
-    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_LAMBDA'
+def test__Check__data_path__lambda_string():
+    registration_value = 'FAKECHECK__DATA_PATH_LAMBDA'
     @Check.register(registration_value)
     class FakeCheck(Check):
         """Mock test for testing."""
@@ -684,62 +739,62 @@ def test__Check__value_extractor__lambda_string():
         expected_input: str
 
         @property
-        def default_value_extractor(self) -> str:
+        def default_data_path(self) -> str:
             return 'lambda data: data.response["foobar"].upper()'
 
-        def _call(self, input: str) -> PassFailResult:  # noqa
+        def __call__(self, input: str) -> PassFailResult:  # noqa
             return PassFailResult(
                 value=input == self.expected_input,
                 metadata={'input': input},
             )
     try:
         check = FakeCheck(expected_input='FOO')
-        result = check(ResponseData(response={'foobar': 'foo'}))
+        result = check.run_on_model(ResponseModel(response={'foobar': 'foo'}))
         assert result.value
         assert result.metadata['input'] == 'FOO'
-        assert 'value_extractor' not in result.metadata
+        assert 'data_path' not in result.metadata
         assert 'value_extracted' not in result.metadata
-        assert 'value_extractor_error' not in result.metadata
+        assert 'data_path_error' not in result.metadata
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__value_extractor__lambda_string__override_default():
-    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_LAMBDA'
+def test__Check__data_path__lambda_string__override_default():
+    registration_value = 'FAKECHECK__DATA_PATH_LAMBDA'
     @Check.register(registration_value)
     class FakeCheck(Check):
         """Mock test for testing."""
 
         expected_input: str
         # @property
-        # def default_value_extractor(self) -> str:
+        # def default_data_path(self) -> str:
         #     return 'lambda data: data.response["foobar"].upper()'
 
-        def _call(self, input: str) -> PassFailResult:  # noqa
+        def __call__(self, input: str) -> PassFailResult:  # noqa
             return PassFailResult(
                 value=input == self.expected_input,
                 metadata={'input': input},
             )
     try:
-        value_extractor = 'lambda data: data.response["foobar"].upper()'
+        data_path = 'lambda data: data.response["foobar"].upper()'
         check = FakeCheck(
             expected_input='FOO',
-            value_extractor=value_extractor,
+            data_path=data_path,
         )
-        result = check(ResponseData(response={'foobar': 'foo'}))
+        result = check.run_on_model(ResponseModel(response={'foobar': 'foo'}))
         assert result.value
         assert result.metadata['input'] == 'FOO'
-        # since we are overriding the default value_extractor, metadata will be populated with
-        # value_extractor and value_extracted
-        assert 'value_extractor' in result.metadata
-        assert result.metadata['value_extractor'] == value_extractor
+        # since we are overriding the default data_path, metadata will be populated with
+        # data_path and value_extracted
+        assert 'data_path' in result.metadata
+        assert result.metadata['data_path'] == data_path
         assert 'value_extracted' in result.metadata
         assert result.metadata['value_extracted'] == 'FOO'
-        assert 'value_extractor_error' not in result.metadata
+        assert 'data_path_error' not in result.metadata
     finally:
         Check.registry._registry.pop(registration_value)
 
-def test__Check__value_extractor__lambda_string__error():
-    registration_value = 'FAKECHECK__VALUE_EXTRACTOR_LAMBDA'
+def test__Check__data_path__lambda_string__error():
+    registration_value = 'FAKECHECK__DATA_PATH_LAMBDA'
     @Check.register(registration_value)
     class FakeCheck(Check):
         """Mock test for testing."""
@@ -747,23 +802,23 @@ def test__Check__value_extractor__lambda_string__error():
         expected_input: str
 
         @property
-        def default_value_extractor(self) -> str:
+        def default_data_path(self) -> str:
             return 'lambda data: data.response["bar"].function_does_not_exist()'
 
-        def _call(self, input: str) -> PassFailResult:  # noqa: A002
+        def __call__(self, input: str) -> PassFailResult:  # noqa: A002
             return PassFailResult(
                 value=input == self.expected_input,
                 metadata={'input': input},
             )
     try:
         check = FakeCheck(expected_input='FOO')
-        result = check(ResponseData(response={'bar': 'foo'}))
+        result = check.run_on_model(ResponseModel(response={'bar': 'foo'}))
         assert not result.value
         assert result.metadata['input'] is None
-        assert 'value_extractor' in result.metadata
+        assert 'data_path' in result.metadata
         assert 'value_extracted' in result.metadata
-        assert 'value_extractor_error' in result.metadata
-        assert 'function_does_not_exist' in result.metadata['value_extractor_error']
+        assert 'data_path_error' in result.metadata
+        assert 'function_does_not_exist' in result.metadata['data_path_error']
     finally:
         Check.registry._registry.pop(registration_value)
 
@@ -787,7 +842,7 @@ def test__MatchCheck__to_from_dict():
     assert Check.from_dict(check.to_dict()) == check
     check = MatchCheck(value='foo', negate=True, metadata={'foo': 'bar'})
     assert Check.from_dict(check.to_dict()) == check
-    check = MatchCheck(value='foo', negate=True, value_extractor='response["foo"]')
+    check = MatchCheck(value='foo', negate=True, data_path='response["foo"]')
     assert Check.from_dict(check.to_dict()) == check
 
 @pytest.mark.parametrize(
@@ -844,7 +899,7 @@ def test__MatchCheck(negate: bool):
     assert actual_dict == expected_dict
     assert MatchCheck(**actual_dict) == check
 
-    result = check(ResponseData(response='foo'))  # passing in matching value which should match
+    result = check.run_on_model(ResponseModel(response='foo'))  # passing in matching value which should match  # noqa: E501
     assert result.success == (not negate)
     assert result.value == (not negate)
     assert result.metadata['check_type'] == CheckType.MATCH.name
@@ -868,6 +923,11 @@ def test__MatchCheck(negate: bool):
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
 
+    # should get same results when calling the check directly
+    result_2 = check('foo')
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
+
     check = Check.from_dict({
         'check_type': CheckType.MATCH.name.lower(),
         'value': 'bar',
@@ -890,7 +950,7 @@ def test__MatchCheck(negate: bool):
     assert actual_dict == expected_dict
     assert MatchCheck(**actual_dict) == check
 
-    result = check(ResponseData(response='foo'))  # should not match
+    result = check.run_on_model(ResponseModel(response='foo'))  # should not match
     assert result.success == negate
     assert result.value == negate
     assert result.metadata['check_type'] == CheckType.MATCH.name
@@ -912,21 +972,39 @@ def test__MatchCheck(negate: bool):
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
+    # should get same results when calling the check directly
+    result_2 = check('foo')
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
-def test__MatchCheck__value_extractor():
+def test__MatchCheck__data_path():
     response = {'foo': 'bar'}
-    check = MatchCheck(value='bar', value_extractor='response["foo"]')
-    result = check(ResponseData(response=response))
+    check = MatchCheck(value='bar', data_path='response["foo"]')
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.success
     assert result.value
+    assert result.metadata['check_type'] == CheckType.MATCH.name
+    assert result.metadata['check_value'] == 'bar'
+    assert result.metadata['check_negate'] is False
+    assert result.metadata['check_metadata'] == {}
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == 'bar'
 
-    assert 'value_extractor' in check.to_dict()
+    assert 'data_path' in check.to_dict()
     assert check == Check.from_dict(check.to_dict())
 
-    check = MatchCheck(value='bar', value_extractor='response["foo"]', negate=True)
-    result = check(ResponseData(response=response))
+    check = MatchCheck(value='bar', data_path='response["foo"]', negate=True)
+    result = check.run_on_model(ResponseModel(response=response))
     assert not result.success
     assert not result.value
+    assert result.metadata['check_type'] == CheckType.MATCH.name
+    assert result.metadata['check_value'] == 'bar'
+    assert result.metadata['check_negate'] is True
+    assert result.metadata['check_metadata'] == {}
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == 'bar'
 
 def test__ContainsCheck__has_check_type():
     """
@@ -998,7 +1076,7 @@ def test__ContainsCheck(negate: bool):
     assert ContainsCheck(**check_dict) == check
 
     # passing in str that is contained within value which should match
-    result = check(ResponseData(response='foo bar'))
+    result = check.run_on_model(ResponseModel(response='foo bar'))
     assert result.success == (not negate)
     assert result.value == (not negate)
     assert result.metadata['check_type'] == CheckType.CONTAINS.name
@@ -1020,6 +1098,10 @@ def test__ContainsCheck(negate: bool):
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
+    # should get same results when calling the check directly
+    result_2 = check('foo bar')
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
     check = Check.from_dict({
         'check_type': CheckType.CONTAINS.name.lower(),
@@ -1044,7 +1126,7 @@ def test__ContainsCheck(negate: bool):
     assert ContainsCheck(**check_dict) == check
 
     # passing in str that is not contained within value which should not match
-    result = check(ResponseData(response='bar foo'))
+    result = check.run_on_model(ResponseModel(response='bar foo'))
     assert result.success == negate
     assert result.value == negate
     assert result.metadata['check_type'] == CheckType.CONTAINS.name
@@ -1066,21 +1148,39 @@ def test__ContainsCheck(negate: bool):
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
+    # should get same results when calling the check directly
+    result_2 = check('bar foo')
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
-def test__ContainsCheck__value_extractor():
+def test__ContainsCheck__data_path():
     response = {'foo': 'the bar'}
-    check = ContainsCheck(value='bar', value_extractor='response["foo"]')
-    result = check(ResponseData(response=response))
+    check = ContainsCheck(value='bar', data_path='response["foo"]')
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.success
     assert result.value
+    assert result.metadata['check_type'] == CheckType.CONTAINS.name
+    assert result.metadata['check_value'] == 'bar'
+    assert result.metadata['check_negate'] is False
+    assert result.metadata['check_metadata'] == {}
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == 'the bar'
 
-    assert 'value_extractor' in check.to_dict()
+    assert 'data_path' in check.to_dict()
     assert check == Check.from_dict(check.to_dict())
 
-    check = ContainsCheck(value='bar', value_extractor='response["foo"]', negate=True)
-    result = check(ResponseData(response=response))
+    check = ContainsCheck(value='bar', data_path='response["foo"]', negate=True)
+    result = check.run_on_model(ResponseModel(response=response))
     assert not result.success
     assert not result.value
+    assert result.metadata['check_type'] == CheckType.CONTAINS.name
+    assert result.metadata['check_value'] == 'bar'
+    assert result.metadata['check_negate'] is True
+    assert result.metadata['check_metadata'] == {}
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == 'the bar'
 
 def test__RegexCheck__has_check_type():
     """
@@ -1132,7 +1232,7 @@ def test__RegexCheck(negate: bool):
     assert RegexCheck(**check_dict) == check
 
     # passing in str that matches the regex which should match
-    result = check(ResponseData(response='foo'))
+    result = check.run_on_model(ResponseModel(response='foo'))
     assert result.success == (not negate)
     assert result.value == (not negate)
     assert result.metadata['check_type'] == CheckType.REGEX.name
@@ -1154,6 +1254,10 @@ def test__RegexCheck(negate: bool):
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
+    # should get same results when calling the check directly
+    result_2 = check('foo')
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
     check_dict = {
         'check_type': CheckType.REGEX.name.lower(),
@@ -1180,7 +1284,7 @@ def test__RegexCheck(negate: bool):
     assert RegexCheck(**check_dict) == check
 
     # passing in str that does not match the regex which should not match
-    result = check(ResponseData(response='Foo'))
+    result = check.run_on_model(ResponseModel(response='Foo'))
     assert result.success == negate
     assert result.value == negate
     assert result.metadata['check_type'] == CheckType.REGEX.name
@@ -1202,17 +1306,21 @@ def test__RegexCheck(negate: bool):
     }
     assert PassFailResult(**result_dict) == result
     assert CheckResult.from_dict(result_dict) == result
+    # should get same results when calling the check directly
+    result_2 = check('Foo')
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
-    assert check(ResponseData(response='foo')).success == (not negate)
-    assert check(ResponseData(response='foo123')).success == negate
-    assert check(ResponseData(response='123foo')).success == negate
-    assert check(ResponseData(response='Foo')).success == negate
+    assert check.run_on_model(ResponseModel(response='foo')).success == (not negate)
+    assert check.run_on_model(ResponseModel(response='foo123')).success == negate
+    assert check.run_on_model(ResponseModel(response='123foo')).success == negate
+    assert check.run_on_model(ResponseModel(response='Foo')).success == negate
 
     check.negate = not negate
-    assert check(ResponseData(response='foo')).success == negate
-    assert check(ResponseData(response='foo123')).success == (not negate)
-    assert check(ResponseData(response='123foo')).success == (not negate)
-    assert check(ResponseData(response='Foo')).success == (not negate)
+    assert check.run_on_model(ResponseModel(response='foo')).success == negate
+    assert check.run_on_model(ResponseModel(response='foo123')).success == (not negate)
+    assert check.run_on_model(ResponseModel(response='123foo')).success == (not negate)
+    assert check.run_on_model(ResponseModel(response='Foo')).success == (not negate)
 
 def test__RegexCheck__multiline_response():
     response = r"""
@@ -1237,7 +1345,7 @@ def test__RegexCheck__multiline_response():
     ```
     """
     check = RegexCheck(pattern='def mask_emails\\([a-zA-Z_]+\\: str\\) -> str\\:')
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.success
 
     # check without type hints; should fail
@@ -1263,23 +1371,37 @@ def test__RegexCheck__multiline_response():
     ```
     """  # noqa: W605
     check = RegexCheck(pattern='def mask_emails\\([a-zA-Z_]+\\: str\\) -> str\\:')
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert not result.success
 
-def test__RegexCheck__value_extractor():
+def test__RegexCheck__data_path():
     response = {'foo': 'the bar'}
-    check = RegexCheck(pattern='bar', value_extractor='response["foo"]')
-    result = check(ResponseData(response=response))
+    check = RegexCheck(pattern='bar', data_path='response["foo"]')
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.success
     assert result.value
+    assert result.metadata['check_type'] == CheckType.REGEX.name
+    assert result.metadata['check_pattern'] == 'bar'
+    assert result.metadata['check_negate'] is False
+    assert result.metadata['check_metadata'] == {}
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == 'the bar'
 
-    assert 'value_extractor' in check.to_dict()
+    assert 'data_path' in check.to_dict()
     assert check == Check.from_dict(check.to_dict())
 
-    check = RegexCheck(pattern='bar', value_extractor='response["foo"]', negate=True)
-    result = check(ResponseData(response=response))
+    check = RegexCheck(pattern='bar', data_path='response["foo"]', negate=True)
+    result = check.run_on_model(ResponseModel(response=response))
     assert not result.success
     assert not result.value
+    assert result.metadata['check_type'] == CheckType.REGEX.name
+    assert result.metadata['check_pattern'] == 'bar'
+    assert result.metadata['check_negate'] is True
+    assert result.metadata['check_metadata'] == {}
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == 'the bar'
 
 def test__LambdaCheck__has_check_type():
     check = LambdaCheck(lambda_str='lambda x: x == 1')
@@ -1294,7 +1416,7 @@ def test__LambdaCheck__has_check_type():
 
 def test__LambdaCheck():
     check = LambdaCheck(lambda_str='lambda x: x == 1', metadata={'foo': 'bar'})
-    result = check(ResponseData(response=1))
+    result = check.run_on_model(ResponseModel(response=1))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 1'
@@ -1302,10 +1424,14 @@ def test__LambdaCheck():
     assert result.metadata['check_metadata'] == {'foo': 'bar'}
     assert 'lambda_error' not in result.metadata
     assert str(result)
+
+    result_2 = check(1)
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
     new_check = Check.from_dict(check.to_dict())
     assert new_check == check
-    result = new_check(ResponseData(response=1))
+    result = new_check.run_on_model(ResponseModel(response=1))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 1'
@@ -1314,7 +1440,7 @@ def test__LambdaCheck():
     assert 'lambda_error' not in result.metadata
     assert str(result)
 
-    result = check(ResponseData(response=2))
+    result = check.run_on_model(ResponseModel(response=2))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 1'
@@ -1322,7 +1448,11 @@ def test__LambdaCheck():
     assert result.metadata['check_metadata'] == {'foo': 'bar'}
     assert 'lambda_error' not in result.metadata
 
-    result = new_check(ResponseData(response=2))
+    result_2 = check(2)
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
+
+    result = new_check.run_on_model(ResponseModel(response=2))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 1'
@@ -1330,9 +1460,45 @@ def test__LambdaCheck():
     assert result.metadata['check_metadata'] == {'foo': 'bar'}
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__value_extractor__double_quotes_key():
-    check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor='response["foo"]')
-    result = check(ResponseData(response={'foo': [1, 2, 3]}))
+def test__LambdaCheck__data_path__double_quotes_key():
+    check = LambdaCheck(lambda_str='lambda x: x[0] == 1', data_path='response["foo"]')
+    result = check.run_on_model(ResponseModel(response={'foo': [1, 2, 3]}))
+    assert result.success
+    assert result.value
+    assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {}
+    assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == [1, 2, 3]
+
+    result = check.run_on_model(ResponseModel(response={'foo': [2, 3]}))
+    assert not result.success
+    assert not result.value
+    assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {}
+    assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == [2, 3]
+
+    check = LambdaCheck(lambda_str='lambda x: len(x) == 3', data_path='response["foo"]')
+    result = check.run_on_model(ResponseModel(response={'foo': [1, 2, 3]}))
+    assert result.success
+    assert result.value
+    assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
+    assert result.metadata['check_type'] == CheckType.LAMBDA.name
+    assert result.metadata['check_metadata'] == {}
+    assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == [1, 2, 3]
+
+def test__LambdaCheck__data_path__single_quotes_key():
+    check = LambdaCheck(lambda_str='lambda x: x[0] == 1', data_path="response['foo']")
+    result = check.run_on_model(ResponseModel(response={'foo': [1, 2, 3]}))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
@@ -1340,7 +1506,7 @@ def test__LambdaCheck__value_extractor__double_quotes_key():
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
 
-    result = check(ResponseData(response={'foo': [2, 3]}))
+    result = check.run_on_model(ResponseModel(response={'foo': [2, 3]}))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
@@ -1348,8 +1514,8 @@ def test__LambdaCheck__value_extractor__double_quotes_key():
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
 
-    check = LambdaCheck(lambda_str='lambda x: len(x) == 3', value_extractor='response["foo"]')
-    result = check(ResponseData(response={'foo': [1, 2, 3]}))
+    check = LambdaCheck(lambda_str='lambda x: len(x) == 3', data_path="response['foo']")
+    result = check.run_on_model(ResponseModel(response={'foo': [1, 2, 3]}))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
@@ -1357,117 +1523,113 @@ def test__LambdaCheck__value_extractor__double_quotes_key():
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
 
-def test__LambdaCheck__value_extractor__single_quotes_key():
-    check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor="response['foo']")
-    result = check(ResponseData(response={'foo': [1, 2, 3]}))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-    result = check(ResponseData(response={'foo': [2, 3]}))
-    assert not result.success
-    assert not result.value
-    assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-    check = LambdaCheck(lambda_str='lambda x: len(x) == 3', value_extractor="response['foo']")
-    result = check(ResponseData(response={'foo': [1, 2, 3]}))
-    assert result.success
-    assert result.value
-    assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
-    assert result.metadata['check_type'] == CheckType.LAMBDA.name
-    assert result.metadata['check_metadata'] == {}
-    assert 'lambda_error' not in result.metadata
-
-def test__LambdaCheck__value_extractor__with_numeric_indexes__dict():
+def test__LambdaCheck__data_path__with_numeric_indexes__dict():
     # test list
     # test dictionary
-    check = LambdaCheck(lambda_str='lambda x: x[0] == 1', value_extractor='response[100]')
-    result = check(ResponseData(response={100: [1, 2, 3]}))
+    check = LambdaCheck(lambda_str='lambda x: x[0] == 1', data_path='response[100]')
+    result = check.run_on_model(ResponseModel(response={100: [1, 2, 3]}))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
     assert result.metadata['check_type'] == CheckType.LAMBDA.name
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response[100]'
+    assert result.metadata['value_extracted'] == [1, 2, 3]
 
-    result = check(ResponseData(response={100: [2, 3]}))
+    result = check.run_on_model(ResponseModel(response={100: [2, 3]}))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
     assert result.metadata['check_type'] == CheckType.LAMBDA.name
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response[100]'
+    assert result.metadata['value_extracted'] == [2, 3]
 
-    check = LambdaCheck(lambda_str='lambda x: len(x) == 3', value_extractor='response[100]')
-    result = check(ResponseData(response={100: [1, 2, 3]}))
+    check = LambdaCheck(lambda_str='lambda x: len(x) == 3', data_path='response[100]')
+    result = check.run_on_model(ResponseModel(response={100: [1, 2, 3]}))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
     assert result.metadata['check_type'] == CheckType.LAMBDA.name
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response[100]'
+    assert result.metadata['value_extracted'] == [1, 2, 3]
 
-def test__LambdaCheck__value_extractor__with_numeric_indexes__list():
+def test__LambdaCheck__data_path__with_numeric_indexes__list():
     # test list
     # test dictionary
     response = [0, 1, 2, 3, 4, 5]
-    check = LambdaCheck(lambda_str='lambda x: x == 5', value_extractor='response[-1]')
-    result = check(ResponseData(response=response))
+    check = LambdaCheck(lambda_str='lambda x: x == 5', data_path='response[-1]')
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 5'
     assert result.metadata['check_type'] == CheckType.LAMBDA.name
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response[-1]'
+    assert result.metadata['value_extracted'] == 5
 
-    result = check(ResponseData(response=[0, 1]))
+    result = check.run_on_model(ResponseModel(response=[0, 1]))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 5'
     assert result.metadata['check_type'] == CheckType.LAMBDA.name
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response[-1]'
+    assert result.metadata['value_extracted'] == 1
 
     response = [0, 1, 2, 3, 4, {'foo': 'bar'}]
-    check = LambdaCheck(lambda_str='lambda x: x == "bar"', value_extractor='response[-1]["foo"]')
-    result = check(ResponseData(response=response))
+    check = LambdaCheck(lambda_str='lambda x: x == "bar"', data_path='response[-1]["foo"]')
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == "bar"'
     assert result.metadata['check_type'] == CheckType.LAMBDA.name
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response[-1]["foo"]'
+    assert result.metadata['value_extracted'] == 'bar'
 
-
-    check = LambdaCheck(lambda_str='lambda x: x == 3', value_extractor='response[3]')
-    result = check(ResponseData(response=response))
+    check = LambdaCheck(lambda_str='lambda x: x == 3', data_path='response[3]')
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x == 3'
     assert result.metadata['check_type'] == CheckType.LAMBDA.name
     assert result.metadata['check_metadata'] == {}
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response[3]'
+    assert result.metadata['value_extracted'] == 3
 
-def test__LambdaCheck__value_extractor__from_dict():
+def test__LambdaCheck__data_path__from_dict():
     check_dict = {
         'check_type': CheckType.LAMBDA.name,
         'lambda_str': 'lambda x: x[0] == 1',
-        'value_extractor': 'response["foo"]',
+        'data_path': 'response["foo"]',
     }
     check = Check.from_dict(check_dict)
-    result = check(ResponseData(response={'foo': [1, 2, 3]}))
+    result = check.run_on_model(ResponseModel(response={'foo': [1, 2, 3]}))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == [1, 2, 3]
 
-    result = check(ResponseData(response={'foo': [2, 3]}))
+    result = check.run_on_model(ResponseModel(response={'foo': [2, 3]}))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: x[0] == 1'
@@ -1476,18 +1638,21 @@ def test__LambdaCheck__value_extractor__from_dict():
     check_dict = {
         'check_type': CheckType.LAMBDA.name,
         'lambda_str': 'lambda x: len(x) == 3',
-        'value_extractor': 'response["foo"]',
+        'data_path': 'response["foo"]',
     }
     check = Check.from_dict(check_dict)
-    result = check(ResponseData(response={'foo': [1, 2, 3]}))
+    result = check.run_on_model(ResponseModel(response={'foo': [1, 2, 3]}))
     assert result.success
     assert result.value
     assert result.metadata['lambda_str'] == 'lambda x: len(x) == 3'
     assert 'lambda_error' not in result.metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == 'response["foo"]'
+    assert result.metadata['value_extracted'] == [1, 2, 3]
 
 def test__LambdaCheck__error_handling__lambda():
     check = LambdaCheck(lambda_str='lambda x: y == 1', metadata={'foo': 'bar'})
-    result = check(ResponseData(response=1))
+    result = check.run_on_model(ResponseModel(response=1))
     assert not result.success
     assert not result.value
     assert result.metadata['lambda_str'] == 'lambda x: y == 1'
@@ -1513,7 +1678,7 @@ def test__test__PythonCodeBlocksPresent():
     assert check.min_code_blocks == 1
     assert check.metadata == {}
     assert str(check)
-    result = check(ResponseData(response=''))
+    result = check.run_on_model(ResponseModel(response=''))
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1521,12 +1686,12 @@ def test__test__PythonCodeBlocksPresent():
     assert result.metadata['min_code_blocks'] == 1
     assert result.metadata['code_blocks'] == []
 
-    check = PythonCodeBlocksPresent(min_code_blocks=1, value_extractor='response_metadata')
+    check = PythonCodeBlocksPresent(min_code_blocks=1, data_path='metadata')
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 1
     assert check.metadata == {}
     assert str(check)
-    result = check(ResponseData(response_metadata=''))
+    result = check.run_on_model(ResponseModel(metadata=''))
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1534,7 +1699,7 @@ def test__test__PythonCodeBlocksPresent():
     assert result.metadata['min_code_blocks'] == 1
     assert result.metadata['code_blocks'] == []
 
-    assert 'value_extractor' in check.to_dict()
+    assert 'data_path' in check.to_dict()
     assert check == Check.from_dict(check.to_dict())
 
     check = PythonCodeBlocksPresent(min_code_blocks=1)
@@ -1542,7 +1707,7 @@ def test__test__PythonCodeBlocksPresent():
     assert check.min_code_blocks == 1
     assert check.metadata == {}
     assert str(check)
-    result = check(ResponseData(response=None))
+    result = check.run_on_model(ResponseModel(response=None))
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1563,7 +1728,7 @@ def test__test__PythonCodeBlocksPresent():
 
     code_block_str = 'print("hello world")'
     expected_code_blocks = [code_block_str]
-    result = check(ResponseData(response=f'```\n{code_block_str}\n```'))
+    result = check.run_on_model(ResponseModel(response=f'```\n{code_block_str}\n```'))
     assert result.success
     assert result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1574,14 +1739,14 @@ def test__test__PythonCodeBlocksPresent():
     check = PythonCodeBlocksPresent(
         min_code_blocks=1,
         metadata={'foo': 'bar'},
-        value_extractor='response_metadata["response"]',
+        data_path='metadata["response"]',
     )
     assert check.check_type == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
     assert check.min_code_blocks == 1
     assert check.metadata == {'foo': 'bar'}
     assert str(check)
     response = f'This is a response: ```python\n{code_block_str}\n```\n'
-    result = check(ResponseData(response_metadata={'response': response}))
+    result = check.run_on_model(ResponseModel(metadata={'response': response}))
     assert result.success
     assert result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1598,7 +1763,7 @@ def test__test__PythonCodeBlocksPresent():
     assert check.metadata == {'foo': 'bar'}
     assert str(check)
     response = f'This is a response: ```python\n{code_block_str}\n```\n'
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert not result.success
     assert not result.value
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name
@@ -1633,7 +1798,7 @@ def test__PythonCodeBlockTests__no_code_blocks():
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(response=''))
+    result = check.run_on_model(ResponseModel(response=''))
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
@@ -1648,7 +1813,7 @@ def test__PythonCodeBlockTests__no_code_blocks():
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-    result = check(ResponseData(response=None))
+    result = check.run_on_model(ResponseModel(response=None))
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
@@ -1676,7 +1841,7 @@ def test__PythonCodeBlockTests__no_code_blocks__with_code_tests():
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(response=''))
+    result = check.run_on_model(ResponseModel(response=''))
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
@@ -1691,7 +1856,7 @@ def test__PythonCodeBlockTests__no_code_blocks__with_code_tests():
     assert result.metadata['code_test_results'] == []
     assert result.metadata['code_test_errors'] == []
 
-    result = check(ResponseData(response=None))
+    result = check.run_on_model(ResponseModel(response=None))
     assert result.value == 0
     assert not result.success
     assert result.success_threshold == 1
@@ -1719,7 +1884,7 @@ def test__PythonCodeBlockTests__no_setup__no_functions():
         'assert my_value == 1',
     ]
     response = _code_blocks_to_response(expected_code_blocks)
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == 2/3
     assert not result.success
     assert result.success_threshold == 1
@@ -1751,7 +1916,7 @@ def test__PythonCodeBlockTests__with_setup():
         'assert my_value == 1',
     ]
     response = _code_blocks_to_response(expected_code_blocks)
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == 0.5
     assert result.success
     assert result.success_threshold == 0.5
@@ -1768,6 +1933,9 @@ def test__PythonCodeBlockTests__with_setup():
     assert result.metadata['code_test_errors'] == []
     assert Check.from_dict(check.to_dict()) == check
     assert CheckResult.from_dict(result.to_dict()) == result
+    result_2 = check(response)
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
 def test__PythonCodeBlockTests__with_code_tests():
     def check_code_blocks(code_blocks):  # noqa
@@ -1816,7 +1984,7 @@ def test__PythonCodeBlockTests__with_code_tests():
         'assert my_value == 1',
     ]
     response = _code_blocks_to_response(expected_code_blocks)
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
@@ -1835,6 +2003,9 @@ def test__PythonCodeBlockTests__with_code_tests():
     assert result.metadata['code_test_errors'][2] == {'error': 'NameError', 'message': "name 'does_not_exist' is not defined"}  # noqa
     assert result.metadata['code_test_errors'][3] is None
     assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
+    result_2 = check(response)
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
 def test__PythonCodeBlockTests__with_code_tests__str():
     # same test as `test__PythonCodeBlockTests__with_code_tests` except the code_tests are strings
@@ -1895,7 +2066,7 @@ def test__PythonCodeBlockTests__with_code_tests__str():
         'assert my_value == 1',
     ]
     response = _code_blocks_to_response(expected_code_blocks)
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
@@ -1918,6 +2089,9 @@ def test__PythonCodeBlockTests__with_code_tests__str():
     assert result.metadata['code_test_errors'][2] == {'error': 'NameError', 'message': "name 'does_not_exist' is not defined"}  # noqa
     assert result.metadata['code_test_errors'][3] is None
     assert result.metadata['code_test_errors'][4] == {'error': 'ValueError', 'message': 'This should fail'}  # noqa
+    result_2 = check(response)
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
 def test__PythonCodeBlockTests__failing_code_setup_raises_error():
     """
@@ -1925,10 +2099,16 @@ def test__PythonCodeBlockTests__failing_code_setup_raises_error():
     should fail.
     """
     # ensure code block is successfull before we test for failure for a different cause
-    response = ResponseData(response='```\n1 == 1\n```')
-    result = PythonCodeBlockTests()(response)
+    response = '```\n1 == 1\n```'
+    response_model = ResponseModel(response=response)
+    check = PythonCodeBlockTests()
+    result = check.run_on_model(response_model)
     assert result.metadata['num_code_blocks'] == 1
     assert result.metadata['num_code_blocks_successful'] == 1
+    result_2 = check(response)
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
+
     check = PythonCodeBlockTests(
         code_setup='raise ValueError()',
     )
@@ -1947,13 +2127,17 @@ def test__PythonCodeBlockTests__with_code_tests__failing_function_does_not_raise
             failing_function,
         ],
     )
-    response = ResponseData(response='```\n1 == 1\n```')
-    result = check(response)
+    response = '```\n1 == 1\n```'
+    response_model = ResponseModel(response=response)
+    result = check.run_on_model(response_model)
     assert result.metadata['num_code_tests'] == 1
     assert result.metadata['num_code_tests_successful'] == 0
     assert len(result.metadata['code_test_errors']) == 1
     assert result.metadata['code_test_errors'][0] == {'error': 'ValueError', 'message': ''}
     assert result.metadata['code_test_results'] == [False]
+    result_2 = check(response)
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
     assert result.value == 0.5
     assert not result.success
@@ -1968,7 +2152,7 @@ def test__PythonCodeBlockTests__with_code_tests__all_code_blocks_fail__test_numb
     """Make sure the number of code tests is still accurate if all code blocks fail to run."""
     code_tests = ["def failing_function(code_blocks):\n    return variable_does_not_exist == 1"]
     check = PythonCodeBlockTests(code_tests=code_tests)
-    response = ResponseData(response=dedent("""
+    response = dedent("""
         ```
         raise ValueError()
         ```
@@ -1976,9 +2160,10 @@ def test__PythonCodeBlockTests__with_code_tests__all_code_blocks_fail__test_numb
         ```
         raise NameError()
         ```
-    """))
+    """)
+    response_model = ResponseModel(response=response)
     expected_code_blocks = ['raise ValueError()', 'raise NameError()']
-    result = check(response)
+    result = check.run_on_model(response_model)
     assert result.metadata['check_type'] == CheckType.PYTHON_CODE_BLOCK_TESTS.name
     assert result.metadata['num_code_blocks'] == 2
     assert result.metadata['num_code_blocks_successful'] == 0
@@ -1990,6 +2175,9 @@ def test__PythonCodeBlockTests__with_code_tests__all_code_blocks_fail__test_numb
     assert result.metadata['num_code_tests_successful'] == 0
     assert result.metadata['code_test_results'] == [False]
     assert result.metadata['code_test_errors'][0] == {'error': 'NameError', 'message': "name 'variable_does_not_exist' is not defined"}  # noqa
+    result_2 = check(response)
+    assert result == result_2
+    assert result.to_dict() == result_2.to_dict()
 
 def test__PythonCodeBlockTests__with_code_tests__all_tests_with_same_name():
     # same test as `test__PythonCodeBlockTests__with_code_tests` except all functions are named the
@@ -2050,7 +2238,7 @@ def test__PythonCodeBlockTests__with_code_tests__all_tests_with_same_name():
         'assert my_value == 1',
     ]
     response = _code_blocks_to_response(expected_code_blocks)
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
@@ -2251,7 +2439,7 @@ def test__PythonCodeBlockTests__with_code_tests__assertion_boolean_statements():
     assert len(check.code_tests) == len(code_tests)
     assert check.metadata == {}
     assert str(check)
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success
     assert result.success_threshold == threshold
@@ -2277,22 +2465,22 @@ def test__PythonCodeBlockTests__with_code_tests__invalid_test_raises_exception()
     code_tests = ['assert True\nassert True']
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match='Only a single statement is allowed if the value is a string.'):  # noqa
-        check(ResponseData(response='```\n1 == 1\n```'))
+        check.run_on_model(ResponseModel(response='```\n1 == 1\n```'))
 
     code_tests = ['def test(code_blocks: list[str]) -> bool:\n    return None']
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match=re.escape(f"Test must return a boolean value:\n{code_tests[0]}")):  # noqa
-        check(ResponseData(response='```\n1 == 1\n```'))
+        check.run_on_model(ResponseModel(response='```\n1 == 1\n```'))
 
     code_tests = ['assert None']
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match=re.escape('Test must return a boolean value:\ndef __code_test__(code_blocks: list[str]) -> bool:\n    return None')):  # noqa
-        check(ResponseData(response='```\n1 == 1\n```'))
+        check.run_on_model(ResponseModel(response='```\n1 == 1\n```'))
 
     code_tests = ['None']
     check = PythonCodeBlockTests(code_tests=code_tests)
     with pytest.raises(AssertionError, match=re.escape('Test must return a boolean value:\ndef __code_test__(code_blocks: list[str]) -> bool:\n    return None')):  # noqa
-        check(ResponseData(response='```\n1 == 1\n```'))
+        check.run_on_model(ResponseModel(response='```\n1 == 1\n```'))
 
 def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():
     expected_code_blocks = [
@@ -2339,7 +2527,7 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_within_threshold():
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success  # second code block fails
     assert result.success_threshold == threshold
@@ -2405,7 +2593,7 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success  # second code block fails
     assert result.success_threshold == threshold
@@ -2471,7 +2659,7 @@ def test__PythonCodeBlockTests__with_code_tests__timeouts_exceed_threshold_code_
     assert check.metadata == {}
     assert str(check)
 
-    result = check(ResponseData(response=response))
+    result = check.run_on_model(ResponseModel(response=response))
     assert result.value == expected_successful_checks / expected_total_checks
     assert not result.success  # second code block fails
     assert result.success_threshold == threshold
@@ -2506,7 +2694,7 @@ def test__PythonCodeBlockTests__with_env_namespace():
             "assert int(answer['b']) == 50",
         ],
     )
-    result = check(ResponseData(response=f"```\n{code}\n```"))
+    result = check.run_on_model(ResponseModel(response=f"```\n{code}\n```"))
     assert result.success is False
     assert result.value == 0
     assert result.metadata['num_code_blocks'] == 1
@@ -2531,7 +2719,7 @@ def test__PythonCodeBlockTests__with_env_namespace():
         ],
         env_namespace=env_namespace,
     )
-    result = check(ResponseData(response=f"```\n{code}\n```"))
+    result = check.run_on_model(ResponseModel(response=f"```\n{code}\n```"))
     assert result.success is True
     assert result.value == 1
     assert result.metadata['num_code_blocks'] == 1
@@ -2551,7 +2739,7 @@ def test__ToolCallsCheck():
         function_name='get_current_weather',
         function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
     )
-    result = check(ResponseData(response=[{
+    result = check.run_on_model(ResponseModel(response=[{
         'arguments': {'location':'Boston, MA', 'unit':'fahrenheit'},
         'name': 'get_current_weather',
     }]))
@@ -2571,7 +2759,7 @@ def test__ToolCallsCheck__multiple_functions():
         function_name='get_current_weather',
         function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
     )
-    result = check(ResponseData(response=[
+    result = check.run_on_model(ResponseModel(response=[
         {
             "arguments": {"location":"Boston, MA", "unit":"fahrenheit"},
             "name": "get_current_weather",
@@ -2603,7 +2791,7 @@ def test__ToolCallsCheck__allow_regex():
         },
         allow_regex=True,
     )
-    result = check(ResponseData(response=[{
+    result = check.run_on_model(ResponseModel(response=[{
         'arguments': {
             'location':'Boston, MA',
             'unit':'fahrenheit',
@@ -2642,7 +2830,7 @@ def test__ToolCallsCheck__penalize_extraneous_arguments():
         },
         'name': 'get_current_weather',
     }]
-    result = check(ResponseData(response=fake_response))
+    result = check.run_on_model(ResponseModel(response=fake_response))
     assert isinstance(result, CheckResult)
     assert result.success is False
     assert result.value == 0
@@ -2657,7 +2845,7 @@ def test__ToolCallsCheck__incorrect_function_name():
         function_name='get_current_weather',
         function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
     )
-    result = check(ResponseData(response=[{
+    result = check.run_on_model(ResponseModel(response=[{
         'arguments': {'location':'Boston, MA', 'unit':'fahrenheit'},
         'name': 'get_current_weather_2',
     }]))
@@ -2677,7 +2865,7 @@ def test__ToolCallsCheck__allow_regex_partial_correct():
         },
         allow_regex=True,
     )
-    result = check(ResponseData(response=[{
+    result = check.run_on_model(ResponseModel(response=[{
         'arguments': {
             'location':'Boston, MA',
             'unit':'fahrenheit',
@@ -2706,7 +2894,7 @@ def test__ToolCallsCheck__empty_string_response():
         function_name='get_current_weather',
         function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
     )
-    result = check(ResponseData(response=""))
+    result = check.run_on_model(ResponseModel(response=""))
     assert isinstance(result, CheckResult)
     assert result.success is False
     assert result.value == 0
@@ -2716,7 +2904,7 @@ def test__ToolCallsCheck__empty_list_response():
         function_name='get_current_weather',
         function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
     )
-    result = check(ResponseData(response=[]))
+    result = check.run_on_model(ResponseModel(response=[]))
     assert isinstance(result, CheckResult)
     assert result.success is False
     assert result.value == 0
@@ -2726,7 +2914,7 @@ def test__ToolCallsCheck__string_response():
         function_name='get_current_weather',
         function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
     )
-    result = check(ResponseData(response="This is a test."))
+    result = check.run_on_model(ResponseModel(response="This is a test."))
     assert isinstance(result, CheckResult)
     assert result.success is False
     assert result.value == 0
@@ -2739,7 +2927,7 @@ def test__LLMCheck__openai(openai_candidate_template: dict):
         eval_prompt = "What is the number returned in the question?",
         evaluator=candidate,
     )
-    result = check(ResponseData(
+    result = check.run_on_model(ResponseModel(
         input=[user_message("What is the secret number?")],
         response="The secret number is 42.",
     ))
@@ -2747,46 +2935,51 @@ def test__LLMCheck__openai(openai_candidate_template: dict):
     assert result.success is None
     assert result.metadata['check_type'] == CheckType.LLM
     assert '42' in result.value
-    assert result.metadata['response_metadata']['total_cost'] > 0
+    assert result.metadata['metadata']['total_cost'] > 0
 
 def test__ToxicityCheck__openai(openai_candidate_template: dict):
     """Test that the template for an OpenAI candidate works."""
     template = deepcopy(openai_candidate_template)
     check = ToxicityCheck(evaluator=Candidate.from_dict(template))
-    result = check(ResponseData(response="This is bullshit."))
+    result = check.run_on_model(ResponseModel(response="This is bullshit."))
     assert isinstance(result, CheckResult)
     assert result.success is False
     assert 'true' in result.value.lower()
     assert result.metadata['check_type'] == CheckType.TOXICITY
-    assert result.metadata['response_metadata']['total_cost'] > 0
+    assert result.metadata['metadata']['total_cost'] > 0
 
     check = ToxicityCheck(evaluator=Candidate.from_dict(template))
-    result = check(ResponseData(response="This is great."))
+    result = check.run_on_model(ResponseModel(response="This is great."))
     assert isinstance(result, CheckResult)
     assert result.success is True
     assert 'false' in result.value.lower()
     assert result.metadata['check_type'] == CheckType.TOXICITY
-    assert result.metadata['response_metadata']['total_cost'] > 0
+    assert result.metadata['metadata']['total_cost'] > 0
 
 def test__PrecisionScore():
+    actual_response = "This is the generated TEXT."
+    ideal_response = "This is the ideal or correct text."
     score = PrecisionScore()
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response="This is the ideal or correct text.",
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     assert result.value == 0.5
     assert result.success_threshold is None
     assert result.success is None
     assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
-def test__PrecisionScore__value_extractor():
-    value_extractor = {
+def test__PrecisionScore__data_path():
+    data_path = {
         'actual_response': 'response["generated_response"]',
         'ideal_response': 'ideal_response["correct"]',
     }
-    score = PrecisionScore(value_extractor=value_extractor)
-    result = score(ResponseData(
+    score = PrecisionScore(data_path=data_path)
+    result = score.run_on_model(ResponseModel(
         response={'generated_response': "This is the generated TEXT."},
         ideal_response={'correct': "This is the ideal or correct text."},
     ))
@@ -2795,9 +2988,9 @@ def test__PrecisionScore__value_extractor():
     assert result.success_threshold is None
     assert result.success is None
     assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
-    # since we are overriding the value_extractor, it should be in the metadata
-    assert 'value_extractor' in result.metadata
-    assert result.metadata['value_extractor'] == value_extractor
+    # since we are overriding the data_path, it should be in the metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == data_path
     assert 'value_extracted' in result.metadata
     assert result.metadata['value_extracted'] == {
         'actual_response': 'This is the generated TEXT.',
@@ -2806,7 +2999,7 @@ def test__PrecisionScore__value_extractor():
 
 def test__PrecisionScore__threshold():
     score = PrecisionScore(success_threshold=0.51)
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response="This is the generated TEXT.",
         ideal_response="This is the ideal or correct text.",
     ))
@@ -2816,7 +3009,7 @@ def test__PrecisionScore__threshold():
     assert result.success_threshold == 0.51
 
     score = PrecisionScore(success_threshold=0.49)
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response="This is the generated TEXT.",
         ideal_response="This is the ideal or correct text.",
     ))
@@ -2826,52 +3019,66 @@ def test__PrecisionScore__threshold():
     assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
 
 def test__PrecisionScore__empty_response():
+    ideal_response = "This is the ideal or correct text."
     score = PrecisionScore()
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response="",
-        ideal_response="This is the ideal or correct text.",
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
+    result_2 = score(actual_response="", ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
     score = PrecisionScore()
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response=None,
-        ideal_response="This is the ideal or correct text.",
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['check_type'] == CheckType.PRECISION_SCORE.name
+    result_2 = score(actual_response=None, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__RecallScore():
+    actual_response = "This is the generated TEXT."
+    ideal_response = "This is the ideal or correct text."
     score = RecallScore()
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response="This is the ideal or correct text.",
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     assert result.value == pytest.approx(1/3)
     assert result.success_threshold is None
     assert result.success is None
     assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
-def test__RecallScore__value_extractor():
-    value_extractor = {
+def test__RecallScore__data_path():
+    data_path = {
         'actual_response': 'response["generated_response"]',
         'ideal_response': 'ideal_response["correct"]',
     }
-    score = RecallScore(value_extractor=value_extractor)
-    result = score(ResponseData(
-        response={'generated_response': "This is the generated TEXT."},
-        ideal_response={'correct': "This is the ideal or correct text."},
+    actual_response = {'generated_response': "This is the generated TEXT."}
+    ideal_response = {'correct': "This is the ideal or correct text."}
+    score = RecallScore(data_path=data_path)
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     assert result.value == pytest.approx(1/3)
     assert result.success_threshold is None
     assert result.success is None
     assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
-        # since we are overriding the value_extractor, it should be in the metadata
-    assert 'value_extractor' in result.metadata
-    assert result.metadata['value_extractor'] == value_extractor
+        # since we are overriding the data_path, it should be in the metadata
+    assert 'data_path' in result.metadata
+    assert result.metadata['data_path'] == data_path
     assert 'value_extracted' in result.metadata
     assert result.metadata['value_extracted'] == {
         'actual_response': 'This is the generated TEXT.',
@@ -2879,62 +3086,84 @@ def test__RecallScore__value_extractor():
     }
 
 def test__RecallScore__threshold():
+    actual_response = "This is the generated TEXT."
+    ideal_response = "This is the ideal or correct text."
     score = RecallScore(success_threshold=0.34)
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response="This is the ideal or correct text.",
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     assert result.value == pytest.approx(1/3)
     assert result.success is False
     assert result.success_threshold == 0.34
     assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
     score = RecallScore(success_threshold=0.32)
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response="This is the ideal or correct text.",
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     assert result.value == pytest.approx(1/3)
     assert result.success is True
     assert result.success_threshold == 0.32
     assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__RecallScore__empty_response():
+    ideal_response = "This is the ideal or correct text."
     score = RecallScore()
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response="",
-        ideal_response="This is the ideal or correct text.",
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+    result_2 = score(actual_response="", ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
     score = RecallScore()
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response=None,
-        ideal_response="This is the ideal or correct text.",
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['check_type'] == CheckType.RECALL_SCORE.name
+    result_2 = score(actual_response=None, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__F1Score():
+    actual_response = "This is the generated TEXT."
+    ideal_response = "This is the ideal or correct text."
     score = F1Score()
     assert not score.return_precision_recall
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response="This is the ideal or correct text.",
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     assert result.value == f1_score(0.5, 1/3)
     assert result.success_threshold is None
     assert result.success is None
     assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__F1Score__return_precision_recall():
+    actual_response = "This is the generated TEXT."
+    ideal_response = "This is the IDEAL or correct text."
     score = F1Score(return_precision_recall=True)
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response="This is the IDEAL or correct text.",
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     response_tokens = ['generated', 'text']
@@ -2949,70 +3178,95 @@ def test__F1Score__return_precision_recall():
     assert result.metadata['precision'] == expected_precision
     assert result.metadata['recall'] == expected_recall
     assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__F1Score__threshold():
+    actual_response = "This is the generated TEXT."
+    ideal_response = "This is the IDEAL or correct text."
     score = F1Score(success_threshold=0.41)
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response="This is the ideal or correct text.",
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     assert result.value == f1_score(0.5, 1/3)
     assert result.success is False
     assert result.success_threshold == 0.41
     assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
     score = F1Score(success_threshold=0.39)
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response="This is the ideal or correct text.",
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     assert result.value == f1_score(0.5, 1/3)
     assert result.success is True
     assert result.success_threshold == 0.39
     assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__F1Score__empty_response():
+    ideal_response = "This is the IDEAL or correct text."
     score = F1Score()
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response="",
-        ideal_response="This is the ideal or correct text.",
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+    result_2 = score(actual_response="", ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
     score = F1Score()
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response=None,
-        ideal_response="This is the ideal or correct text.",
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['check_type'] == CheckType.F1_SCORE.name
+    result_2 = score(actual_response=None, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__MaxF1Score():
+    actual_response = "This is the generated TEXT."
+    ideal_response = [
+        "This will have low score because there is not overlap in non-stop words.",
+        "This is the IDEAL or correct text.",
+    ]
     score = MaxF1Score()
     assert not score.return_precision_recall
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response=[
-            "This will have low score because there is not overlap in non-stop words.",
-            "This is the ideal or correct text.",
-        ],
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     assert result.value == f1_score(0.5, 1/3)
     assert result.success_threshold is None
     assert result.success is None
     assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__MaxF1Score__return_precision_recall():
+    actual_response = "This is the generated TEXT."
+    ideal_response = [
+        "This will have low score because there is not overlap in non-stop words.",
+        "This is the IDEAL or correct text.",
+    ]
     score = MaxF1Score(return_precision_recall=True)
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response=[
-            "This will have low score because there is not overlap in non-stop words.",
-            "This is the ideal or correct text.",
-        ],
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     response_tokens = ['generated', 'text']
@@ -3027,15 +3281,21 @@ def test__MaxF1Score__return_precision_recall():
     assert result.metadata['precision'] == expected_precision
     assert result.metadata['recall'] == expected_recall
     assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__MaxF1Score__threshold():
+    actual_response = "This is the generated TEXT."
     score = MaxF1Score(success_threshold=0.41)
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response=[
-            "This will have low score because there is not overlap in non-stop words.",
-            "This is the ideal or correct text.",
-        ],
+    ideal_response = [
+        "This will have low score because there is not overlap in non-stop words.",
+        "This is the IDEAL or correct text.",
+    ]
+
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     # tokens should be ['generated', 'text'] and ['ideal', 'correct', 'text']
     assert result.value == f1_score(0.5, 1/3)
@@ -3044,54 +3304,58 @@ def test__MaxF1Score__threshold():
     assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
 
     score = MaxF1Score(success_threshold=0.39)
-    result = score(ResponseData(
-        response="This is the generated TEXT.",
-        ideal_response=[
-            "This will have low score because there is not overlap in non-stop words.",
-            "This is the ideal or correct text.",
-        ],
+    result = score.run_on_model(ResponseModel(
+        response=actual_response,
+        ideal_response=ideal_response,
     ))
     assert result.value == f1_score(0.5, 1/3)
     assert result.success is True
     assert result.success_threshold == 0.39
     assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+    result_2 = score(actual_response=actual_response, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
 def test__MaxF1Score__empty_response__empty():
+    ideal_response = [
+        "This will have low score because there is not overlap in non-stop words.",
+        "This is the IDEAL or correct text.",
+    ]
     score = MaxF1Score(return_precision_recall=True)
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response=[],
-        ideal_response=[
-            "This will have low score because there is not overlap in non-stop words.",
-            "This is the ideal or correct text.",
-        ],
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['precision'] == 0
     assert result.metadata['recall'] == 0
     assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+    result_2 = score(actual_response=[], ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
     score = MaxF1Score(return_precision_recall=True)
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response=None,
-        ideal_response=[
-            "This will have low score because there is not overlap in non-stop words.",
-            "This is the ideal or correct text.",
-        ],
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['precision'] == 0
     assert result.metadata['recall'] == 0
     assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+    result_2 = score(actual_response=None, ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()
 
     score = MaxF1Score(return_precision_recall=True)
-    result = score(ResponseData(
+    result = score.run_on_model(ResponseModel(
         response='',
-        ideal_response=[
-            "This will have low score because there is not overlap in non-stop words.",
-            "This is the ideal or correct text.",
-        ],
+        ideal_response=ideal_response,
     ))
     assert result.value == 0
     assert result.metadata['precision'] == 0
     assert result.metadata['recall'] == 0
     assert result.metadata['check_type'] == CheckType.MAX_F1_SCORE.name
+    result_2 = score(actual_response='', ideal_response=ideal_response)
+    assert result_2 == result
+    assert result_2.to_dict() == result.to_dict()

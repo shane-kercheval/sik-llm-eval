@@ -1,14 +1,12 @@
 """Tests for the evals module."""
 import pytest
 from copy import deepcopy
-import multiprocessing
 import os
 from textwrap import dedent
 import yaml
 from llm_eval.candidates import (
     Candidate,
     CandidateResponse,
-    is_async_candidate,
 )
 from llm_eval.checks import (
     Check,
@@ -25,143 +23,166 @@ from llm_eval.eval import (
     Eval,
     EvalHarness,
     EvalResult,
-    ResponseError,
+    Mode,
 )
 from llm_eval.internal_utilities import extract_code_blocks
 from llm_eval.openai import user_message
-from tests.conftest import MockCandidate
+from tests.conftest import UnregisteredCandidate, UnregisteredCheck
 
 
-def test__Eval__creation():
-    messages = [user_message('test')]
-    eval_obj = Eval(input=messages)
-    eval_dict = eval_obj.to_dict()
-    assert eval_dict == {'input': messages}
-    assert Eval(**eval_dict) == eval_obj
-    assert str(eval_obj)
-
-    messages = [user_message('test1')]
+@pytest.mark.parametrize('input_', [[user_message('test1')], None])
+def test__Eval__creation(input_: object):
     eval_obj = Eval(
-        input=messages,
+        input=input_,
         ideal_response='test2',
         checks = [
             MatchCheck(value='test6', metadata={'test': 'test7'}),
             ContainsCheck(value='test8'),
+            ContainsCheck(value='test9').to_dict(),
         ],
     )
-    assert eval_obj.input == messages
+    assert eval_obj.input == input_
     assert eval_obj.ideal_response == 'test2'
     assert eval_obj.checks == [
         MatchCheck(value='test6', metadata={'test': 'test7'}),
         ContainsCheck(value='test8'),
+        ContainsCheck(value='test9'),
     ]
     assert str(eval_obj)
 
     eval_dict = eval_obj.to_dict()
-    assert eval_dict == {
-        'input': messages,
+    expected_dict = {
+        'input': input_,
         'ideal_response': 'test2',
         'checks': [
             {'check_type': 'MATCH', 'value': 'test6', 'metadata': {'test': 'test7'}},
             {'check_type': 'CONTAINS', 'value': 'test8'},
+            {'check_type': 'CONTAINS', 'value': 'test9'},
         ],
     }
+    if not input_:
+        del expected_dict['input']
+    assert eval_dict == expected_dict
     assert Eval(**eval_dict) == eval_obj
 
-def test__eval_obj__clone(fake_eval_8f9fbf37: dict):
+def test__eval__clone(fake_eval_8f9fbf37: dict):
     config = deepcopy(fake_eval_8f9fbf37)
     eval_obj = Eval(**config)
-    eval_cloned = eval_obj.clone()
-    assert eval_obj == eval_cloned
-    assert eval_obj.to_dict() == eval_cloned.to_dict()
+    eval_copy = deepcopy(eval_obj)
+    assert eval_obj == eval_copy
+    assert eval_obj.to_dict() == eval_copy.to_dict()
     # test-sequence (i.e. PromptTest objects) should be the same prompt tests but different objects
-    assert eval_obj.input == eval_cloned.input
-    assert eval_obj.input is not eval_cloned.input
-    assert eval_obj.ideal_response == eval_cloned.ideal_response
-    assert eval_obj.ideal_response is not eval_cloned.ideal_response
-    assert eval_obj.checks == eval_cloned.checks
-    assert all(c1 is not c2 for c1, c2 in zip(eval_obj.checks, eval_cloned.checks))
-    assert eval_obj.metadata == eval_cloned.metadata
-    assert eval_obj.metadata is not eval_cloned.metadata
+    assert eval_obj.input == eval_copy.input
+    assert eval_obj.input is not eval_copy.input
+    assert eval_obj.ideal_response == eval_copy.ideal_response
+    assert eval_obj.ideal_response is not eval_copy.ideal_response
+    assert eval_obj.checks == eval_copy.checks
+    assert all(c1 is not c2 for c1, c2 in zip(eval_obj.checks, eval_copy.checks))
+    assert eval_obj.metadata == eval_copy.metadata
+    assert eval_obj.metadata is not eval_copy.metadata
 
-def test__Eval__call__result__to_from_dict():
+def test__Eval__from_file():
     """
-    Tests the basic case of calling an Eval object and converting it to/from a dict. No checks are
-    passed to the eval.
+    For each of our fake evals, test that we can create an Eval object from the yaml file and that
+    the object is the same as the one created from the dictionary.
     """
+    eval_files = [
+        f'tests/fake_data/{f}'
+        for f in os.listdir('tests/fake_data')
+        if f.startswith('fake_eval') and f.endswith('.yaml')
+    ]
+    assert len(eval_files) > 1
+    for path in eval_files:
+        with open(path) as f:
+            eval_dict = yaml.safe_load(f)
+        eval_obj = Eval.from_file(path)
+        assert isinstance(eval_obj, Eval)
+        assert eval_obj.to_dict() == eval_dict
+        assert Eval(**eval_dict) == eval_obj
+
+@pytest.mark.parametrize(
+    ('candidate', 'metadata'),
+    [
+        (None, None),
+        (lambda x: x, {'foo': 'bar'}),
+        (UnregisteredCandidate(response="foobar"), None),
+    ],
+)
+def test__Eval__call__result__to_from_dict(candidate, metadata):  # noqa: ANN001
+    """Tests the basic case of calling an Eval object and converting it to/from a dict."""
     messages = [user_message('test')]
-    eval_obj = Eval(input=messages)
+    eval_obj = Eval(input=messages, checks=[MatchCheck(value='fails')])
     # dict before call should be the same as after call
-    assert eval_obj.to_dict() == {'input': messages}
+    assert eval_obj.to_dict() == {'input': messages, 'checks': [{'check_type': 'MATCH', 'value': 'fails'}]}  # noqa: E501
     assert Eval(**eval_obj.to_dict()) == eval_obj
-    result = eval_obj(lambda x: CandidateResponse(response=f'response: {x}'))
-    assert result.eval_obj == eval_obj
-    assert result.response == "response: [{'role': 'user', 'content': 'test'}]"
-    assert result.response_metadata is None
-    assert result.total_time_seconds >= 0
-    assert result.check_results == []
+    response = f'response: {eval_obj.input}'
+    result = eval_obj(
+        response=response,
+        metadata=metadata,
+        candidate=candidate,
+    )
+    assert result.eval == eval_obj
+    assert result.response == response
+    assert result.metadata == metadata
+    assert result.check_results[0].value is False
+    assert result.check_results[0].success is False
+    assert result.check_results[0].metadata['check_type'] == 'MATCH'
+    assert result.check_results[0].metadata['check_value'] == 'fails'
+    assert result.num_checks == 1
+    assert result.timestamp
+    if candidate:
+        assert result.candidate
+    else:
+        assert result.candidate is None
     assert Eval(**eval_obj.to_dict()) == eval_obj
 
     result_dict = result.to_dict()
-    assert result_dict['eval_obj'] == eval_obj.to_dict()
-    assert result_dict['candidate_obj']
-    assert Eval(**result_dict['eval_obj']) == eval_obj
+    assert result_dict['eval'] == eval_obj.to_dict()
+    assert result_dict['metadata'] == metadata
+    assert result_dict['timestamp']
+    assert result_dict['response'] == response
+    assert result_dict['check_results'] == [result.check_results[0].to_dict()]
+    if candidate:
+        if isinstance(candidate, UnregisteredCandidate):
+            assert result_dict['candidate']['candidate_type'] == 'UnregisteredCandidate'
+        else:
+            assert result_dict['candidate']
+    else:
+        assert result_dict['candidate'] is None
+    assert Eval(**result_dict['eval']) == eval_obj
     assert EvalResult(**result_dict) == result
     assert EvalResult(**result_dict).to_dict() == result.to_dict()
 
 def test__Eval__from_objects__minimal():
-    def mock_llm(x):  # noqa
-        return f'response: {x}'
-    prompt = "This is a prompt."
-    messages = [user_message(prompt)]
-    eval_obj = Eval(input=messages)
-    result = eval_obj(lambda x: CandidateResponse(response=mock_llm(x)))
-    assert result.eval_obj == eval_obj
-    assert result.candidate_obj
-    assert result.response == mock_llm(messages)
-    assert result.num_checks == 0
-    assert result.num_successful_checks == 0
-    assert result.perc_successful_checks is None
-    assert result.check_results == []
+    eval_obj = Eval(checks=[ContainsCheck(value='a response')])
+    response = "This is a response."
+    result = eval_obj(response)
+    assert result.eval == eval_obj
+    assert result.candidate is None
+    assert result.response == response
+    assert result.num_checks == 1
+    assert result.num_successful_checks == 1
+    assert result.perc_successful_checks == 1
+    assert result.check_results[0].value is True
+    assert result.check_results[0].success is True
+    assert result.check_results[0].metadata['check_type'] == 'CONTAINS'
+    assert result.check_results[0].metadata['check_value'] == 'a response'
     assert result.timestamp
-    assert result.total_time_seconds >= 0
 
-@pytest.mark.parametrize('use_async', [True, False])
-def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_8f9fbf37: dict):
+@pytest.mark.parametrize('passes_input', [True, False])
+def test__Eval__example_8f9fbf37__callable_candidate(passes_input: bool, fake_eval_8f9fbf37: dict):
     eval_dict = fake_eval_8f9fbf37.copy()
+    if not passes_input:
+        del eval_dict['input']
     eval_obj = Eval(**eval_dict)
     assert eval_obj.to_dict() == eval_dict
+    assert Eval(**eval_dict) == eval_obj
 
-    responses = [
-        CandidateResponse(response="This is a response with code blocks\n```python\nprint('hello world')\n```"),  # noqa
-    ]
-    def create_mock_llm(responses, use_async):  # noqa
-        if use_async:
-            iterator = iter(responses)
-            async def mock_llm(_: str):  # noqa
-                try:
-                    return next(iterator)
-                except StopIteration:
-                    return None
-            return mock_llm
-        else:  # noqa: RET505
-            iterator = iter(responses)
-            def mock_llm(_: str):  # noqa
-                try:
-                    return next(iterator)
-                except StopIteration:
-                    return None
-        return mock_llm
-
-    mock_llm = create_mock_llm(responses, use_async)
-    if use_async:
-        assert is_async_candidate(mock_llm)
-    else:
-        assert not is_async_candidate(mock_llm)
-    eval_result = eval_obj(mock_llm)
-    assert eval_result.response == responses[0].response
-    assert eval_result.eval_obj.input == eval_obj.input
-    assert eval_result.eval_obj.to_dict() == eval_dict
+    response = "This is a response with code blocks\n```python\nprint('hello world')\n```"
+    eval_result = eval_obj(response)
+    assert eval_result.response == response
+    assert eval_result.eval.input == eval_obj.input
+    assert eval_result.eval.to_dict() == eval_dict
     expected_num_checks = 3
     assert eval_result.num_checks == expected_num_checks
     assert eval_result.num_successful_checks == 2
@@ -173,19 +194,24 @@ def test__Eval__example_8f9fbf37__callable_candidate(use_async: bool, fake_eval_
     # we can't check that entire eval_result_dict will recreate the exact eval_result object
     # because the candidate will be slightly different (e.g. if it was a function, it will have
     # been converted to a string; we can't serialize the underlying model/llm)
-    assert eval_result_dict['eval_obj'] == eval_dict
-    assert Eval(**eval_result_dict['eval_obj']) == eval_obj
-    assert eval_result_dict['candidate_obj']
+    assert eval_result_dict['eval'] == eval_dict
+    assert Eval(**eval_result_dict['eval']) == eval_obj
+    assert eval_result_dict['candidate'] is None
+    assert eval_result_dict['response'] == response
+    assert eval_result_dict['metadata'] is None
+    assert eval_result_dict['timestamp']
     # check that the check result dicts match
     assert eval_result_dict['check_results'] == [r.to_dict() for r in eval_result.check_results]
-    assert eval_result.total_time_seconds > 0
     # check that the eval_result_dict will recreate the exact eval_result object
-    recreated_eval = EvalResult(**eval_result_dict)
-    assert recreated_eval == eval_result
-    assert recreated_eval.to_dict() == eval_result.to_dict()
-    assert recreated_eval.eval_obj == eval_result.eval_obj
-    assert recreated_eval.candidate_obj
-    assert recreated_eval.check_results == eval_result.check_results
+    recreated_result = EvalResult(**eval_result_dict)
+    assert recreated_result == eval_result
+    assert recreated_result.to_dict() == eval_result.to_dict()
+    assert recreated_result.eval == eval_result.eval.to_dict()
+    assert not recreated_result.candidate
+    assert recreated_result.response == eval_result.response
+    assert recreated_result.metadata == eval_result.metadata
+    assert recreated_result.timestamp == eval_result.timestamp
+    assert recreated_result.check_results == eval_result.check_results
 
 def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_numbers_code_blocks_run: dict):  # noqa: E501
     """
@@ -218,22 +244,21 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
     assert expected_num_code_blocks == 2
     expected_successful_code_blocks = len(expected_code_blocks)
 
-    def mock_llm(_):  # noqa
-        return CandidateResponse(response=response)
-
-    eval_result = eval_obj(mock_llm)
-    # we need to strip the code blocks of leading/trailing whitespace to compare them
     expected_config = deepcopy(config)
-    expected_config['checks'][-1]['code_tests'] = [
-        dedent(x.strip()) for x in
-        expected_config['checks'][-1]['code_tests']
-    ]
-    assert eval_result.eval_obj.to_dict() == expected_config
+
+    def dummy_candidate(_): return None  # noqa
+
+    eval_result = eval_obj(response, metadata={'foo': 'bar'}, candidate=dummy_candidate)
+    assert eval_result.eval == eval_obj
+    assert eval_result.candidate == str(dummy_candidate)
+    assert eval_result.response == response
+    assert eval_result.metadata == {'foo': 'bar'}
+    assert eval_result.timestamp
+
+    assert eval_result.eval.to_dict() == expected_config
     assert Eval(**eval_obj.to_dict()) == eval_obj
-    # i need to compare strings because underlying error objects (i.e. instances) will not be same
     assert str(EvalResult(**eval_result.to_dict()).to_dict()) == str(eval_result.to_dict())
 
-    assert eval_result.response == response
     assert eval_result.num_checks == 5
     assert eval_result.num_successful_checks == 2
     assert eval_result.perc_successful_checks == 2 / 5
@@ -285,51 +310,93 @@ def test__Eval__multiple_code_blocks__ensure_code_blocks_run(fake_eval_sum_two_n
         'message': "name 'variable_does_not_exist' is not defined",
     }
 
-@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__Eval__candidate_from_dict(fake_eval_sum_two_numbers: dict, openai_candidate_template: dict):  # noqa: E501
-    eval_config = fake_eval_sum_two_numbers.copy()
-    eval_obj = Eval(**eval_config)
-    result = eval_obj(openai_candidate_template)
-    assert result.eval_obj == eval_obj
-    assert result.candidate_obj == Candidate.from_dict(openai_candidate_template)
-    assert result.candidate_obj.to_dict() == openai_candidate_template
-    assert result.response
-    assert 'sum_two_numbers' in result.response
-    assert len(result.check_results) == 2
-    assert result.check_results[0].success
-    assert result.check_results[0].metadata['check_type'] == CheckType.CONTAINS.name
-    assert result.check_results[1].success
-    assert result.check_results[1].metadata['check_type'] == CheckType.PYTHON_CODE_BLOCKS_PRESENT.name  # noqa: E501
-    assert result.check_results[1].metadata['num_code_blocks'] >= 1
-    expected_num_code_blocks = len(result.check_results[1].metadata['code_blocks'])
-    assert result.check_results[1].metadata['num_code_blocks'] == expected_num_code_blocks
-    assert result.num_checks == 2
-    assert result.num_successful_checks == 2
-    assert result.perc_successful_checks == 1
-    assert EvalResult(**result.to_dict()) == result
-    assert EvalResult(**result.to_dict()).to_dict() == result.to_dict()
-    assert eval_config == fake_eval_sum_two_numbers
-
-def callback(x: EvalResult) -> None:
-    """
-    Test the callback function by saving the result to a yaml file in the 'test/temp'
-    directory. Assume directory already exists.
-    """
-    candidate_id = x.candidate_obj.metadata['uuid']
-    eval_id = x.eval_obj.metadata['uuid']
-    with open(f'tests/__temp__/result-{candidate_id}-{eval_id}.yaml', 'w') as f:
-        yaml.dump(x.to_dict(), f, default_flow_style=False, sort_keys=False)
-
-@pytest.mark.parametrize("candidate_type", ["AsyncMockCandidate", "MockCandidate"])
-@pytest.mark.parametrize("num_cpus", [-1, 1])
-@pytest.mark.parametrize("async_batch_size", [1, 50])
-def test__async__EvalHarness__multiple_candidates__multiple_evals(
-        candidate_type: str,
-        num_cpus: int,
-        async_batch_size: int,
+def test__EvalHarness__initializating_with_different_types_gives_same_config(
         fake_eval_subtract_two_numbers: dict,
         fake_eval_sum_two_numbers: dict,
     ):
+    subtract_config = fake_eval_subtract_two_numbers.copy()
+    sum_config = fake_eval_sum_two_numbers.copy()
+
+    response_subtract = 'This is the response.\n\n```\ndef subtract_two_numbers(a, b):\n    return a - b\n```'  # noqa
+    response_sum = 'This is the response.\n\n```\ndef sum_two_numbers(a, b):\n    return a + b\n```'  # noqa
+    responses_lookup = {
+        fake_eval_subtract_two_numbers['input'][0]['content']: response_subtract,
+        fake_eval_sum_two_numbers['input'][0]['content']: response_sum,
+    }
+
+    candidate_1_dict = {
+        'metadata': {'uuid': 'candidate_1'},
+        'candidate_type': 'MockCandidate',
+        'responses': responses_lookup,
+    }
+    candidate_2_dict = deepcopy(candidate_1_dict)
+    candidate_2_dict['metadata']['uuid'] = 'candidate_2'
+
+    ####
+    # Test that creating the EvalHarness object in different ways still results in the same config
+    ####
+    eval_harness_via_dicts = EvalHarness(
+        evals=[subtract_config, sum_config],
+        candidates=[
+            candidate_1_dict, candidate_2_dict, MockCandidateCausesError(),
+        ],
+    )
+    eval_harness_via_objects = EvalHarness(
+        evals=[Eval(**subtract_config), Eval(**sum_config)],
+        candidates=[
+            Candidate.from_dict(candidate_1_dict),
+            Candidate.from_dict(candidate_2_dict),
+            MockCandidateCausesError(),
+        ],
+    )
+    assert eval_harness_via_dicts.evals == eval_harness_via_objects.evals
+    assert eval_harness_via_dicts.candidates == eval_harness_via_objects.candidates
+    assert all(e1 is not e2 for e1, e2 in zip(eval_harness_via_dicts.evals, eval_harness_via_objects.evals))  # noqa
+    assert all(c1 is not c2 for c1, c2 in zip(eval_harness_via_dicts.candidates, eval_harness_via_objects.candidates))  # noqa
+
+    eval_harness_via_dicts_via_add = EvalHarness()
+    eval_harness_via_dicts_via_add.add_evals(subtract_config)
+    eval_harness_via_dicts_via_add.add_evals(sum_config)
+    eval_harness_via_dicts_via_add.add_candidates(candidate_1_dict)
+    eval_harness_via_dicts_via_add.add_candidates(candidate_2_dict)
+    eval_harness_via_dicts_via_add.add_candidates(MockCandidateCausesError())
+    assert eval_harness_via_dicts.evals == eval_harness_via_dicts_via_add.evals
+    assert eval_harness_via_dicts.candidates == eval_harness_via_dicts_via_add.candidates
+    eval_harness_via_dicts_via_add = EvalHarness()
+    eval_harness_via_dicts_via_add.add_evals([subtract_config, sum_config])
+    eval_harness_via_dicts_via_add.add_candidates([
+        candidate_1_dict, candidate_2_dict, MockCandidateCausesError(),
+    ])
+    assert eval_harness_via_dicts.evals == eval_harness_via_dicts_via_add.evals
+
+    eval_harness = EvalHarness()
+    assert len(eval_harness.evals) == 0
+    assert len(eval_harness.candidates) == 0
+    eval_harness.add_evals(Eval(**subtract_config))
+    eval_harness.add_evals(Eval(**sum_config))
+    eval_harness.add_candidates(Candidate.from_dict(candidate_1_dict))
+    eval_harness.add_candidates(Candidate.from_dict(candidate_2_dict))
+    eval_harness.add_candidates(MockCandidateCausesError())
+    assert eval_harness.evals == eval_harness_via_dicts.evals
+    assert eval_harness.candidates == eval_harness_via_dicts.candidates
+
+class MockCandidateCausesError(Candidate):  # noqa: D101
+    def __call__(self, input: object) -> CandidateResponse:  # noqa
+        raise ValueError("This candidate always fails.")
+
+@pytest.mark.parametrize('candidate_type', ['AsyncMockCandidate', 'MockCandidate'])
+@pytest.mark.parametrize('num_samples', [1, 5])
+@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+def test__EvalHarness__non_async__single_processor(
+        candidate_type: str,
+        num_samples: int,
+        generate_mode: str,
+        eval_mode: str,
+        fake_eval_subtract_two_numbers: dict,
+        fake_eval_sum_two_numbers: dict,
+    ):
+    expected_num_eval_results = 2 * num_samples
     subtract_config = fake_eval_subtract_two_numbers.copy()
     sum_config = fake_eval_sum_two_numbers.copy()
 
@@ -348,44 +415,10 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(
     candidate_2_dict = deepcopy(candidate_1_dict)
     candidate_2_dict['metadata']['uuid'] = 'candidate_2'
 
-    eval_harness_via_dicts = EvalHarness(
-        evals=[subtract_config, sum_config],
-        candidates=[candidate_1_dict, candidate_2_dict],
-        num_cpus=num_cpus,
-        async_batch_size=async_batch_size,
-    )
-    eval_harness_via_objects = EvalHarness(
-        evals=[Eval(**subtract_config), Eval(**sum_config)],
-        candidates=[Candidate.from_dict(candidate_1_dict), Candidate.from_dict(candidate_2_dict)],
-        num_cpus=num_cpus,
-        async_batch_size=async_batch_size,
-    )
-    assert eval_harness_via_dicts.evals == eval_harness_via_objects.evals
-    assert eval_harness_via_dicts.candidates == eval_harness_via_objects.candidates
-    assert all(e1 is not e2 for e1, e2 in zip(eval_harness_via_dicts.evals, eval_harness_via_objects.evals))  # noqa
-    assert all(c1 is not c2 for c1, c2 in zip(eval_harness_via_dicts.candidates, eval_harness_via_objects.candidates))  # noqa
-
-    eval_harness_via_dicts_via_add = EvalHarness(
-        num_cpus=num_cpus,
-        async_batch_size=async_batch_size,
-    )
-    eval_harness_via_dicts_via_add.add_evals(subtract_config)
-    eval_harness_via_dicts_via_add.add_evals(sum_config)
-    eval_harness_via_dicts_via_add.add_candidates(candidate_1_dict)
-    eval_harness_via_dicts_via_add.add_candidates(candidate_2_dict)
-    assert eval_harness_via_dicts.evals == eval_harness_via_dicts_via_add.evals
-    assert eval_harness_via_dicts.candidates == eval_harness_via_dicts_via_add.candidates
-    eval_harness_via_dicts_via_add = EvalHarness(
-        num_cpus=num_cpus,
-        async_batch_size=async_batch_size,
-    )
-    eval_harness_via_dicts_via_add.add_evals([subtract_config, sum_config])
-    eval_harness_via_dicts_via_add.add_candidates([candidate_1_dict, candidate_2_dict])
-    assert eval_harness_via_dicts.evals == eval_harness_via_dicts_via_add.evals
-
     eval_harness = EvalHarness(
-        num_cpus=num_cpus,
-        async_batch_size=async_batch_size,
+        generate_mode=generate_mode,
+        eval_mode=eval_mode,
+        num_samples=num_samples,
     )
     assert len(eval_harness.evals) == 0
     assert len(eval_harness.candidates) == 0
@@ -393,36 +426,66 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(
     eval_harness.add_evals(Eval(**sum_config))
     eval_harness.add_candidates(Candidate.from_dict(candidate_1_dict))
     eval_harness.add_candidates(Candidate.from_dict(candidate_2_dict))
-    assert eval_harness.evals == eval_harness_via_dicts.evals
-    assert eval_harness.candidates == eval_harness_via_dicts.candidates
+    eval_harness.add_candidates(MockCandidateCausesError())
+    assert len(eval_harness.evals) == 2
+    assert len(eval_harness.candidates) == 3
 
+    ####
+    # Now run the eval harness and check the results
+    ####
     results = eval_harness()
     assert len(results) == len(eval_harness.candidates)
-    assert len(results[0]) == len(eval_harness.evals)
-    assert len(results[1]) == len(eval_harness.evals)
-    assert results[0][0].candidate_obj == results[0][1].candidate_obj
-    assert results[1][0].candidate_obj == results[1][1].candidate_obj
-    assert results[0][0].candidate_obj != results[1][0].candidate_obj
+    # ensure the number of EvalResults is correct for each candidate
+    assert all(expected_num_eval_results == len(x.eval_results) for x in results)
+    # ensure the results associated with each candidate have both evals
+    expected_eval_ids = {
+        fake_eval_subtract_two_numbers['metadata']['uuid'],
+        fake_eval_sum_two_numbers['metadata']['uuid'],
+    }
+    assert all(
+        expected_eval_ids == {er.eval.metadata['uuid'] for er in r.eval_results}
+        for r in results[0:2]  # third candidate causes an error; only check first two
+    )
 
+    assert results[0].candidate == Candidate.from_dict(candidate_1_dict)
+    assert results[0].num_errors == 0
+    assert results[0].response_errors == [None] * expected_num_eval_results
+    assert results[0].eval_errors == [None] * expected_num_eval_results
     # The first list should contain the results for candidate 1 (subtract eval, sum eval)
-    assert results[0][0].eval_obj == Eval(**subtract_config)
-    assert results[0][0].candidate_obj == Candidate.from_dict(candidate_1_dict)
-    assert results[0][1].eval_obj == Eval(**sum_config)
-    assert results[0][1].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0].eval_results[0].eval == Eval(**subtract_config)
+    assert results[0].eval_results[0].candidate == Candidate.from_dict(candidate_1_dict)
+    # num_samples indexes into the first occurrence of the second eval
+    assert results[0].eval_results[num_samples].eval == Eval(**sum_config)
+    assert results[0].eval_results[num_samples].candidate == Candidate.from_dict(candidate_1_dict)
+
+    assert results[1].candidate == Candidate.from_dict(candidate_2_dict)
+    assert results[1].num_errors == 0
+    assert results[1].response_errors == [None] * expected_num_eval_results
+    assert results[1].eval_errors == [None] * expected_num_eval_results
     # The second list should contain the results for candidate 2 (subtract eval, sum eval)
-    assert results[1][0].eval_obj == Eval(**subtract_config)
-    assert results[1][0].candidate_obj == Candidate.from_dict(candidate_2_dict)
-    assert results[1][1].eval_obj == Eval(**sum_config)
-    assert results[1][1].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1].candidate == Candidate.from_dict(candidate_2_dict)
+    assert results[1].eval_results[0].eval == Eval(**subtract_config)
+    assert results[1].eval_results[0].candidate == Candidate.from_dict(candidate_2_dict)
+    assert results[1].eval_results[num_samples].eval == Eval(**sum_config)
+    assert results[1].eval_results[num_samples].candidate == Candidate.from_dict(candidate_2_dict)
+
+    assert results[2].candidate == MockCandidateCausesError()
+    assert results[2].num_errors == expected_num_eval_results
+    assert len(results[2].response_errors) == expected_num_eval_results
+    assert all(isinstance(x, ValueError) for x in results[2].response_errors)
+    assert results[2].eval_errors == [None] * expected_num_eval_results
 
     # eval objects across candidates should have same values (same eval) but different objects
-    assert results[0][0].eval_obj == results[1][0].eval_obj
-    assert results[0][0].eval_obj is not results[1][0].eval_obj
-    assert results[0][1].eval_obj == results[1][1].eval_obj
-    assert results[0][1].eval_obj is not results[1][1].eval_obj
+    assert results[0].eval_results[0].eval == results[1].eval_results[0].eval
+    assert results[0].eval_results[0].eval is not results[1].eval_results[0].eval
+    # when num_samples >1 the first and second indexes will be the same eval but should be
+    # different objects
+    assert results[0].eval_results[0].eval is not results[1].eval_results[1].eval
+    assert results[0].eval_results[num_samples].eval == results[1].eval_results[num_samples].eval
+    assert results[0].eval_results[num_samples].eval is not results[1].eval_results[num_samples].eval  # noqa: E501
 
     # candidate 1 - subtract eval
-    cand_1_results_subtract = results[0][0]
+    cand_1_results_subtract = results[0].eval_results[0]
     assert cand_1_results_subtract.response == response_subtract
     assert cand_1_results_subtract.num_checks == 3
     assert cand_1_results_subtract.num_successful_checks == 2
@@ -430,7 +493,7 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(
     assert cand_1_results_subtract.check_results[-1].metadata['num_code_blocks'] == 1
 
     # candidate 1 - sum eval
-    cand_1_results_sum = results[0][1]
+    cand_1_results_sum = results[0].eval_results[num_samples]
     assert cand_1_results_sum.response == response_sum
     assert cand_1_results_sum.num_checks == 2
     assert cand_1_results_sum.num_successful_checks == 2
@@ -438,7 +501,7 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(
     assert cand_1_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
     # candidate 2 - subtract eval
-    cand_2_results_subtract = results[1][0]
+    cand_2_results_subtract = results[1].eval_results[0]
     assert cand_2_results_subtract.response == response_subtract
     assert cand_1_results_subtract.num_checks == 3
     assert cand_1_results_subtract.num_successful_checks == 2
@@ -446,33 +509,42 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(
     assert cand_2_results_subtract.check_results[-1].metadata['num_code_blocks'] == 1
 
     # candidate 2 - sum eval
-    cand_2_results_sum = results[1][1]
+    cand_2_results_sum = results[1].eval_results[num_samples]
     assert cand_2_results_sum.response == response_sum
     assert cand_2_results_sum.num_checks == 2
     assert cand_2_results_sum.num_successful_checks == 2
     assert cand_2_results_sum.perc_successful_checks == 1
     assert cand_2_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
+    # candidate 3 returns an error so there will not be any successful checks
+    cand_3_results_subtract = results[2].eval_results[0]
+    assert cand_3_results_subtract.response is None
+    assert cand_3_results_subtract.num_checks == 3
+    assert cand_3_results_subtract.num_successful_checks == 0
+    assert cand_3_results_subtract.perc_successful_checks == 0
+    assert cand_3_results_subtract.check_results[-1].metadata['num_code_blocks'] == 0
+    assert cand_3_results_subtract.check_results[-1].metadata['code_blocks'] == []
+
     # the eval results of candidate 1 should be the same as the eval results of candidate 2,
     # except the seconds it took to run the evals and the uuid of the candidate
     cand_1_results_subtract_dict = deepcopy(cand_1_results_subtract.to_dict())
     del cand_1_results_subtract_dict['timestamp']
-    del cand_1_results_subtract_dict['total_time_seconds']
-    del cand_1_results_subtract_dict['candidate_obj']['metadata']['uuid']
+    del cand_1_results_subtract_dict['candidate']['metadata']['uuid']
+    del cand_1_results_subtract_dict['metadata']['response_timestamp']
     cand_2_results_subtract_dict = deepcopy(cand_2_results_subtract.to_dict())
     del cand_2_results_subtract_dict['timestamp']
-    del cand_2_results_subtract_dict['total_time_seconds']
-    del cand_2_results_subtract_dict['candidate_obj']['metadata']['uuid']
+    del cand_2_results_subtract_dict['candidate']['metadata']['uuid']
+    del cand_2_results_subtract_dict['metadata']['response_timestamp']
     assert cand_1_results_subtract_dict == cand_2_results_subtract_dict
 
     cand_1_results_subtract.to_yaml('__temp__.yaml')
-    result_from_yaml = cand_1_results_subtract.from_yaml('__temp__.yaml')
+    result_from_yaml = cand_1_results_subtract.from_file('__temp__.yaml')
     assert result_from_yaml == cand_1_results_subtract
     assert result_from_yaml.to_dict() == cand_1_results_subtract.to_dict()
     os.remove('__temp__.yaml')
 
     cand_1_results_subtract.to_json('__temp__.json')
-    result_from_json = cand_1_results_subtract.from_json('__temp__.json')
+    result_from_json = cand_1_results_subtract.from_file('__temp__.json')
     assert result_from_json == cand_1_results_subtract
     assert result_from_json.to_dict() == cand_1_results_subtract.to_dict()
     os.remove('__temp__.json')
@@ -484,13 +556,53 @@ def test__async__EvalHarness__multiple_candidates__multiple_evals(
     os.remove('__temp__.yaml')
 
     cand_1_results_sum.to_json('__temp__.json')
-    result_from_json = cand_1_results_sum.from_json('__temp__.json')
+    result_from_json = cand_1_results_sum.from_file('__temp__.json')
     assert result_from_json == cand_1_results_sum
     assert result_from_json.to_dict() == cand_1_results_sum.to_dict()
     os.remove('__temp__.json')
 
     assert subtract_config == fake_eval_subtract_two_numbers  # ensure eval_config wasn't modified
     assert sum_config == fake_eval_sum_two_numbers  # ensure eval_config wasn't modified
+
+class MockCheckCausesError(Check):  # noqa: D101
+    def __call__(self, response: object) -> CheckResult:  # noqa
+        raise RuntimeError("This check always fails.")
+
+@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+def test__EvalHarness__Check_raises_error(
+        fake_eval_subtract_two_numbers: dict,
+        generate_mode: str,
+        eval_mode: str,
+        ):
+    eval_config = fake_eval_subtract_two_numbers.copy()
+    check = MockCheckCausesError()
+    eval_obj = Eval(**eval_config)
+    eval_obj.checks = [check, *eval_obj.checks]
+    eval_harness = EvalHarness(
+        generate_mode=generate_mode,
+        eval_mode=eval_mode,
+        evals=eval_obj,
+        candidates=[UnregisteredCandidate(response=eval_obj.input), MockCandidateCausesError()],
+    )
+    results = eval_harness()
+    assert len(results) == 2
+    assert all(len(r.eval_results) == 1 for r in results)
+    assert all(r.num_errors == 1 for r in results)
+
+    assert results[0].candidate == UnregisteredCandidate(response=eval_obj.input)
+    assert results[0].num_errors == 1
+    assert results[0].response_errors == [None]
+    assert len(results[0].eval_errors) == 1
+    assert isinstance(results[0].eval_errors[0], RuntimeError)
+    assert results[0].eval_results == [None]
+
+    assert results[1].candidate == MockCandidateCausesError()
+    assert results[1].num_errors == 1
+    assert len(results[1].response_errors) == 1
+    assert isinstance(results[1].response_errors[0], ValueError)
+    assert len(results[1].eval_errors) == 1
+    assert isinstance(results[1].eval_errors[0], RuntimeError)
 
 @pytest.mark.parametrize("candidate_type", ["AsyncMockCandidate", "MockCandidate"])
 def test__evals__num_samples__greater_than_one__async__via_constructor(
@@ -520,22 +632,16 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
     eval_harness_via_dicts = EvalHarness(
         evals=[subtract_config, sum_config],
         candidates=[candidate_1_dict, candidate_2_dict],
-        num_cpus=1,
-        async_batch_size=1,
     )
     eval_harness_via_objects = EvalHarness(
         evals=[Eval(**subtract_config), Eval(**sum_config)],
         candidates=[Candidate.from_dict(candidate_1_dict), Candidate.from_dict(candidate_2_dict)],
-        num_cpus=1,
-        async_batch_size=1,
     )
     assert eval_harness_via_dicts.evals == eval_harness_via_objects.evals
     assert eval_harness_via_dicts.candidates == eval_harness_via_objects.candidates
 
     num_samples = 3
     eval_harness = EvalHarness(
-        num_cpus=2,
-        async_batch_size=2,
         num_samples=num_samples,
     )
     assert eval_harness.evals != eval_harness_via_dicts.evals
@@ -551,63 +657,65 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
 
     results = eval_harness()
     assert len(results) == num_candidates
-    assert len(results[0]) == num_evals * num_samples
-    assert len(results[1]) == num_evals * num_samples
+    assert all(len(r.eval_results) == num_evals * num_samples for r in results)
+    assert all(r.num_errors == 0 for r in results)
+    assert all(r.response_errors == [None] * num_evals * num_samples for r in results)
+    assert all(r.eval_errors == [None] * num_evals * num_samples for r in results)
     # The underlying candidate objects should have the same values but should be different objects
     # because each candidate object (against a specific eval) is responsible for storing its own
     # history/conversation and the history should be different for each eval.
-    assert results[0][0].candidate_obj == results[0][1].candidate_obj
-    assert results[1][0].candidate_obj == results[1][1].candidate_obj
+    assert results[0].eval_results[0].candidate == results[0].eval_results[1].candidate
+    assert results[1].eval_results[0].candidate == results[1].eval_results[1].candidate
 
     # The first list should contain the results for candidate 1 (subtract eval * 3, sum eval * 3)
     # 3 SAMPLES OF SUBTRACT EVAL
-    assert results[0][0].eval_obj == Eval(**subtract_config)
-    assert results[0][0].candidate_obj == Candidate.from_dict(candidate_1_dict)
-    assert results[0][1].eval_obj == Eval(**subtract_config)
-    assert results[0][1].candidate_obj == Candidate.from_dict(candidate_1_dict)
-    assert results[0][2].eval_obj == Eval(**subtract_config)
-    assert results[0][2].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0].eval_results[0].eval == Eval(**subtract_config)
+    assert results[0].eval_results[0].candidate == Candidate.from_dict(candidate_1_dict)
+    assert results[0].eval_results[1].eval == Eval(**subtract_config)
+    assert results[0].eval_results[1].candidate == Candidate.from_dict(candidate_1_dict)
+    assert results[0].eval_results[2].eval == Eval(**subtract_config)
+    assert results[0].eval_results[2].candidate == Candidate.from_dict(candidate_1_dict)
     # 3 SAMPLES OF SUM EVAL
-    assert results[0][3].eval_obj == Eval(**sum_config)
-    assert results[0][3].candidate_obj == Candidate.from_dict(candidate_1_dict)
-    assert results[0][4].eval_obj == Eval(**sum_config)
-    assert results[0][4].candidate_obj == Candidate.from_dict(candidate_1_dict)
-    assert results[0][5].eval_obj == Eval(**sum_config)
-    assert results[0][5].candidate_obj == Candidate.from_dict(candidate_1_dict)
+    assert results[0].eval_results[3].eval == Eval(**sum_config)
+    assert results[0].eval_results[3].candidate == Candidate.from_dict(candidate_1_dict)
+    assert results[0].eval_results[4].eval == Eval(**sum_config)
+    assert results[0].eval_results[4].candidate == Candidate.from_dict(candidate_1_dict)
+    assert results[0].eval_results[5].eval == Eval(**sum_config)
+    assert results[0].eval_results[5].candidate == Candidate.from_dict(candidate_1_dict)
 
     # The second list should contain the results for candidate 2 (subtract eval, sum eval)
     # 3 SAMPLES OF SUBTRACT EVAL
-    assert results[1][0].eval_obj == Eval(**subtract_config)
-    assert results[1][0].candidate_obj == Candidate.from_dict(candidate_2_dict)
-    assert results[1][1].eval_obj == Eval(**subtract_config)
-    assert results[1][1].candidate_obj == Candidate.from_dict(candidate_2_dict)
-    assert results[1][2].eval_obj == Eval(**subtract_config)
-    assert results[1][2].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1].eval_results[0].eval == Eval(**subtract_config)
+    assert results[1].eval_results[0].candidate == Candidate.from_dict(candidate_2_dict)
+    assert results[1].eval_results[1].eval == Eval(**subtract_config)
+    assert results[1].eval_results[1].candidate == Candidate.from_dict(candidate_2_dict)
+    assert results[1].eval_results[2].eval == Eval(**subtract_config)
+    assert results[1].eval_results[2].candidate == Candidate.from_dict(candidate_2_dict)
     # 3 SAMPLES OF SUM EVAL
-    assert results[1][3].eval_obj == Eval(**sum_config)
-    assert results[1][3].candidate_obj == Candidate.from_dict(candidate_2_dict)
-    assert results[1][4].eval_obj == Eval(**sum_config)
-    assert results[1][4].candidate_obj == Candidate.from_dict(candidate_2_dict)
-    assert results[1][5].eval_obj == Eval(**sum_config)
-    assert results[1][5].candidate_obj == Candidate.from_dict(candidate_2_dict)
+    assert results[1].eval_results[3].eval == Eval(**sum_config)
+    assert results[1].eval_results[3].candidate == Candidate.from_dict(candidate_2_dict)
+    assert results[1].eval_results[4].eval == Eval(**sum_config)
+    assert results[1].eval_results[4].candidate == Candidate.from_dict(candidate_2_dict)
+    assert results[1].eval_results[5].eval == Eval(**sum_config)
+    assert results[1].eval_results[5].candidate == Candidate.from_dict(candidate_2_dict)
 
     # eval objects across candidates should have same values (same eval) but different objects
-    assert results[0][0].eval_obj == results[1][0].eval_obj
-    assert results[0][0].eval_obj is not results[1][0].eval_obj
-    assert results[0][0].eval_obj == results[0][1].eval_obj
-    assert results[0][0].eval_obj is not results[0][1].eval_obj
-    assert results[0][0].eval_obj == results[0][2].eval_obj
-    assert results[0][0].eval_obj is not results[0][2].eval_obj
+    assert results[0].eval_results[0].eval == results[1].eval_results[0].eval
+    assert results[0].eval_results[0].eval is not results[1].eval_results[0].eval
+    assert results[0].eval_results[0].eval == results[0].eval_results[1].eval
+    assert results[0].eval_results[0].eval is not results[0].eval_results[1].eval
+    assert results[0].eval_results[0].eval == results[0].eval_results[2].eval
+    assert results[0].eval_results[0].eval is not results[0].eval_results[2].eval
 
-    assert results[0][3].eval_obj == results[1][3].eval_obj
-    assert results[0][3].eval_obj is not results[1][3].eval_obj
-    assert results[0][3].eval_obj == results[0][4].eval_obj
-    assert results[0][3].eval_obj is not results[0][4].eval_obj
-    assert results[0][3].eval_obj == results[0][5].eval_obj
-    assert results[0][3].eval_obj is not results[0][5].eval_obj
+    assert results[0].eval_results[3].eval == results[1].eval_results[3].eval
+    assert results[0].eval_results[3].eval is not results[1].eval_results[3].eval
+    assert results[0].eval_results[3].eval == results[0].eval_results[4].eval
+    assert results[0].eval_results[3].eval is not results[0].eval_results[4].eval
+    assert results[0].eval_results[3].eval == results[0].eval_results[5].eval
+    assert results[0].eval_results[3].eval is not results[0].eval_results[5].eval
 
     # candidate 1 - subtract eval; all 3 should have same results
-    cand_1_results_subtract = results[0][0]
+    cand_1_results_subtract = results[0].eval_results[0]
     cand_1_results_subtract.to_dict()
     assert cand_1_results_subtract.response == response_subtract
     assert cand_1_results_subtract.num_checks == 3
@@ -615,7 +723,7 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
     assert cand_1_results_subtract.perc_successful_checks == 2 / 3
     assert cand_1_results_subtract.check_results[-1].metadata['num_code_blocks'] == 1
 
-    cand_1_results_subtract = results[0][1]
+    cand_1_results_subtract = results[0].eval_results[1]
     cand_1_results_subtract.to_dict()
     assert cand_1_results_subtract.response == response_subtract
     assert cand_1_results_subtract.num_checks == 3
@@ -624,7 +732,7 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
     assert cand_1_results_subtract.check_results[-1].metadata['num_code_blocks'] == 1
 
 
-    cand_1_results_subtract = results[0][2]
+    cand_1_results_subtract = results[0].eval_results[2]
     cand_1_results_subtract.to_dict()
     assert cand_1_results_subtract.response == response_subtract
     assert cand_1_results_subtract.num_checks == 3
@@ -633,21 +741,21 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
     assert cand_1_results_subtract.check_results[-1].metadata['num_code_blocks'] == 1
 
     # candidate 1 - sum eval; all 3 should have same results
-    cand_1_results_sum = results[0][3]
+    cand_1_results_sum = results[0].eval_results[3]
     assert cand_1_results_sum.response == response_sum
     assert cand_1_results_sum.num_checks == 2
     assert cand_1_results_sum.num_successful_checks == 2
     assert cand_1_results_sum.perc_successful_checks == 1
     assert cand_1_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
-    cand_1_results_sum = results[0][4]
+    cand_1_results_sum = results[0].eval_results[4]
     assert cand_1_results_sum.response == response_sum
     assert cand_1_results_sum.num_checks == 2
     assert cand_1_results_sum.num_successful_checks == 2
     assert cand_1_results_sum.perc_successful_checks == 1
     assert cand_1_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
-    cand_1_results_sum = results[0][5]
+    cand_1_results_sum = results[0].eval_results[5]
     assert cand_1_results_sum.response == response_sum
     assert cand_1_results_sum.num_checks == 2
     assert cand_1_results_sum.num_successful_checks == 2
@@ -655,7 +763,7 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
     assert cand_1_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
     # candidate 2 - subtract eval; all 3 should have same results
-    cand_2_results_subtract = results[1][0]
+    cand_2_results_subtract = results[1].eval_results[0]
     cand_2_results_subtract.to_dict()
     assert cand_2_results_subtract.response == response_subtract
     assert cand_2_results_subtract.num_checks == 3
@@ -663,7 +771,7 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
     assert cand_2_results_subtract.perc_successful_checks == 2 / 3
     assert cand_2_results_subtract.check_results[-1].metadata['num_code_blocks'] == 1
 
-    cand_2_results_subtract = results[1][1]
+    cand_2_results_subtract = results[1].eval_results[1]
     cand_2_results_subtract.to_dict()
     assert cand_2_results_subtract.response == response_subtract
     assert cand_2_results_subtract.num_checks == 3
@@ -671,7 +779,7 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
     assert cand_2_results_subtract.perc_successful_checks == 2 / 3
     assert cand_2_results_subtract.check_results[-1].metadata['num_code_blocks'] == 1
 
-    cand_2_results_subtract = results[1][2]
+    cand_2_results_subtract = results[1].eval_results[2]
     cand_2_results_subtract.to_dict()
     assert cand_2_results_subtract.response == response_subtract
     assert cand_2_results_subtract.num_checks == 3
@@ -680,21 +788,21 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
     assert cand_2_results_subtract.check_results[-1].metadata['num_code_blocks'] == 1
 
     # candidate 2 - sum eval; all 3 should have same results
-    cand_2_results_sum = results[1][3]
+    cand_2_results_sum = results[1].eval_results[3]
     assert cand_2_results_sum.response == response_sum
     assert cand_2_results_sum.num_checks == 2
     assert cand_2_results_sum.num_successful_checks == 2
     assert cand_2_results_sum.perc_successful_checks == 1
     assert cand_2_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
-    cand_2_results_sum = results[1][4]
+    cand_2_results_sum = results[1].eval_results[4]
     assert cand_2_results_sum.response == response_sum
     assert cand_2_results_sum.num_checks == 2
     assert cand_2_results_sum.num_successful_checks == 2
     assert cand_2_results_sum.perc_successful_checks == 1
     assert cand_2_results_sum.check_results[-1].metadata['num_code_blocks'] == 1
 
-    cand_2_results_sum = results[1][5]
+    cand_2_results_sum = results[1].eval_results[5]
     assert cand_2_results_sum.response == response_sum
     assert cand_2_results_sum.num_checks == 2
     assert cand_2_results_sum.num_successful_checks == 2
@@ -704,163 +812,19 @@ def test__evals__num_samples__greater_than_one__async__via_constructor(
 def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values: dict):
     """Test that numeric values are converted to strings when loading an Eval object."""
     eval_config = deepcopy(fake_eval_non_string_values)
-    eval_obj = Eval(**eval_config)
-    assert Eval(**eval_obj.to_dict()) == eval_obj
-    assert eval_obj.metadata['version'] == 1
-    assert eval_obj.metadata['tags'][0] == 1
-    assert isinstance(eval_obj.input, list)
-    assert isinstance(eval_obj.input[0], dict)
-    assert 'role' in eval_obj.input[0]
-    assert 'content' in eval_obj.input[0]
-    assert eval_obj.input[0]['content'] == 6
+    eval_ = Eval(**eval_config)
+    assert Eval(**eval_.to_dict()) == eval_
+    assert eval_.metadata['version'] == 1
+    assert eval_.metadata['tags'][0] == 1
+    assert isinstance(eval_.input, list)
+    assert isinstance(eval_.input[0], dict)
+    assert 'role' in eval_.input[0]
+    assert 'content' in eval_.input[0]
+    assert eval_.input[0]['content'] == 6
 
-class ErrorCallbackHandler:
-    """
-    ErrorCallbackHandler is responsible for managing a shared list of errors (or other data)
-    across multiple processes. It provides a callback function that can be passed to different
-    processes and safely appends items to the shared list.
-
-    This class is designed to work in a multiprocessing environment where the callback function
-    needs to be pickled and passed to different processes. By encapsulating the shared list
-    and the callback function in a class, we ensure that the callback function can be pickled
-    without issues.
-    """
-
-    def __init__(self, shared_list):  # noqa
-        """
-        Initializes the ErrorCallbackHandler with a shared list.
-
-        Args:
-            shared_list (multiprocessing.Manager().list): A list managed by multiprocessing.Manager
-            that can be shared across multiple processes.
-        """
-        self.shared_list = shared_list
-
-    def callback(self, exception: Exception, eval_obj: Eval, candidate_obj: Candidate):  # noqa
-        self.shared_list.append((exception, eval_obj, candidate_obj))
-
-error_callback_global_list = multiprocessing.Manager().list()
-multi_processing_error_handler = ErrorCallbackHandler(error_callback_global_list)
-multi_processing_error_callback = multi_processing_error_handler.callback
-
-@pytest.mark.parametrize('num_cpus', [1, None])
-def test__EvalHarness__candidate_has_error_generating_response_multi_processing(
-        num_cpus: int | None,
-        fake_eval_sum_two_numbers_code_blocks_run: dict,
-    ):
-    """
-    Tests that the EvalHarness captures errors generated by the candidate. If no error_callback
-    is set, the harness should raise the error and stop processing the evals. If an error_callback
-    is set, the harness should call the error_callback and the candidate object and continue
-    processing the remaining evals.
-    """
-    eval_config = deepcopy(fake_eval_sum_two_numbers_code_blocks_run)
-    prompt = eval_config['input'][0]['content']
-    response = '```\ndef sum_two_numbers(a, b): return a+b\n```'
-
-    # Create mock candidates 1 and 2; candidate 1 will raise an error when generating a response
-    # candidate 2 will generate the correct response
-    # Test that both mock candidates give the expected results before running the harness
-    candidate_1 = MockCandidate(
-        metadata={'name': 'candidate_1'},
-        responses={
-            prompt: ValueError('Fake Rate Limit Error for prompt_1'),
-        },
-    )
-    with pytest.raises(ValueError, match='Fake Rate Limit Error for prompt_1'):
-        candidate_1(eval_config['input'])
-
-    candidate_2 = MockCandidate(
-        metadata={'name': 'candidate_2'},
-        responses={
-            prompt: response,
-        },
-    )
-    assert candidate_2(eval_config['input']).response == response
-
-    eval_1 = Eval(**eval_config)
-    eval_2 = Eval(**eval_config)
-    harness = EvalHarness(
-        evals=[eval_1, eval_2],
-        candidates=[candidate_1, candidate_2],
-        num_cpus=num_cpus,
-    )
-    # this should raise an error because the candidate has an error generating a response
-    # and we have not set the error_callaback to capture/ignore errors
-    with pytest.raises(ResponseError) as error:  # noqa: PT012
-        _ = harness()
-        error = error.value  # noqa
-        assert isinstance(error.exception, ValueError)
-        assert error.exception.args[0] == 'Fake Rate Limit Error'
-        assert error.eval_obj == eval_1
-        assert error.candidate_obj == candidate_1
-
-    if num_cpus == 1:
-        # NOTE: not happy with this solution but it works for now
-        test_harness_callback_errors = []
-        def local_error_callback(exception: Exception, eval_obj: Eval, candidate_obj: Candidate) -> None:  # noqa: E501
-            test_harness_callback_errors.append((exception, eval_obj, candidate_obj))
-        harness.error_callback = local_error_callback
-    else:
-        harness.error_callback = multi_processing_error_callback
-
-    results = harness()
-    assert len(results) == 2
-    if num_cpus == 1:
-        errors = test_harness_callback_errors
-    else:
-        errors = list(multi_processing_error_handler.shared_list)
-    # both evals for candidate 1 should have an error
-    assert len(errors) == 2
-    # candidate 1 will raise an error for both evals
-    assert errors[0][0].args[0] == results[0][0].response_metadata['harness_exception'].args[0]
-    assert errors[1][0].args[0] == results[0][1].response_metadata['harness_exception'].args[0]
-
-    if num_cpus != 1:
-        # if num_cpus is not 1, the order of the errors is not guaranteed
-        # sort errors by candidate name so we can compare them
-        errors = sorted(errors, key=lambda x: x[2].metadata['name'])
-    # first item in tuple is the exception, second is the eval, third is the candidate
-    assert errors[0][0].args[0] == 'Fake Rate Limit Error for prompt_1'
-    assert errors[0][0].args[0] == results[0][0].response_metadata['harness_exception'].args[0]
-    assert errors[0][1] == eval_1
-    assert errors[0][2].metadata['name'] == candidate_1.metadata['name']
-    assert errors[1][0].args[0] == 'Fake Rate Limit Error for prompt_1'
-    assert errors[1][0].args[0] == results[0][1].response_metadata['harness_exception'].args[0]
-    assert errors[1][1] == eval_2
-    assert errors[1][2].metadata['name'] == candidate_1.metadata['name']
-
-    # test that the CheckResult objects have the correct values (should be failing)
-    # in the first two evals, the prompt should fail
-    expected_num_checks = len(eval_config['checks'])
-    expected_num_code_tests = len(eval_config['checks'][-1]['code_tests'])
-    for i in range(2):
-        assert not any(x.success for x in results[0][i].check_results)
-        assert results[0][i].num_checks == expected_num_checks
-        assert results[0][i].num_successful_checks == 0
-        # no code block were generated because the first prompt failed
-        assert results[0][i].check_results[-1].metadata['num_code_blocks'] == 0
-        assert results[0][i].check_results[-1].metadata['num_code_blocks_successful'] == 0
-        assert results[0][i].check_results[-1].metadata['num_code_tests'] == expected_num_code_tests  # noqa
-        assert results[0][i].check_results[-1].metadata['num_code_tests_successful'] == 0
-
-    # in the second two evals, the prompt should pass
-    for i in range(2):
-        assert results[1][i].check_results[0].success  # checks for sum_two_numbers
-        assert not results[1][i].check_results[1].success
-        assert not results[1][i].check_results[2].success
-        assert results[1][i].check_results[3].success
-        assert not results[1][i].check_results[4].success
-
-        assert results[1][i].num_checks == expected_num_checks
-        assert results[1][i].num_successful_checks == 2
-        # code block were generated
-        assert results[1][i].check_results[-1].metadata['num_code_blocks'] == 1
-        assert results[1][i].check_results[-1].metadata['num_code_blocks_successful'] == 1
-        assert results[1][i].check_results[-1].metadata['num_code_tests'] == expected_num_code_tests  # noqa: E501
-        assert results[1][i].check_results[-1].metadata['num_code_tests_successful'] > 0
-
-def test__MultiProcessing_openai_candidates(
+@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+def test__openai_candidates__across_all_modes(
+        generate_mode: Mode,
         openai_candidate_template: dict,
         fake_eval_sum_two_numbers: dict,
         fake_eval_subtract_two_numbers: dict,
@@ -877,41 +841,21 @@ def test__MultiProcessing_openai_candidates(
     harness = EvalHarness(
         evals=[eval_1, eval_2],
         candidates=[candidate_1, candidate_2],
-        num_cpus=2,
+        generate_mode=generate_mode,
+        eval_mode=Mode.SYNC,
     )
     results = harness()
     assert len(results) == 2
-    assert len(results[0]) == 2
-    assert len(results[1]) == 2
-    assert results[0][0].response_metadata['total_tokens'] > 0
-    assert results[0][1].response_metadata['total_tokens'] > 0
-    assert results[1][0].response_metadata['total_tokens'] > 0
-    assert results[1][1].response_metadata['total_tokens'] > 0
+    assert all(len(r.eval_results) == 2 for r in results)
+    assert all(r.num_errors == 0 for r in results)
+    assert all(r.response_errors == [None, None] for r in results)
+    assert all(r.eval_errors == [None, None] for r in results)
+    assert results[0].eval_results[0].metadata['response_metadata']['total_tokens'] > 0
+    assert results[0].eval_results[1].metadata['response_metadata']['total_tokens'] > 0
+    assert results[1].eval_results[0].metadata['response_metadata']['total_tokens'] > 0
+    assert results[1].eval_results[1].metadata['response_metadata']['total_tokens'] > 0
 
-class UnregisteredCheckResult(CheckResult):  # noqa
-    pass
-
-class UnregisteredCheck(Check):  # noqa
-    def _call(self, value: str) -> UnregisteredCheckResult:
-        return UnregisteredCheckResult(
-            success=value is not None,
-            value=value,
-            metadata={},
-        )
-
-    def clone(self) -> Check:  # noqa
-        return UnregisteredCheck()
-
-class UnregisteredCandidate(Candidate):  # noqa
-    def __init__(self, response: object) -> None:
-        super().__init__()
-        self.response = response
-
-    def __call__(self, prompt: dict) -> dict:  # noqa
-        # returns dictionary instead of string
-        return CandidateResponse(response={'prompt': prompt, 'response': self.response})
-
-def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_and_response():
+def test__Eval__unregistered_check__non_string_prompt_and_response():
     """
     We should be able to use unregistered Check and Candidate classes with non-string prompts and
     responses. These classes won't be able to be saved/loaded from a dictionary, and so we can't
@@ -922,27 +866,33 @@ def test__Eval__unregistered_check__unregistered_candidate__non_string_prompt_an
         checks=[UnregisteredCheck()],
     )
     assert eval_.to_dict() == {'input': {'prompt': 'Test Prompt'}, 'checks': [{'check_type': 'UnregisteredCheck'}]}  # noqa
-    assert UnregisteredCandidate(42).to_dict() == {'candidate_type': 'UnregisteredCandidate'}
-    result = eval_(UnregisteredCandidate(42))
-    assert result.response == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}
+    expected_response = {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}
+    result = eval_(response=expected_response, candidate=UnregisteredCandidate(42))
+    assert result.response == expected_response
     assert len(result.check_results) == 1
     check_result = result.check_results[0]
-    assert check_result.value == {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}
+    assert check_result.value == expected_response
     assert check_result.success is True
-    assert check_result.to_dict() == {'value': {'prompt': {'prompt': 'Test Prompt'}, 'response': 42}, 'success': True, 'result_type': 'UnregisteredCheckResult'}  # noqa
+    assert check_result.to_dict() == {'value': expected_response, 'success': True, 'result_type': 'UnregisteredCheckResult'}  # noqa
     assert result.num_checks == 1
     assert result.num_successful_checks == 1
     assert result.perc_successful_checks == 1
     # ensure that we can convert the results (which contain unregistered checks/candidates) to
     # a string and dictionary (which call underlying str and to_dict methods on
     # checks/candidates)
-    assert result.to_dict()['eval_obj'] == eval_.to_dict()
-    assert result.to_dict()['candidate_obj'] == UnregisteredCandidate(42).to_dict()
+    assert result.to_dict()['eval'] == eval_.to_dict()
+    assert result.to_dict()['candidate'] == UnregisteredCandidate(42).to_dict()
     assert result.to_dict()['check_results'][0] == check_result.to_dict()
 
-def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_prompt_and_response():  # noqa: E501
+@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_prompt_and_response(
+        generate_mode: Mode,
+        eval_mode: Mode,
+    ):
         harness = EvalHarness(
-            # num_cpus=1, async_batch_size=1,
+            generate_mode=generate_mode,
+            eval_mode=eval_mode,
             evals=[
                 Eval(
                     input={'prompt': 'Test Prompt 1'},  # test with dictionary prompt
@@ -960,91 +910,48 @@ def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_pr
         )
         results = harness()
         assert len(results) == 2  # 2 candidates
-        assert len(results[0]) == 2  # 2 evals
-        assert len(results[1]) == 2  # same 2 evals
-        assert results[0][0].response == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}  # noqa
-        assert results[0][1].response == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 1'}  # noqa
-        assert results[1][0].response == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 2'}  # noqa
-        assert results[1][1].response == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}  # noqa
-        assert len(results[0][0].check_results) == 1
-        assert results[0][0].perc_successful_checks == 1
-        assert results[0][0].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}  # noqa
-        assert results[0][0].check_results[0].success is True
-        assert len(results[0][1].check_results) == 1
-        assert results[0][1].perc_successful_checks == 1
-        assert results[0][1].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 1'}  # noqa
-        assert results[0][1].check_results[0].success is True
-        assert len(results[1][0].check_results) == 1
-        assert results[1][0].perc_successful_checks == 1
-        assert results[1][0].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 2'}  # noqa
-        assert results[1][0].check_results[0].success is True
-        assert len(results[1][1].check_results) == 1
-        assert results[1][1].perc_successful_checks == 1
-        assert results[1][1].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}  # noqa
-        assert results[1][1].check_results[0].success is True
+        assert all(len(r.eval_results) == 2 for r in results)
+        assert all(r.num_errors == 0 for r in results)
+        assert all(r.response_errors == [None, None] for r in results)
+        assert all(r.eval_errors == [None, None] for r in results)
+
+        assert results[0].eval_results[0].response == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}  # noqa
+        assert results[0].eval_results[1].response == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 1'}  # noqa
+        assert results[1].eval_results[0].response == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 2'}  # noqa
+        assert results[1].eval_results[1].response == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}  # noqa
+        assert len(results[0].eval_results[0].check_results) == 1
+        assert results[0].eval_results[0].perc_successful_checks == 1
+        assert results[0].eval_results[0].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 1'}  # noqa
+        assert results[0].eval_results[0].check_results[0].success is True
+        assert len(results[0].eval_results[1].check_results) == 1
+        assert results[0].eval_results[1].perc_successful_checks == 1
+        assert results[0].eval_results[1].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 1'}  # noqa
+        assert results[0].eval_results[1].check_results[0].success is True
+        assert len(results[1].eval_results[0].check_results) == 1
+        assert results[1].eval_results[0].perc_successful_checks == 1
+        assert results[1].eval_results[0].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 1'}, 'response': 'Response 2'}  # noqa
+        assert results[1].eval_results[0].check_results[0].success is True
+        assert len(results[1].eval_results[1].check_results) == 1
+        assert results[1].eval_results[1].perc_successful_checks == 1
+        assert results[1].eval_results[1].check_results[0].value == {'prompt': {'prompt': 'Test Prompt 2'}, 'response': 'Response 2'}  # noqa
+        assert results[1].eval_results[1].check_results[0].success is True
 
         # ensure that we can convert the results (which contain unregistered checks/candidates) to
         # a string and dictionary (which call underlying str and to_dict methods on
         # checks/candidates)
-        assert len(str(results[0][0])) > 10
-        assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
-        assert results[0][0].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-        assert results[0][0].to_dict()['check_results'][0] == results[0][0].check_results[0].to_dict()  # noqa
-        assert results[0][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-        assert results[0][1].to_dict()['candidate_obj'] == harness.candidates[0].to_dict()
-        assert results[0][1].to_dict()['check_results'][0] == results[0][1].check_results[0].to_dict()  # noqa
-        assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
-        assert results[1][0].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-        assert results[1][0].to_dict()['check_results'][0] == results[1][0].check_results[0].to_dict()  # noqa
-        assert results[1][1].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-        assert results[1][1].to_dict()['candidate_obj'] == harness.candidates[1].to_dict()
-        assert results[1][1].to_dict()['check_results'][0] == results[1][1].check_results[0].to_dict()  # noqa
-
-def test__Eval__callable_check__callable_candidate__non_string_prompt_and_response():
-    """
-    We should be able to use callable Checks and Candidates (e.g. functions) with non-string
-    prompts and responses. Lambdas can't be pickled, so we can't use them with EvalHarness (with
-    multi-processing), but we can use them with Evals individually.
-    """
-    eval_ = Eval(
-        input={'prompt': 'Test Prompt'},  # non-string prompt
-        checks=[
-            lambda data: 'Response' in data.response['response'],  # should pass
-            lambda data: 'does not exist' in data.response['response'],  # should fail
-        ],
-    )
-    assert 'input' in eval_.to_dict()
-    assert eval_.to_dict()['input'] == {'prompt': 'Test Prompt'}
-    assert len(eval_.to_dict()['checks']) == 2
-
-    # return dictionary instead of string
-    result = eval_(lambda prompt: CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response'}))  # noqa
-    assert result.response == {'prompt': 'Test Prompt', 'response': 'Test Prompt & Response'}
-    assert len(result.check_results) == 2
-    check_result_1 = result.check_results[0]
-    assert check_result_1.value is True
-    assert check_result_1.success is True
-    assert check_result_1.to_dict() == {'value': True, 'success': True, 'result_type': 'PASS_FAIL'}
-    check_result_2 = result.check_results[1]
-    assert check_result_2.value is False
-    assert check_result_2.success is False
-    assert check_result_2.to_dict() == {'value': False, 'success': False, 'result_type': 'PASS_FAIL'}  # noqa
-
-    assert len(result.check_results) == 2
-    assert result.perc_successful_checks == 0.5
-    assert result.check_results[0].value == check_result_1.value
-    assert result.check_results[0].success == check_result_1.success
-    assert result.check_results[1].value == check_result_2.value
-    assert result.check_results[1].success == check_result_2.success
-
-    assert result.num_checks == 2
-    assert result.num_successful_checks == 1
-    assert result.perc_successful_checks == 0.5
-
-    assert result.to_dict()['eval_obj'] == eval_.to_dict()
-    assert result.to_dict()['candidate_obj']
-    assert result.to_dict()['check_results'][0] == check_result_1.to_dict()
-    assert result.to_dict()['check_results'][1] == check_result_2.to_dict()
+        assert len(str(results[0].eval_results[0])) > 10
+        assert results[0].eval_results[0].to_dict()['eval'] == harness.evals[0].to_dict()
+        assert results[0].eval_results[0].to_dict()['candidate'] == harness.candidates[0].to_dict()
+        assert results[0].eval_results[0].to_dict()['check_results'][0] == results[0].eval_results[0].check_results[0].to_dict()  # noqa
+        assert results[0].eval_results[1].to_dict()['eval'] == harness.evals[1].to_dict()
+        assert results[0].eval_results[1].to_dict()['candidate'] == harness.candidates[0].to_dict()
+        assert results[0].eval_results[1].to_dict()['check_results'][0] == results[0].eval_results[1].check_results[0].to_dict()  # noqa
+        assert results[1].eval_results[0].to_dict()['eval'] == harness.evals[0].to_dict()
+        assert results[1].eval_results[0].to_dict()['candidate'] == harness.candidates[1].to_dict()
+        assert results[1].eval_results[0].to_dict()['check_results'][0] == results[1].eval_results[0].check_results[0].to_dict()  # noqa
+        assert results[1].eval_results[1].to_dict()['eval'] == harness.evals[1].to_dict()
+        assert results[1].eval_results[1].to_dict()['candidate'] == harness.candidates[1].to_dict()
+        assert results[1].eval_results[1].to_dict()['check_results'][0] == results[1].eval_results[1].check_results[0].to_dict()  # noqa
 
 def test__EvalResult__loading_unregistered_candidate_from_dict():
     """
@@ -1071,15 +978,20 @@ def test__EvalResult__loading_unregistered_candidate_from_dict():
         metadata={'foo': 'bar'},
     )
     candidate = MyUnregisteredCandidate('barfoo')
-    result = eval_(candidate)
+    candidate_response = candidate(eval_.input)
+    result = eval_(
+        response=candidate_response.response,
+        candidate=candidate,
+        metadata=candidate_response.metadata,
+    )
     result_dict = result.to_dict()
-    assert result_dict['eval_obj'] == eval_.to_dict()
-    assert result_dict['candidate_obj'] == candidate.to_dict()
-    assert result_dict['candidate_obj']['metadata'] == {'some_metadata': 'some_value'}
-    assert 'candidate_type' in result_dict['candidate_obj']
-    assert result_dict['candidate_obj']['candidate_type'] == 'MyUnregisteredCandidate'
-    assert result_dict['response'] == {'input': 'This is the input', 'response': 'This is the response foobar'}  # noqa: E501
-    assert result_dict['response_metadata'] == {'custom_state': 'barfoo'}
+    assert result_dict['eval'] == eval_.to_dict()
+    assert result_dict['candidate'] == candidate.to_dict()
+    assert result_dict['candidate']['metadata'] == {'some_metadata': 'some_value'}
+    assert 'candidate_type' in result_dict['candidate']
+    assert result_dict['candidate']['candidate_type'] == 'MyUnregisteredCandidate'
+    assert result_dict['response'] == candidate_response.response
+    assert result_dict['metadata'] == candidate_response.metadata
 
     assert len(result_dict['check_results']) == 1
     assert result_dict['check_results'][0]['result_type'] == 'PASS_FAIL'
@@ -1089,93 +1001,113 @@ def test__EvalResult__loading_unregistered_candidate_from_dict():
     result_loaded = EvalResult(**result_dict)
     assert result_loaded.to_dict() == result_dict
 
-@pytest.mark.parametrize('use_async', [True, False])
-def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(use_async: bool):  # noqa: E501
-    if use_async:
-        async def async_candidate_1(prompt):  # noqa
-            return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response1'})  # noqa
+async def mock_async_candidate_1(prompt):  # noqa
+    return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response1'})
 
-        async def async_candidate_2(prompt):  # noqa
-            return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response2'})  # noqa
+async def mock_async_candidate_2(prompt):  # noqa
+    return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response2'})
 
-        candidates = [async_candidate_1, async_candidate_2]
+def mock_sync_candidate_1(prompt):  # noqa
+    return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response1'})
+
+def mock_sync_candidate_2(prompt):  # noqa
+    return CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response2'})
+
+def mock_check_1(data):  # noqa
+    return 'Response1' in data.response['response']
+
+def mock_check_2(data):  # noqa
+    return 'Response2' in data.response['response']
+
+@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('use_async_candidate', [True, False])
+def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(
+        generate_mode: Mode,
+        eval_mode: Mode,
+        use_async_candidate: bool,
+    ):
+    if use_async_candidate:
+        candidates = [mock_async_candidate_1, mock_async_candidate_2]
     else:
-        candidates = [
-            lambda prompt: CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response1'}),  # noqa
-            lambda prompt: CandidateResponse(response=prompt | {'response': prompt['prompt'] + ' & Response2'}),  # noqa
-        ]
+        candidates = [mock_sync_candidate_1, mock_sync_candidate_2]
 
+    num_samples = 100
     harness = EvalHarness(
-        num_cpus=1, async_batch_size=1,
+        generate_mode=generate_mode,
+        eval_mode=eval_mode,
+        num_samples=num_samples,
         evals=[
             Eval(
                 input={'prompt': 'Test Prompt 1'},  # non-string prompt
-                checks=[lambda data: 'Response1' in data.response['response']],
+                checks=[mock_check_1],
             ),
             Eval(
                 input={'prompt': 'Test Prompt 2'},  # non-string prompt
-                checks=[lambda data: 'Response2' in data.response['response']],
+                checks=[mock_check_2],
             ),
         ],
         candidates = candidates,
     )
-    num_samples = 100
     assert len(harness.evals) == 2
     assert len(harness.candidates) == 2
-    results = harness(num_samples=num_samples)
+    results = harness()
     assert len(results) == 2  # 2 candidates
-    assert len(results[0]) == 2 * num_samples  # 2 evals
-    assert len(results[1]) == 2 * num_samples # same 2 evals
-    assert results[0][0].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}  # noqa
-    assert results[0][num_samples-1].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}  # noqa
-    assert results[0][num_samples].response == {'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}  # noqa
-    assert results[1][0].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response2'}  # noqa
-    assert results[1][num_samples].response == {'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}  # noqa
+    assert all(len(r.eval_results) == 2 * num_samples for r in results)
+    assert all(r.num_errors == 0 for r in results)
+    assert all(r.response_errors == [None] * 2 * num_samples for r in results)
+    assert all(r.eval_errors == [None] * 2 * num_samples for r in results)
+
+    assert results[0].eval_results[0].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}  # noqa
+    assert results[0].eval_results[num_samples-1].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response1'}  # noqa
+    assert results[0].eval_results[num_samples].response == {'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response1'}  # noqa
+    assert results[1].eval_results[0].response == {'prompt': 'Test Prompt 1', 'response': 'Test Prompt 1 & Response2'}  # noqa
+    assert results[1].eval_results[num_samples].response == {'prompt': 'Test Prompt 2', 'response': 'Test Prompt 2 & Response2'}  # noqa
     # eval 1 candidate 1
-    assert len(results[0][0].check_results) == 1
-    assert results[0][0].num_checks == 1
-    assert results[0][0].num_successful_checks == 1
-    assert results[0][0].perc_successful_checks == 1
-    assert results[0][0].check_results[0].value is True
-    assert results[0][0].check_results[0].success is True
+    assert len(results[0].eval_results[0].check_results) == 1
+    assert results[0].eval_results[0].num_checks == 1
+    assert results[0].eval_results[0].num_successful_checks == 1
+    assert results[0].eval_results[0].perc_successful_checks == 1
+    assert results[0].eval_results[0].check_results[0].value is True
+    assert results[0].eval_results[0].check_results[0].success is True
     # eval 2 candidate 1
-    assert len(results[0][num_samples].check_results) == 1
-    assert results[0][num_samples].num_checks == 1
-    assert results[0][num_samples].num_successful_checks == 0
-    assert results[0][num_samples].perc_successful_checks == 0
-    assert results[0][num_samples].check_results[0].value is False
-    assert results[0][num_samples].check_results[0].success is False
+    assert len(results[0].eval_results[num_samples].check_results) == 1
+    assert results[0].eval_results[num_samples].num_checks == 1
+    assert results[0].eval_results[num_samples].num_successful_checks == 0
+    assert results[0].eval_results[num_samples].perc_successful_checks == 0
+    assert results[0].eval_results[num_samples].check_results[0].value is False
+    assert results[0].eval_results[num_samples].check_results[0].success is False
     # eval 1 candidate 2
-    assert len(results[1][0].check_results) == 1
-    assert results[1][0].num_checks == 1
-    assert results[1][0].num_successful_checks == 0
-    assert results[1][0].perc_successful_checks == 0
-    assert results[1][0].check_results[0].value is False
-    assert results[1][0].check_results[0].success is False
+    assert len(results[1].eval_results[0].check_results) == 1
+    assert results[1].eval_results[0].num_checks == 1
+    assert results[1].eval_results[0].num_successful_checks == 0
+    assert results[1].eval_results[0].perc_successful_checks == 0
+    assert results[1].eval_results[0].check_results[0].value is False
+    assert results[1].eval_results[0].check_results[0].success is False
     # eval 2 candidate 2
-    assert len(results[1][1].check_results) == 1
-    assert results[1][num_samples].num_checks == 1
-    assert results[1][num_samples].num_successful_checks == 1
-    assert results[1][num_samples].perc_successful_checks == 1
-    assert results[1][num_samples].check_results[0].value is True
-    assert results[1][num_samples].check_results[0].success is True
+    assert len(results[1].eval_results[1].check_results) == 1
+    assert results[1].eval_results[num_samples].num_checks == 1
+    assert results[1].eval_results[num_samples].num_successful_checks == 1
+    assert results[1].eval_results[num_samples].perc_successful_checks == 1
+    assert results[1].eval_results[num_samples].check_results[0].value is True
+    assert results[1].eval_results[num_samples].check_results[0].success is True
 
     # ensure that we can convert the results (which contain unregistered checks/candidates) to
     # a string and dictionary (which call underlying str and to_dict methods on
     # checks/candidates)
-    assert len(str(results[0][0])) > 10
-    assert results[0][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
-    assert results[0][0].to_dict()['candidate_obj']
-    assert results[0][0].to_dict()['check_results'][0] == results[0][0].check_results[0].to_dict()
-    assert results[0][num_samples].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-    assert results[0][num_samples].to_dict()['candidate_obj']
-    assert results[0][num_samples].to_dict()['check_results'][0] == results[0][num_samples].check_results[0].to_dict()  # noqa: E501
-    assert results[1][0].to_dict()['eval_obj'] == harness.evals[0].to_dict()
-    assert results[1][0].to_dict()['candidate_obj']
-    assert results[1][0].to_dict()['check_results'][0] == results[1][0].check_results[0].to_dict()
-    assert results[1][num_samples].to_dict()['eval_obj'] == harness.evals[1].to_dict()
-    assert results[1][num_samples].to_dict()['candidate_obj']
-    assert results[1][num_samples].to_dict()['check_results'][0] == results[1][num_samples].check_results[0].to_dict()  # noqa: E501
+    assert len(str(results[0].eval_results[0])) > 10
+    assert results[0].eval_results[0].to_dict()['eval'] == harness.evals[0].to_dict()
+    assert results[0].eval_results[0].to_dict()['candidate']
+    assert results[0].eval_results[0].to_dict()['check_results'][0] == results[0].eval_results[0].check_results[0].to_dict()  # noqa: E501
+    assert results[0].eval_results[num_samples].to_dict()['eval'] == harness.evals[1].to_dict()
+    assert results[0].eval_results[num_samples].to_dict()['candidate']
+    assert results[0].eval_results[num_samples].to_dict()['check_results'][0] == results[0].eval_results[num_samples].check_results[0].to_dict()  # noqa: E501
+    assert results[1].eval_results[0].to_dict()['eval'] == harness.evals[0].to_dict()
+    assert results[1].eval_results[0].to_dict()['candidate']
+    assert results[1].eval_results[0].to_dict()['check_results'][0] == results[1].eval_results[0].check_results[0].to_dict()  # noqa: E501
+    assert results[1].eval_results[num_samples].to_dict()['eval'] == harness.evals[1].to_dict()
+    assert results[1].eval_results[num_samples].to_dict()['candidate']
+    assert results[1].eval_results[num_samples].to_dict()['check_results'][0] == results[1].eval_results[num_samples].check_results[0].to_dict()  # noqa: E501
 
 def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template: dict):
     """Integration test that tests Evaling a real OpenAITool API call against the ToolsCheck."""
@@ -1189,7 +1121,8 @@ def test__OpenAIToolsCandidate__ToolsCallCheck(openai_tools_candidate_template: 
             ),
         ],
     )
-    result = eval_(candidate)
+    candidate_response = candidate(eval_.input)
+    result = eval_(response=candidate_response.response, candidate=candidate)
     tool_response = result.response[0]
     assert tool_response['name'] == 'get_current_weather'
     assert 'location' in tool_response['arguments']

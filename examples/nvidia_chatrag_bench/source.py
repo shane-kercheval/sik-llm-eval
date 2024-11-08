@@ -263,12 +263,12 @@ def build_evals(sample_size_per_dataset: int) -> None:
         # The MatchCheck needs different information than the F1Score, so the candidate
         # or agent needs to return both the relevant document index and the generated response.
         # And the checks need to know where to find both.
-        match_value_extractor = "response['relevant_document_id']"
+        match_data_path = "response['relevant_document_id']"
         # the scores need both the `actual_response` and the `ideal_response`; Those are the names
         # of the parameters of the `call` method of these classes, so those names need to be the
-        # keys in the value_extractor dictionary. The dictionary will be passed to the object
+        # keys in the data_path dictionary. The dictionary will be passed to the object
         # using keyword arguments.
-        score_value_extractor = {
+        score_data_path = {
             'actual_response': "response['generated_response']",
             'ideal_response': 'ideal_response',
         }
@@ -277,11 +277,11 @@ def build_evals(sample_size_per_dataset: int) -> None:
             # we only want to do the match check for the evals that have a ground truth doc id
             checks += [
                 MatchCheck(
-                    value_extractor=match_value_extractor,
+                    data_path=match_data_path,
                     value=str(row['ground_truth_doc_id']),
                 ),
             ]
-        checks += [MaxF1Score(value_extractor=score_value_extractor, return_precision_recall=True)]
+        checks += [MaxF1Score(data_path=score_data_path, return_precision_recall=True)]
         unique_id = str(uuid.uuid4())
         eval_ = Eval(
             metadata={

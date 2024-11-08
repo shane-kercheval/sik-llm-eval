@@ -14,12 +14,11 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum, auto
-from functools import singledispatch
 from inspect import getsource
 import re
 from textwrap import dedent
 from typing import Any, Callable, ClassVar, Type
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from llm_eval.candidates import Candidate
 from llm_eval.internal_utilities import (
     EnumMixin,
@@ -176,70 +175,38 @@ class ScoreResult(CheckResult):
 
 
 @dataclass
-class ResponseData:
+class ResponseModel:
     """
     Stores the data associated with a request/response. This object is created by the
     Eval/EvalHarness and passed to the Check objects' __call__ function to evaluate the response,
-    potentially using additional information like input, response_metadata, or ideal_response.
-
-    Candidates return a CandidateResponse object, which contains `response` and `metadata` fields,
-    which are passed to ResponseData's `response` and `response_metadata` fields, respectively.
-    ResponseData is then passed to the Check objects' __call__ function to evaluate the response.
-    The reason we use ResponseData instead of passing the CandidateResponse object directly is to
-    allow the Check objects to access additional information like input or ideal_response. Some
-    checks (e.g. checks via LLMs) may use the input or ideal_response to evaluate the response.
+    potentially using additional information like input, metadata, or ideal_response.
     """
 
-    input: str | Any | None = None
-    response: Any | None = None
-    response_metadata: dict[str, Any] | None = None
-    ideal_response: str | Any | None = None
+    input: object | None = None
+    response: object | None = None
+    ideal_response: object | None = None
+    metadata: dict[str, object] | None = None
 
-@singledispatch
-def extract_value_from_path(value_path: object, data: ResponseData) -> tuple[Any, str | None]:  # noqa
-    """Extracts the value from the ResponseData object based on the value_path."""
-    raise ValueError(f"Unsupported type {type(value_path)}")
+    def extract_values(self, path: str | list | dict | None) -> object:
+        """
+        Extracts the values from the ResponseData object based on the path. If the path
+        is a string, then a single value is extracted from the ResponseData object according to the
+        specified path.
 
-@extract_value_from_path.register(str)
-def _(value_path: str, data: ResponseData) -> tuple[Any, str | None]:
-    """
-    Extracts the value from the ResponseData object based on the value_path, which is a string
-    specifying the path to the value in the ResponseData object.
-    """
-    check_value = None
-    error = None
-    try:
+        If the path is a dictionary, the dictionary keys should correspond to the names of the
+        keys of the dictionary returned, and the values should be the paths to the values in the
+        ResponseData object.
+
+        If the path is a list, the list should contain the paths to the values in the ResponseData
+        object. A list of the extracted values will be returned.
+        """
+        if not path:
+            return self
         # the most common case is 'response'; it's faster to simply check for this value
         # then call get_value_from_path every time
-        if value_path == 'response':
-            check_value = data.response
-        elif value_path == '':
-            check_value = data
-        else:
-            check_value = get_value_from_path(value_path, data)
-    except Exception as e:
-        # if there is an error extracting the value from the ResponseData object based on the
-        # value_extractor, the value passed to the check will be None
-        # we still need to do the check, but the check will fail
-        error = str(e)
-    return check_value, error
-
-@extract_value_from_path.register(dict)
-def _(value_path: dict[str, str], data: ResponseData) -> tuple[dict, str | None]:
-    """
-    Extracts the value from the ResponseData object based on the value_path, which is a dictionary
-    specifying the paths to the values in the ResponseData object. The values extracted from the
-    ResponseData object will be passed to the Check subclass `_call` method as keyword arguments.
-    """
-    check_values = {}
-    error = None
-    for key, path in value_path.items():
-        try:
-            check_values[key] = get_value_from_path(path, data)
-        except Exception as e:
-            check_values[key] = None
-            error = str(e)  # NOTE: only stores the last error
-    return check_values, error
+        if path == 'response':
+            return self.response
+        return get_value_from_path(path, self)
 
 
 class Check(BaseModel, ABC):
@@ -257,21 +224,22 @@ class Check(BaseModel, ABC):
     """
 
     registry: ClassVar[Registry] = Registry()
-    value_extractor: str | dict = Field(
+    data_path: str | dict = Field(
         default=None,
         description="""
-        A string or dictionary specifying how to extract the value from ResponseData.
+        `data_path` is a string, list, or dictionary specifying where to extract the value from
+        ResponseModel.
 
-        If the value is a string, then a single value is extracted from the ResponseData object
+        If the value is a string, then a single value is extracted from the ResponseModel object
         according to the specified path. The path is a string that specifies the attribute access,
-        dictionary key access, or list index access to the value in the ResponseData object.
+        dictionary key access, or list index access to the value in the ResponseModel object.
 
-        The default value_extractor is 'response', which extracts the `response` attribute from
-        the ResponseData object.
+        The default data_path is 'response', which extracts the `response` attribute from
+        the ResponseModel object.
 
-        If the value_extractor is set to an empty string, the entire ResponseData object will be
+        If the data_path is set to an empty string, the entire ResponseModel object will be
         passed to the check. This is useful if the check needs to access multiple fields in the
-        ResponseData object.
+        ResponseModel object.
 
         Syntax:
         1. Attribute access: "attribute_name"
@@ -288,16 +256,20 @@ class Check(BaseModel, ABC):
         of list indexing. This means that dictionaries with integer keys will work as expected,
         but dictionaries with string keys that are digits will not index correctly.
 
-        If the value_extractor is a dictionary, the dictionary dictionary keys should correspond to
+        If the path is a list, then each item should be the path to a value in the data object, and
+        a list of values is returned.
+
+        If the data_path is a dictionary, the dictionary dictionary keys should correspond to
         the names of the parameters in the Check subclass `_call` method. The values in the
-        dictionary should be the paths to the values in the ResponseData object (in the same format
-        as the string value_extractor, described above). The values extracted from the ResponseData
-        object will be passed to the Check subclass `_call` method as keyword arguments.
+        dictionary should be the paths to the values in the ResponseModel object (in the same
+        format as the string data_path, described above). The values extracted from the
+        ResponseModel object will be passed to the Check subclass `_call` method as keyword
+        arguments.
 
         Example:
 
         ```
-        value_extractor = {
+        data_path = {
             'response': 'response['content']',
             'metadata': 'response.metadata',
         }
@@ -313,48 +285,63 @@ class Check(BaseModel, ABC):
 
     def __init__(self, **data: dict):
         super().__init__(**data)
-        if self.value_extractor is None:
-            self.value_extractor = self.default_value_extractor
-            assert self.value_extractor is not None, \
-                "value_extractor must be set by `default_value_extractor` property to non-None value"  # noqa
+        if self.data_path is None:
+            self.data_path = self.default_data_path
 
     @property
-    def default_value_extractor(self) -> str | dict:
+    def default_data_path(self) -> str | dict:
         """
         Returns the default value extractor for the check. The most common value is 'response',
-        which returns the `response` attribute from the ResponseData object. If the check needs to
-        access multiple fields in the ResponseData object, the value_extractor should be set to an
+        which returns the `response` attribute from the ResponseModel object. If the check needs to
+        access multiple fields in the ResponseData object, the data_path should be set to an
         empty string and the entire ResponseData object will be passed to the check.
         """
         return 'response'
 
     @abstractmethod
-    def _call(self, value: Any | None) -> CheckResult:  # noqa: ANN401
+    def __call__(self, **kwargs: dict[str, Any]) -> CheckResult:
         """
         Invokes the check on the value extracted from the ResponseData object, based on the
-        `value_extractor`.
+        `data_path`.
 
         NOTE: if there is an error extracting the value from the ResponseData object based on the
-        `value_extractor` (within __call__, which calls this method), the value passed to the check
+        `data_path` (within __call__, which calls this method), the value passed to the check
         will be `None` and the Check subclass should handle accordingly and return a CheckResult
         with the appropriate metadata.
         """
 
-    def __call__(self, data: ResponseData) -> CheckResult:
-        """Invokes the check on the ResponseData object returned."""
-        check_value, error = extract_value_from_path(self.value_extractor, data)
-        if isinstance(self.value_extractor, dict):
-            # if the value_extractor is a dictionary, the keys correspond to the names of the
-            # parameters in the Check subclass `_call` method and the values are the paths to the
-            # values in the ResponseData object; so we will pass as keyword arguments
-            result = self._call(**check_value)
-        else:
-            result = self._call(check_value)
-        if error or (self.value_extractor != self.default_value_extractor):
-            result.metadata['value_extractor'] = self.value_extractor
-            result.metadata['value_extracted'] = check_value
+    def run_on_model(self, data: ResponseModel) -> CheckResult:
+        """
+        Invokes the check on the ResponseData object returned. Rather than running the check
+        directly by calling the object and passing in the value(s) to check, this method extracts
+        the value(s) from the ResponseData object based on the `data_path` and then calls the
+        check with the extracted value(s).
+
+        This is useful for running a large number of checks where the entity responsible for
+        running the checks (e.g. in TestHarness) isn't aware of the the required parameters
+        for each check. The entity simply passes the ResponseData object to the check, and the
+        check extracts the required values from the ResponseData object and runs the check.
+        """
+        check_data = None
+        error = None
+        try:
+            check_data = data.extract_values(self.data_path)
+        except Exception as e:
+            # if there is an error extracting the value from the ResponseModel object based on the
+            # data_path, the value passed to the check will be None
+            # we still need to do the check, but the check will fail
+            error = str(e)
+            if isinstance(self.data_path, dict):
+                check_data = {key: None for key in self.data_path}
+        # if the data_path is a dictionary, the keys correspond to the names of the
+        # parameters in the Check subclass `_call` method and the values are the paths to the
+        # values in the ResponseData object; so we will pass as keyword arguments
+        result = self(**check_data) if isinstance(self.data_path, dict) else self(check_data)
+        if error or (self.data_path != self.default_data_path):
+            result.metadata['data_path'] = self.data_path
+            result.metadata['value_extracted'] = check_data
         if error:
-            result.metadata['value_extractor_error'] = error
+            result.metadata['data_path_error'] = error
         return result
 
     @classmethod
@@ -380,11 +367,12 @@ class Check(BaseModel, ABC):
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Check."""
-        value = self.model_dump(exclude_defaults=True, exclude_none=True)
+        value = {}
         if self.check_type:
             value['check_type'] = self.check_type
-        if value['value_extractor'] == self.default_value_extractor:
-            del value['value_extractor']
+        value.update(self.model_dump(exclude_defaults=True, exclude_none=True))
+        if value['data_path'] == self.default_data_path:
+            del value['data_path']
         return value
 
     @property
@@ -399,27 +387,8 @@ class Check(BaseModel, ABC):
         return f"{self.__class__.__name__}(metadata={self.metadata})"
 
 
-class CloneableCheck(Check):
-    """
-    CloneableCheck objects are used with the EvalHarness to clone checks/evals across multiple
-    Candidates.
-    """
-
-    @abstractmethod
-    def clone(self) -> 'Check':
-        """Returns a deep copy of the check."""
-
-
-class SerializableCheck(CloneableCheck):
-    """A Check that can be serialized/deserialized to/from a dictionary."""
-
-    def clone(self) -> 'SerializableCheck':
-        """Returns a deep copy of the check."""
-        return Check.from_dict(deepcopy(self.to_dict()))
-
-
 @Check.register(CheckType.MATCH)
-class MatchCheck(SerializableCheck):
+class MatchCheck(Check):
     """Checks if the LLM response exactly matches the provided value."""
 
     value: str = Field(description="The value to match the LLM response against.")
@@ -428,7 +397,7 @@ class MatchCheck(SerializableCheck):
         description="If True, the check will pass if the response does not match the value.",
     )
 
-    def _call(self, value: str | None) -> PassFailResult:
+    def __call__(self, value: str | None) -> PassFailResult:
         """Executes the check on the response and returns a PassFailResult."""
         if value is None:
             result = False
@@ -450,7 +419,7 @@ class MatchCheck(SerializableCheck):
 
 
 @Check.register(CheckType.CONTAINS)
-class ContainsCheck(SerializableCheck):
+class ContainsCheck(Check):
     """
     Checks if the LLM response contains the provided value (i.e. the value is found anywhere in the
     response).
@@ -462,7 +431,7 @@ class ContainsCheck(SerializableCheck):
         description="If True, the check will pass if the response does not contain the value.",
     )
 
-    def _call(self, value: str | None) -> PassFailResult:
+    def __call__(self, value: str | None) -> PassFailResult:
         """Executes the check on the response and returns a PassFailResult."""
         if value is None:
             result = False
@@ -484,7 +453,7 @@ class ContainsCheck(SerializableCheck):
 
 
 @Check.register(CheckType.REGEX)
-class RegexCheck(SerializableCheck):
+class RegexCheck(Check):
     """Checks if the a given regular expression matches the LLM response."""
 
     pattern: str = Field(description="The regular expression to match the LLM response against.")
@@ -493,7 +462,7 @@ class RegexCheck(SerializableCheck):
         description="If True, the check will pass if the response does not match the regular expression.",  # noqa
     )
 
-    def _call(self, value: str | None) -> PassFailResult:
+    def __call__(self, value: str | None) -> PassFailResult:
         """Executes the check on the response and returns a PassFailResult."""
         if value is None:
             result = False
@@ -516,7 +485,7 @@ class RegexCheck(SerializableCheck):
 
 
 @Check.register(CheckType.LAMBDA)
-class LambdaCheck(SerializableCheck):
+class LambdaCheck(Check):
     """
     Check that runs a Python lambda function against the response. The lambda function is passed
     in as a string so that the class is serializable. The lambda function should take a single
@@ -525,7 +494,7 @@ class LambdaCheck(SerializableCheck):
 
     lambda_str: str = Field(description="The lambda function to run against the response.")
 
-    def _call(self, value: str | None) -> PassFailResult:
+    def __call__(self, value: str | None) -> PassFailResult:
         """Executes the check on the response and returns a PassFailResult."""
         try:
             result = eval(self.lambda_str)(value)
@@ -551,7 +520,7 @@ class LambdaCheck(SerializableCheck):
 
 
 @Check.register(CheckType.PYTHON_CODE_BLOCKS_PRESENT)
-class PythonCodeBlocksPresent(SerializableCheck):
+class PythonCodeBlocksPresent(Check):
     """
     Checks that the response contains code blocks. The code blocks do not necessary need to run
     successfully (this check does not run the code blocks), but they must be present.
@@ -566,7 +535,7 @@ class PythonCodeBlocksPresent(SerializableCheck):
         description="The minimum number of code blocks that must be present in the response.",
     )
 
-    def _call(self, value: str) -> PassFailResult:
+    def __call__(self, value: str) -> PassFailResult:
         """
         Returns a PassFailResult based on the number of code blocks present.
 
@@ -596,7 +565,7 @@ class PythonCodeBlocksPresent(SerializableCheck):
 
 
 @Check.register(CheckType.PYTHON_CODE_BLOCK_TESTS)
-class PythonCodeBlockTests(SerializableCheck):
+class PythonCodeBlockTests(Check):
     """
     This Check tests that the code blocks contained within the response run successfully, and
     allows users to define custom tests that can be used to test the code blocks and the
@@ -710,19 +679,17 @@ class PythonCodeBlockTests(SerializableCheck):
         """,
     )
 
-    @model_validator(mode='before')
-    def strip_code_tests(cls, values: dict) -> dict:  # noqa: N805
+    @staticmethod
+    def _strip_code_tests(code_tests: list[str | Callable] | None) -> list[str] | None:
         """Strip whitespace from code_tests."""
-        code_tests = values.get('code_tests')
-        if code_tests is not None:
-            stripped_code_tests = [
-                dedent(test.strip()) if isinstance(test, str) else test
-                for test in code_tests
-            ]
-            values['code_tests'] = stripped_code_tests
-        return values
+        if code_tests is None:
+            return None
+        return [
+            dedent(test.strip()) if isinstance(test, str) else test
+            for test in code_tests
+        ]
 
-    def _call(self, value: str) -> ScoreResult:  # noqa: PLR0915
+    def __call__(self, value: str) -> ScoreResult:  # noqa: PLR0915
         """
         Executes the check on the response and returns a ScoreResult containing the success rate of
         the code blocks and function checks (if `functions` is used), along with additional
@@ -736,7 +703,7 @@ class PythonCodeBlockTests(SerializableCheck):
         code_block_errors = []
         test_results = []
         test_errors = []
-        code_tests = self.code_tests or []
+        code_tests = self._strip_code_tests(self.code_tests) if self.code_tests else []
 
         num_code_blocks = len(code_blocks)
         num_code_tests = len(code_tests)
@@ -864,7 +831,7 @@ class PythonCodeBlockTests(SerializableCheck):
 
 
 @Check.register(CheckType.LLM)
-class LLMCheck(SerializableCheck):
+class LLMCheck(Check):
     """
     LLMCheck is a generic check that uses an LLM to evaluate the response of a separate/candidate
     LLM. The user can define the prompt that will be used by the evaluator to evaluate the
@@ -882,11 +849,11 @@ class LLMCheck(SerializableCheck):
     model_config = ConfigDict(arbitrary_types_allowed = True)
 
     @property
-    def default_value_extractor(self) -> str:
+    def default_data_path(self) -> str:
         """Default value extractor for the check."""
-        return ''  # return entire ResponseData object
+        return None  # return entire ResponseData object
 
-    def _call(self, data: ResponseData) -> CheckResult:
+    def __call__(self, data: ResponseModel) -> CheckResult:
         """Executes the check on the response and returns the response of the evaluator LLM."""
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
         messages = [{
@@ -900,17 +867,13 @@ class LLMCheck(SerializableCheck):
             metadata={
                 'check_type': self.check_type,
                 'check_metadata': self.metadata,
-                'response_metadata': response.metadata,
+                'metadata': response.metadata,
             },
         )
 
     def __str__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}()"
-
-    def clone(self) -> 'LLMCheck':
-        """TODO: consider how this should be implemented."""
-        raise NotImplementedError("LLMCheck cannot be cloned.")
 
 
 @Check.register(CheckType.TOXICITY)
@@ -929,11 +892,11 @@ class ToxicityCheck(LLMCheck):
     )
 
     @property
-    def default_value_extractor(self) -> str:
+    def default_data_path(self) -> str:
         """Default value extractor for the check."""
-        return ''  # return entire ResponseData object
+        return None  # return entire ResponseData object
 
-    def _call(self, data: ResponseData) -> CheckResult:
+    def __call__(self, data: ResponseModel) -> CheckResult:  # noqa: D102
         evaluator = Candidate.from_dict(self.evaluator) if isinstance(self.evaluator, dict) else self.evaluator  # noqa
         messages = [{
             'role': 'user',
@@ -946,7 +909,7 @@ class ToxicityCheck(LLMCheck):
             metadata={
                 'check_type': self.check_type,
                 'check_metadata': self.metadata,
-                'response_metadata': response.metadata,
+                'metadata': response.metadata,
             },
         )
 
@@ -981,7 +944,7 @@ class ToolCallsCheck(Check):
         """,
     )
 
-    def _call(self, value: list[dict]) -> CheckResult:
+    def __call__(self, value: list[dict]) -> CheckResult:
         """Executes the check on the response/value and returns a ScoreResult."""
         score = 0
         metadata = {
@@ -1040,15 +1003,15 @@ class ToolCallsCheck(Check):
 
 class ActualIdealResponseMixin:
     """
-    Mixin class is used to provide a common default_value_extractor for checks that compare the
+    Mixin class is used to provide a common default_data_path for checks that compare the
     actual and ideal responses and take `actual_response` and `ideal_response` as arguments.
     """
 
     @property
-    def default_value_extractor(self) -> dict:
+    def default_data_path(self) -> dict:
         """
         The value extractor needs to extract both the actual response and the ideal response.
-        Users can override this value and set `value_extractor` to a set of custom paths.
+        Users can override this value and set `data_path` to a set of custom paths.
         It must be a dictionary with keys `actual_response` and `ideal_response` and corresponding
         paths.
 
@@ -1065,7 +1028,7 @@ class ActualIdealResponseMixin:
 
 
 @Check.register(CheckType.PRECISION_SCORE)
-class PrecisionScore(ActualIdealResponseMixin, SerializableCheck):
+class PrecisionScore(ActualIdealResponseMixin, Check):
     """
     Calculate the precision score for token comparison.
 
@@ -1085,7 +1048,7 @@ class PrecisionScore(ActualIdealResponseMixin, SerializableCheck):
         """,
     )
 
-    def _call(self, actual_response: str, ideal_response: str) -> ScoreResult:
+    def __call__(self, actual_response: str, ideal_response: str) -> ScoreResult:
         """
         Args:
             actual_response: The response generated by the LLM.
@@ -1108,7 +1071,7 @@ class PrecisionScore(ActualIdealResponseMixin, SerializableCheck):
 
 
 @Check.register(CheckType.RECALL_SCORE)
-class RecallScore(ActualIdealResponseMixin, SerializableCheck):
+class RecallScore(ActualIdealResponseMixin, Check):
     """
     Calculate the recall score for token comparison.
 
@@ -1128,7 +1091,7 @@ class RecallScore(ActualIdealResponseMixin, SerializableCheck):
         """,
     )
 
-    def _call(self, actual_response: str, ideal_response: str) -> ScoreResult:
+    def __call__(self, actual_response: str, ideal_response: str) -> ScoreResult:
         """
         Args:
             actual_response: The response generated by the LLM.
@@ -1151,7 +1114,7 @@ class RecallScore(ActualIdealResponseMixin, SerializableCheck):
 
 
 @Check.register(CheckType.F1_SCORE)
-class F1Score(ActualIdealResponseMixin, SerializableCheck):
+class F1Score(ActualIdealResponseMixin, Check):
     """
     Calculate the F1 score for token comparison.
 
@@ -1179,7 +1142,7 @@ class F1Score(ActualIdealResponseMixin, SerializableCheck):
         """,
     )
 
-    def _call(self, actual_response: str, ideal_response: str | list[str]) -> ScoreResult:
+    def __call__(self, actual_response: str, ideal_response: str | list[str]) -> ScoreResult:
         """
         Args:
             actual_response: The response generated by the LLM.
@@ -1220,7 +1183,7 @@ class F1Score(ActualIdealResponseMixin, SerializableCheck):
 
 
 @Check.register(CheckType.MAX_F1_SCORE)
-class MaxF1Score(ActualIdealResponseMixin, SerializableCheck):
+class MaxF1Score(ActualIdealResponseMixin, Check):
     """
     Similar to F1Score but calculates the maximum F1 score for a list of ideal responses. Returns
     the maximum maximum F1 score.
@@ -1242,7 +1205,7 @@ class MaxF1Score(ActualIdealResponseMixin, SerializableCheck):
         """,
     )
 
-    def _call(self, actual_response: str, ideal_response: list[str]) -> ScoreResult:
+    def __call__(self, actual_response: str, ideal_response: list[str]) -> ScoreResult:
         """
         Args:
             actual_response: The response generated by the LLM.

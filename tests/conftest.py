@@ -13,6 +13,7 @@ from llm_eval.candidates import Candidate, CandidateResponse
 
 from dotenv import load_dotenv
 
+from llm_eval.checks import Check, CheckResult
 from llm_eval.openai import Function, FunctionParameter
 load_dotenv()
 
@@ -378,6 +379,28 @@ def function_stocks() -> Function:
     )
 
 
+class UnregisteredCheckResult(CheckResult):  # noqa
+    pass
+
+class UnregisteredCheck(Check):  # noqa
+    def __call__(self, value: str) -> UnregisteredCheckResult:  # noqa: D102
+        return UnregisteredCheckResult(
+            success=value is not None,
+            value=value,
+            metadata={},
+        )
+
+    def clone(self) -> Check:  # noqa
+        return UnregisteredCheck()
+
+class UnregisteredCandidate(Candidate):  # noqa
+    def __init__(self, response: object) -> None:
+        super().__init__()
+        self.response = response
+
+    def __call__(self, prompt: dict) -> dict:  # noqa
+        # returns dictionary instead of string
+        return CandidateResponse(response={'prompt': prompt, 'response': self.response})
 
 ###################################################################################################
 # Mock OpenAI API Client

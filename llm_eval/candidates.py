@@ -33,15 +33,15 @@ can be serialized into a dictionary and the information can be saved in the Eval
 from __future__ import annotations
 
 import os
-import yaml
 import contextlib
+from datetime import datetime, timezone
 from inspect import iscoroutinefunction
 from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
 from typing import Any, Callable, Literal, TYPE_CHECKING
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from openai import OpenAI
 from llm_eval.openai import (
     MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
@@ -53,6 +53,7 @@ from llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
     Registry,
+    SerializationMixin,
 )
 
 if TYPE_CHECKING:
@@ -94,18 +95,19 @@ class CandidateType(EnumMixin, Enum):
 class CandidateResponse(BaseModel):
     """
     Provides a standard response object for Candidates so that the Eval/TestHarness can
-    consistently evaluate the response and store the metadata (e.g. cost, usage, etc.) for the
+    consistently evaluate the response and store any metadata (e.g. cost, usage, etc.) for the
     response.
 
     Content is the text/dict/etc. from the LLM that is meant to be evaluated (via Check objects).
     Metadata is a dictionary of metadata about the response (e.g. cost, usage, etc.).
     """
 
-    response: Any
+    response: object
     metadata: dict | None = None
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
-class Candidate(DictionaryEqualsMixin, ABC):
+class Candidate(SerializationMixin, DictionaryEqualsMixin, ABC):
     """
     A Candidate describes an LLM and the client for interfacing with the LLM (or specific
     implementation of an LLM interface (e.g. history/context management)) along with optional
@@ -192,21 +194,6 @@ class Candidate(DictionaryEqualsMixin, ABC):
         if hasattr(self.__class__, "_type_name"):
             return self.__class__._type_name.upper()
         return self.__class__.__name__
-
-    @classmethod
-    def from_yaml(
-        cls: type[Candidate],
-        path: str,
-    ) -> Candidate | list[Candidate]:
-        """
-        Creates a Candidate object from a YAML file. This method requires the Candidate subclass to
-        be registered via `Candidate.register(...)` before calling this method. It also requires
-        that the YAML file has a `candidate_type` field that matches the type name of the
-        registered Candidate subclass.
-        """
-        with open(path) as f:
-            config = yaml.safe_load(f)
-        return cls.from_dict(config)
 
     def __str__(self) -> str:
         """Returns a string representation of the Candidate."""

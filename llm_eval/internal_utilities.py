@@ -3,9 +3,12 @@
 
 from abc import abstractmethod
 from enum import Enum
+from functools import singledispatch
 from inspect import isclass, ismethod, signature, isfunction
 import datetime
 from itertools import product
+import json
+import os
 import signal
 from types import FunctionType
 import hashlib
@@ -16,6 +19,7 @@ import contextlib
 from textwrap import dedent
 from typing import Any, Type, TypeVar
 import tenacity
+import yaml
 
 
 class Timer:
@@ -265,9 +269,20 @@ def get_callable_info(callable_obj: Callable) -> str:
     raise ValueError(f"Unsupported callable object: {callable_obj}")
 
 
-def get_value_from_path(value_path: str, data: Any) -> Any:  # noqa: ANN401
+@singledispatch
+def get_value_from_path(path: object, data: object) -> object:  # noqa: ARG001
     """
     Retrieves the value from the data object based on the specified path.
+
+    If a string is passed as the path, the function will interpret the path as a series of
+    object properties, dictionary keys, or list indices.
+
+    If the path is a dictionary key, a dictionary is returned, and each key in the path dictionary
+    corresponds to the key that is returned in the dictionary, and each value should corresponds to
+    the value that is returned in the dictionary.
+
+    If the path is a list, then each item should be the path to a value in the data object, and a
+    list of values is returned.
 
     For example:
 
@@ -301,10 +316,15 @@ def get_value_from_path(value_path: str, data: Any) -> Any:  # noqa: ANN401
     assert value(data) == 'FOO'
     ```
     """
-    if value_path.startswith('lambda'):
-        return eval(value_path)(data)
+    raise ValueError(f"Unsupported path type: `{type(path)}`")
+
+@get_value_from_path.register(str)
+def _(path: str, data: object) -> object:
+    """See the main `get_value_from_path` function for details."""
+    if path.startswith('lambda'):
+        return eval(path)(data)
     current = data
-    parts = re.findall(r'\[.*?\]|\w+', value_path)
+    parts = re.findall(r'\[.*?\]|\w+', path)
     for part in parts:
         if part.startswith('[') and part.endswith(']'):
             # Dictionary or list access
@@ -317,6 +337,15 @@ def get_value_from_path(value_path: str, data: Any) -> Any:  # noqa: ANN401
             current = getattr(current, part)
     return current
 
+@get_value_from_path.register(dict)
+def _(path: dict, data: object) -> dict:
+    """See the main `get_value_from_path` function for details."""
+    return {key: get_value_from_path(value, data) for key, value in path.items()}
+
+@get_value_from_path.register(list)
+def _(path: list, data: object) -> list:
+    """See the main `get_value_from_path` function for details."""
+    return [get_value_from_path(item, data) for item in path]
 
 T = TypeVar('T')
 
@@ -431,4 +460,52 @@ class DictionaryEqualsMixin:
         """Returns True if the dictionaries are equal."""
         if not isinstance(other, self.__class__):
             return False
-        return self.to_dict() == other.to_dict()
+        other = other if isinstance(other, dict) else other.to_dict()
+        return self.to_dict() == other
+
+
+class SerializationMixin:
+    """Mixin for serializing objects."""
+
+    @abstractmethod
+    def to_dict(self) -> dict:
+        """Returns a dictionary representation of the object."""
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls: 'SerializationMixin', data: dict) -> 'SerializationMixin':
+        """Creates an object from a dictionary."""
+
+    def to_yaml(self, file_path: str) -> None:
+        """Saves the object to a YAML file."""
+        with open(file_path, 'w') as f:
+            yaml.dump(self.to_dict(), f, sort_keys=False)
+
+    @classmethod
+    def from_yaml(cls: 'SerializationMixin', path: str) -> 'SerializationMixin':
+        """Creates an object from a YAML file."""
+        with open(path) as f:
+            config = yaml.safe_load(f)
+        return cls.from_dict(config)
+
+    def to_json(self, file_path: str) -> None:
+        """Saves the object to a JSON file."""
+        with open(file_path, 'w') as f:
+            json.dump(self.to_dict(), f, indent=4)
+
+    @classmethod
+    def from_json(cls: 'SerializationMixin', path: str) -> 'SerializationMixin':
+        """Creates an object from a JSON file."""
+        with open(path) as f:
+            config = json.load(f)
+        return cls.from_dict(config)
+
+    @classmethod
+    def from_file(cls: 'SerializationMixin', path: str) -> 'SerializationMixin':
+        """Creates an object from a file, detecting JSON or YAML format based on the extension."""
+        _, ext = os.path.splitext(path)
+        if ext.lower() == '.json':
+            return cls.from_json(path)
+        if ext.lower() in {'.yaml', '.yml'}:
+            return cls.from_yaml(path)
+        raise ValueError(f"Unsupported file extension: {ext}. Use '.json', '.yaml', or '.yml'.")

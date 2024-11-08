@@ -28,14 +28,14 @@ def result_expects_code_blocks(result: EvalResult) -> bool:
     Return True if the underlying Eval object in the EvalResult contains a check that tests for the
     presence of code blocks (i.e. Check objects with `PythonCodeBlocksPresent` check type).
     """
-    return eval_expects_code_blocks(result.eval_obj)
+    return eval_expects_code_blocks(result.eval)
 
 def result_contains_code_block_tests(result: EvalResult) -> bool:
     """
     Return True if the underlying Eval object in the EvalResult contains a check that tests code
     blocks (i.e. Check objects with `PythonCodeBlockTests` check type).
     """
-    return eval_contains_code_block_tests(result.eval_obj)
+    return eval_contains_code_block_tests(result.eval)
 
 def filter_expects_code_blocks(results: list[EvalResult]) -> list[EvalResult]:
     """
@@ -74,11 +74,11 @@ def matches_tags(
     exclude = set(exclude or [])
     if include:
         # include any results that have at least one of the include tags
-        matches = bool(include & set(result.eval_obj.metadata.get('tags', [])))
+        matches = bool(include & set(result.eval.metadata.get('tags', [])))
     if exclude:
         # exclude any results that have at least one of the exclude tags
-        # not exclude & set(filtered[0].eval_obj.metadata.get('tags', []))
-        matches = matches and not exclude & set(result.eval_obj.metadata.get('tags', []))
+        # not exclude & set(filtered[0].eval.metadata.get('tags', []))
+        matches = matches and not exclude & set(result.eval.metadata.get('tags', []))
     return matches
 
 def filter_tags(

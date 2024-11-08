@@ -51,18 +51,17 @@ def test_filter_tags(
         fake_eval_sum_two_numbers: dict,
         fake_eval_sum_two_numbers_code_blocks_run: dict) -> None:
     """Test the filtering function."""
-    candidate = MockCandidate()
     results = []
-    results.append(Eval(**fake_eval_8f9fbf37)(candidate))
-    results.append(Eval(**fake_eval_subtract_two_numbers)(candidate))
-    results.append(Eval(**fake_eval_sum_two_numbers)(candidate))
-    results.append(Eval(**fake_eval_sum_two_numbers_code_blocks_run)(candidate))
+    results.append(Eval(**fake_eval_8f9fbf37)(MockCandidate()(fake_eval_8f9fbf37['input']).response))
+    results.append(Eval(**fake_eval_subtract_two_numbers)(MockCandidate()(fake_eval_subtract_two_numbers['input']).response))
+    results.append(Eval(**fake_eval_sum_two_numbers)(MockCandidate()(fake_eval_sum_two_numbers['input']).response))
+    results.append(Eval(**fake_eval_sum_two_numbers_code_blocks_run)(MockCandidate()(fake_eval_sum_two_numbers_code_blocks_run['input']).response))
 
-    assert 'eval_8f9' in results[0].eval_obj.metadata['tags']
-    assert 'subtract_two_numbers' in results[1].eval_obj.metadata['tags']
-    assert 'sum_two_numbers' in results[2].eval_obj.metadata['tags']
-    assert 'sum_two_numbers' in results[3].eval_obj.metadata['tags']
-    assert 'code_block' in results[3].eval_obj.metadata['tags']
+    assert 'eval_8f9' in results[0].eval.metadata['tags']
+    assert 'subtract_two_numbers' in results[1].eval.metadata['tags']
+    assert 'sum_two_numbers' in results[2].eval.metadata['tags']
+    assert 'sum_two_numbers' in results[3].eval.metadata['tags']
+    assert 'code_block' in results[3].eval.metadata['tags']
 
     # using `is True` and `is False` to ensure that the return value is a boolean
     assert matches_tags(results[0]) is True
@@ -139,13 +138,12 @@ def test__expects_code_blocks(
     assert eval_expects_code_blocks(Eval(**fake_eval_sum_two_numbers_code_blocks_run))
     assert not eval_expects_code_blocks(Eval(**fake_eval_no_code_blocks))
 
-    candidate = MockCandidate()
     results = []
-    results.append(Eval(**fake_eval_8f9fbf37)(candidate))
-    results.append(Eval(**fake_eval_subtract_two_numbers)(candidate))
-    results.append(Eval(**fake_eval_sum_two_numbers)(candidate))
-    results.append(Eval(**fake_eval_sum_two_numbers_code_blocks_run)(candidate))
-    results.append(Eval(**fake_eval_no_code_blocks)(candidate))
+    results.append(Eval(**fake_eval_8f9fbf37)(MockCandidate()(fake_eval_8f9fbf37['input']).response))
+    results.append(Eval(**fake_eval_subtract_two_numbers)(MockCandidate()(fake_eval_subtract_two_numbers['input']).response))
+    results.append(Eval(**fake_eval_sum_two_numbers)(MockCandidate()(fake_eval_sum_two_numbers['input']).response))
+    results.append(Eval(**fake_eval_sum_two_numbers_code_blocks_run)(MockCandidate()(fake_eval_sum_two_numbers_code_blocks_run['input']).response))
+    results.append(Eval(**fake_eval_no_code_blocks)(MockCandidate()(fake_eval_no_code_blocks['input']).response))
 
     assert result_expects_code_blocks(results[0])
     assert result_expects_code_blocks(results[1])
@@ -174,13 +172,12 @@ def test__contains_code_block_tests(
     assert eval_contains_code_block_tests(Eval(**fake_eval_sum_two_numbers_code_blocks_run))
     assert not eval_contains_code_block_tests(Eval(**fake_eval_no_code_blocks))
 
-    candidate = MockCandidate()
     results = []
-    results.append(Eval(**fake_eval_8f9fbf37)(candidate))
-    results.append(Eval(**fake_eval_subtract_two_numbers)(candidate))
-    results.append(Eval(**fake_eval_sum_two_numbers)(candidate))
-    results.append(Eval(**fake_eval_sum_two_numbers_code_blocks_run)(candidate))
-    results.append(Eval(**fake_eval_no_code_blocks)(candidate))
+    results.append(Eval(**fake_eval_8f9fbf37)(MockCandidate()(fake_eval_8f9fbf37['input']).response))
+    results.append(Eval(**fake_eval_subtract_two_numbers)(MockCandidate()(fake_eval_subtract_two_numbers['input']).response))
+    results.append(Eval(**fake_eval_sum_two_numbers)(MockCandidate()(fake_eval_sum_two_numbers['input']).response))
+    results.append(Eval(**fake_eval_sum_two_numbers_code_blocks_run)(MockCandidate()(fake_eval_sum_two_numbers_code_blocks_run['input']).response))
+    results.append(Eval(**fake_eval_no_code_blocks)(MockCandidate()(fake_eval_no_code_blocks['input']).response))
 
     assert not result_contains_code_block_tests(results[0])
     assert not result_contains_code_block_tests(results[1])

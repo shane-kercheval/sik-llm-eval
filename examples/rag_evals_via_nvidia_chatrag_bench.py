@@ -30,7 +30,7 @@ from examples.nvidia_chatrag_bench.source import (
     build_evals,
 )
 from llm_eval.candidates import Candidate, CandidateResponse
-from llm_eval.eval import EvalHarness, EvalResult
+from llm_eval.eval import CandidateRunResult, EvalHarness, Mode
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -108,26 +108,26 @@ class CustomRAGAgentCandidate(Candidate):
             },
         )
 
-
 candidates = [CustomRAGAgentCandidate(**params) for params in param_combinations]
-harness = EvalHarness(
-    num_cpus=None,
-    async_batch_size=1,
-    num_samples=1,
-)
-harness.add_evals_from_yamls("examples/nvidia_chatrag_bench/evals/*.yaml")
+harness = EvalHarness(generate_mode=Mode.PARALLEL, eval_mode=Mode.PARALLEL)
+harness.add_evals_from_files("examples/nvidia_chatrag_bench/evals/*.yaml")
 harness.add_candidates(candidates)
 
-
-def save_callback(result: EvalResult) -> None:
-    """Simple callback function to print progress and save the eval result."""
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    print(f"{timestamp}: {result.candidate_obj.metadata['id']} - {result.eval_obj.metadata['uuid']}")  # noqa: E501
-    # save result
-    result.to_yaml(f"examples/nvidia_chatrag_bench/results/{result.eval_obj.metadata['uuid']}-{result.candidate_obj.metadata['uuid']}.yaml")
-
-
-harness.callback = save_callback
 print(f"Starting Evals: {len(harness.evals)} evals and {len(harness.candidates)} candidates (total {len(harness.evals) * len(harness.candidates)} eval-candidate pairs)")  # noqa: E501
-results = harness()
-print("Finished Evals")
+print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+results: list[CandidateRunResult] = harness()
+print(f"Finished - Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+for candidate_result in results:
+    print(f"Num Errors: {candidate_result.num_errors}")
+    if candidate_result.num_errors > 0:
+        for index, error in enumerate(candidate_result.response_errors):
+            if error is not None:
+                print(f"Response Error ({index}): {error}")
+        for index, error in enumerate(candidate_result.eval_errors):
+            if error is not None:
+                print(f"Eval Error ({index}): {error}")
+    for eval_result in candidate_result.eval_results:
+        if eval_result is not None:
+            eval_file = f"examples/nvidia_chatrag_bench/results/{eval_result.eval.metadata['uuid']}-{eval_result.candidate.metadata['uuid']}.yaml"  # noqa: E501
+            # print(f"Saving: {eval_file}")
+            eval_result.to_yaml(eval_file)

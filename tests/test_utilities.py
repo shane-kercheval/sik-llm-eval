@@ -607,36 +607,36 @@ def test__get_value_from_path_dict():
     }
     assert get_value_from_path("['a']['b']['c']", data) == 5
 
-def test__get_value_from_path_non_existent_key():
+def test__get_value_from_path__str__non_existent_key():
     data = {'a': {'b': 10}}
     with pytest.raises(KeyError):
         get_value_from_path("['a']['c']", data)
 
-def test__get_value_from_path_list():
+def test__get_value_from_path__str__list():
     data = [10, 20, 30]
     assert get_value_from_path("[1]", data) == 20
 
-def test__get_value_from_path_list_out_of_range():
+def test__get_value_from_path__str__list_out_of_range():
     data = [10, 20, 30]
     with pytest.raises(IndexError):
         get_value_from_path("[5]", data)
 
-def test__get_value_from_path_tuple():
+def test__get_value_from_path__str__tuple():
     data = (100, 200, 300)
     assert get_value_from_path("[2]", data) == 300
 
-def test__get_value_from_path_tuple_out_of_range():
+def test__get_value_from_path__str__tuple_out_of_range():
     data = (100, 200, 300)
     with pytest.raises(IndexError):
         get_value_from_path("[5]", data)
 
-def test__get_value_from_path_mixed():
+def test__get_value_from_path__str__mixed():
     data = {
         'x': [1, 2, {'y': 10}],
     }
     assert get_value_from_path("['x'][2]['y']", data) == 10
 
-def test__get_value_from_path_custom_object():
+def test__get_value_from_path__str__custom_object():
     class CustomObject:
         def __init__(self, name, age):  # noqa
             self.name = name
@@ -646,7 +646,7 @@ def test__get_value_from_path_custom_object():
     assert get_value_from_path(".name", obj) == "Alice"
     assert get_value_from_path(".age", obj) == 30
 
-def test__get_value_from_path_non_existent_attribute():
+def test__get_value_from_path__str__non_existent_attribute():
     class CustomObject:
         def __init__(self, name, age):  # noqa
             self.name = name
@@ -656,54 +656,185 @@ def test__get_value_from_path_non_existent_attribute():
     with pytest.raises(AttributeError):
         get_value_from_path(".address", obj)
 
-def test__get_value_from_path_invalid_path():
+def test__get_value_from_path__str__invalid_path():
     data = {'a': {'b': 10}}
     with pytest.raises(KeyError):
         get_value_from_path("['x']['b'].x", data)
 
-def test__get_value_from_path_negative_index():
+def test__get_value_from_path__str__negative_index():
     data = [10, 20, 30]
     assert get_value_from_path("[-1]", data) == 30
     assert get_value_from_path("[-2]", data) == 20
 
-def test__get_value_from_path_nested_list_and_dict():
+def test__get_value_from_path__str__nested_list_and_dict():
     data = [{'a': [1, 2, {'b': 3}]}]
     assert get_value_from_path("[0]['a'][2]['b']", data) == 3
 
-def test__get_value_from_path_with_none():
+def test__get_value_from_path__str__with_none():
     data = {'a': None}
     assert get_value_from_path("['a']", data) is None
 
-def test__get_value_from_path_dict_with_integer_key():
+def test__get_value_from_path__str__dict_with_integer_key():
     data = {1: 'one', 2: 'two'}
     assert get_value_from_path("[1]", data) == 'one'
     assert get_value_from_path("[2]", data) == 'two'
 
-def test__get_value_from_path_deeply_nested():
+def test__get_value_from_path__str__deeply_nested():
     data = {'a': {'b': {'c': {'d': {'e': {'f': 100}}}}}}
     assert get_value_from_path("['a']['b']['c']['d']['e']['f']", data) == 100
 
-def test__get_value_from_path_empty_data():
+def test__get_value_from_path__str__empty_data():
     data = {}
     with pytest.raises(KeyError):
         get_value_from_path("['a']", data)
 
-def test__get_value_from_path_non_string_dict_keys():
+def test__get_value_from_path__str__non_string_dict_keys():
     data = {1: {'a': 10}, 2: {'b': 20}}
     assert get_value_from_path("[1]['a']", data) == 10
     assert get_value_from_path("[2]['b']", data) == 20
 
-def test__get_value_from_path_list_of_lists():
+def test__get_value_from_path__str__list_of_lists():
     data = [[1, 2, 3], [4, 5, 6]]
     assert get_value_from_path("[1][2]", data) == 6
     assert get_value_from_path("[0][0]", data) == 1
 
-def test__get_value_from_path_using_lamda():
+def test__get_value_from_path__str__using_lamda():
     data = {'a': {'b': {'c': 5}}}
     assert get_value_from_path("lambda x: x['a']['b']['c']", data) == 5
 
     data = {'a': [1, 2, {'b': 'foo'}]}
     assert get_value_from_path("lambda x: x['a'][2]['b'].upper()", data) == 'FOO'
+
+def test__get_value_from_path__dict__simple_dict():
+    path = {'key1': "['a']['b']", 'key2': "['x']['y']"}
+    data = {
+        'a': {'b': 10},
+        'x': {'y': 20},
+    }
+    result = get_value_from_path(path, data)
+    assert result == {'key1': 10, 'key2': 20}
+
+def test__get_value_from_path__dict__nested_dict():
+    path = {'nested': {'key1': "['a'][0]", 'key2': "['b']['c']"}}
+    data = {
+        'a': [10, 20],
+        'b': {'c': 30},
+    }
+    result = get_value_from_path(path, data)
+    assert result == {'nested': {'key1': 10, 'key2': 30}}
+
+def test__get_value_from_path__dict__non_existent_key_in_dict():
+    path = {'key1': "['a']['non_existent_key']"}
+    data = {'a': {'b': 10}}
+    with pytest.raises(KeyError):
+        get_value_from_path(path, data)
+
+def test__get_value_from_path__list__simple_list():
+    path = ["['a']['b']", "['x']['y']"]
+    data = {
+        'a': {'b': 10},
+        'x': {'y': 20},
+    }
+    result = get_value_from_path(path, data)
+    assert result == [10, 20]
+
+def test__get_value_from_path__list__nested_list():
+    path = ["['a'][0]", "['b']['c']"]
+    data = {
+        'a': [10, 20],
+        'b': {'c': 30},
+    }
+    result = get_value_from_path(path, data)
+    assert result == [10, 30]
+
+def test__get_value_from_path__list__mixed():
+    path = ["['a'][0]", "['b'].name"]
+    class CustomObject:
+        def __init__(self, name):  # noqa: ANN001
+            self.name = name
+
+    data = {
+        'a': [10, 20],
+        'b': CustomObject("TestName"),
+    }
+    result = get_value_from_path(path, data)
+    assert result == [10, "TestName"]
+
+def test__get_value_from_path__dict__lambda_in_dict():
+    path = {'value': "lambda x: x['a'][0] + x['b']['c']"}
+    data = {
+        'a': [10, 20],
+        'b': {'c': 30},
+    }
+    result = get_value_from_path(path, data)
+    assert result == {'value': 40}
+
+def test__get_value_from_path__list__with_lambda():
+    path = ["lambda x: x['a']['b'] * 2", "lambda x: x['x']['y'] + 5"]
+    data = {
+        'a': {'b': 10},
+        'x': {'y': 20},
+    }
+    result = get_value_from_path(path, data)
+    assert result == [20, 25]
+
+def test__get_value_from_path__list__list_indexing_in_list():
+    path = ["[0][1]", "[1][0]"]
+    data = [[1, 2, 3], [4, 5, 6]]
+    result = get_value_from_path(path, data)
+    assert result == [2, 4]
+
+def test__get_value_from_path__dict__empty_dict_path():
+    path = {}
+    data = {'a': 10}
+    result = get_value_from_path(path, data)
+    assert result == {}
+
+def test__get_value_from_path__list__empty_list_path():
+    path = []
+    data = {'a': 10}
+    result = get_value_from_path(path, data)
+    assert result == []
+
+def test__get_value_from_path__dict__mixed_keys_and_lambdas():
+    path = {
+        'key1': "['a'][1]",
+        'key2': "['b']['c']",
+        'lambda_key': "lambda x: x['a'][0] + x['b']['c']",
+    }
+    data = {
+        'a': [10, 20],
+        'b': {'c': 30},
+    }
+    result = get_value_from_path(path, data)
+    assert result == {'key1': 20, 'key2': 30, 'lambda_key': 40}
+
+def test__get_value_from_path__dict__tuple_access_in_dict():
+    path = {
+        'key1': "[0]",
+        'key2': "[2]",
+    }
+    data = (100, 200, 300)
+    result = get_value_from_path(path, data)
+    assert result == {'key1': 100, 'key2': 300}
+
+def test__get_value_from_path__list__dictionary_keys_in_list():
+    path = ["[0]['a']", "[1]['b']"]
+    data = [{'a': 1}, {'b': 2}]
+    result = get_value_from_path(path, data)
+    assert result == [1, 2]
+
+def test__get_value_from_path__list__tuple_keys_in_list():
+    path = ["[1]", "[2]"]
+    data = (10, 20, 30)
+    result = get_value_from_path(path, data)
+    assert result == [20, 30]
+
+def test__get_value_from_path__list__unsupported_path_type():
+    path = 12
+    data = {'a': 10}
+    with pytest.raises(ValueError):  # noqa: PT011
+        get_value_from_path(path, data)
 
 class SampleEnum(Enum):
     """Enum for testing Registry."""
