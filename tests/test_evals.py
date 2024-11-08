@@ -20,6 +20,7 @@ from llm_eval.checks import (
     ToolCallsCheck,
 )
 from llm_eval.eval import (
+    CandidateRunResults,
     Eval,
     EvalHarness,
     EvalResult,
@@ -388,7 +389,7 @@ class MockCandidateCausesError(Candidate):  # noqa: D101
 @pytest.mark.parametrize('num_samples', [1, 5])
 @pytest.mark.parametrize('response_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 @pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
-def test__EvalHarness__non_async__single_processor(
+def test__EvalHarness(
         candidate_type: str,
         num_samples: int,
         response_mode: str,
@@ -435,6 +436,8 @@ def test__EvalHarness__non_async__single_processor(
     ####
     results = eval_harness()
     assert len(results) == len(eval_harness.candidates)
+    assert all(isinstance(x, CandidateRunResults) for x in results)
+
     # ensure the number of EvalResults is correct for each candidate
     assert all(expected_num_eval_results == len(x.eval_results) for x in results)
     # ensure the results associated with each candidate have both evals
@@ -447,6 +450,10 @@ def test__EvalHarness__non_async__single_processor(
         for r in results[0:2]  # third candidate causes an error; only check first two
     )
 
+    for eval_result, response_error, eval_error in results[0]:
+        assert isinstance(eval_result, EvalResult)
+        assert response_error is None
+        assert eval_error is None
     assert results[0].candidate == Candidate.from_dict(candidate_1_dict)
     assert results[0].num_errors == 0
     assert results[0].response_errors == [None] * expected_num_eval_results
@@ -458,6 +465,10 @@ def test__EvalHarness__non_async__single_processor(
     assert results[0].eval_results[num_samples].eval == Eval(**sum_config)
     assert results[0].eval_results[num_samples].candidate == Candidate.from_dict(candidate_1_dict)
 
+    for eval_result, response_error, eval_error in results[1]:
+        assert isinstance(eval_result, EvalResult)
+        assert response_error is None
+        assert eval_error is None
     assert results[1].candidate == Candidate.from_dict(candidate_2_dict)
     assert results[1].num_errors == 0
     assert results[1].response_errors == [None] * expected_num_eval_results
@@ -469,11 +480,21 @@ def test__EvalHarness__non_async__single_processor(
     assert results[1].eval_results[num_samples].eval == Eval(**sum_config)
     assert results[1].eval_results[num_samples].candidate == Candidate.from_dict(candidate_2_dict)
 
+    for eval_result, response_error, eval_error in results[2]:
+        assert isinstance(eval_result, EvalResult)
+        assert isinstance(response_error, ValueError)
+        assert eval_error is None
     assert results[2].candidate == MockCandidateCausesError()
     assert results[2].num_errors == expected_num_eval_results
     assert len(results[2].response_errors) == expected_num_eval_results
     assert all(isinstance(x, ValueError) for x in results[2].response_errors)
     assert results[2].eval_errors == [None] * expected_num_eval_results
+    assert results[2].eval_results[0].candidate == MockCandidateCausesError()
+    assert results[2].eval_results[0].eval == Eval(**subtract_config)
+    assert all(c.success is False for c in results[2].eval_results[0].check_results)
+    assert results[2].eval_results[num_samples].candidate == MockCandidateCausesError()
+    assert results[2].eval_results[num_samples].eval == Eval(**sum_config)
+    assert all(c.success is False for c in results[2].eval_results[num_samples].check_results)
 
     # eval objects across candidates should have same values (same eval) but different objects
     assert results[0].eval_results[0].eval == results[1].eval_results[0].eval
@@ -590,6 +611,10 @@ def test__EvalHarness__Check_raises_error(
     assert all(len(r.eval_results) == 1 for r in results)
     assert all(r.num_errors == 1 for r in results)
 
+    for eval_result, response_error, eval_error in results[0]:
+        assert eval_result is None
+        assert response_error is None
+        assert isinstance(eval_error, RuntimeError)
     assert results[0].candidate == UnregisteredCandidate(response=eval_obj.input)
     assert results[0].num_errors == 1
     assert results[0].response_errors == [None]
@@ -597,6 +622,10 @@ def test__EvalHarness__Check_raises_error(
     assert isinstance(results[0].eval_errors[0], RuntimeError)
     assert results[0].eval_results == [None]
 
+    for eval_result, response_error, eval_error in results[1]:
+        assert eval_result is None
+        assert isinstance(response_error, ValueError)
+        assert isinstance(eval_error, RuntimeError)
     assert results[1].candidate == MockCandidateCausesError()
     assert results[1].num_errors == 1
     assert len(results[1].response_errors) == 1

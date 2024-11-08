@@ -10,7 +10,7 @@ from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
 from textwrap import dedent
-from typing import Callable
+from typing import Callable, Iterator
 from llm_eval.candidates import Candidate, CandidateResponse, is_async_candidate
 from llm_eval.checks import (
     Check,
@@ -271,12 +271,12 @@ class EvalRunResult:
     eval_error: Exception | None  # Error during eval execution, if any
 
 
-class CandidateRunResult:
+class CandidateRunResults:
     """Encapsulates the results of running one or more Evals against a single Candidate."""
 
     def __init__(self, candidate: Candidate, run_results: list[EvalRunResult]) -> None:
         """
-        Initializes the CandidateRunResult.
+        Initializes the CandidateRunResults.
 
         Args:
             candidate:
@@ -289,6 +289,13 @@ class CandidateRunResult:
         self._response_errors = [result.response_error for result in run_results]
         self._eval_results = [result.eval_result for result in run_results]
         self._eval_errors = [result.eval_error for result in run_results]
+
+    def __iter__(self) -> Iterator[tuple[EvalResult | None, Exception | None, Exception | None]]:
+        """
+        Iterates over the results, yielding tuples of (EvalResult, Exception (response eror), and
+        Exception (eval_error)) for each index in the results lists.
+        """
+        return zip(self._eval_results, self._response_errors, self._eval_errors)
 
     @property
     def num_errors(self) -> int:
@@ -720,7 +727,7 @@ class EvalHarness:
             self,
             responses: list[list[tuple[CandidateResponse, Exception | None]]],
             eval_copies: list[list[Eval]],
-        ) -> list[CandidateRunResult]:
+        ) -> list[CandidateRunResults]:
         """
         Runs all Evals against all of the responses generated for each Candidate via
         `_generate_responses`.
@@ -741,7 +748,7 @@ class EvalHarness:
                         response_error=response_error,
                         eval_error=eval_error,
                     ))
-                results.append(CandidateRunResult(
+                results.append(CandidateRunResults(
                     candidate=candidate,
                     run_results=candidate_results,
                 ))
@@ -771,7 +778,7 @@ class EvalHarness:
                         eval_error=eval_error,
                     ))
                     index += 1
-                results.append(CandidateRunResult(
+                results.append(CandidateRunResults(
                     candidate=candidate,
                     run_results=candidate_results,
                 ))
@@ -796,7 +803,7 @@ class EvalHarness:
                         eval_error=eval_error,
                     ))
                     index += 1
-                results.append(CandidateRunResult(
+                results.append(CandidateRunResults(
                     candidate=candidate,
                     run_results=candidate_results,
                 ))
@@ -804,7 +811,7 @@ class EvalHarness:
             raise ValueError("mode must be `Mode.SYNC`, `Mode.ASYNC`, or `Mode.PARALLEL`")
         return results
 
-    async def _execute(self) -> list[CandidateRunResult]:
+    async def _execute(self) -> list[CandidateRunResults]:
         """
         Creates all necessary eval copies up front and executes the harness.
         Each candidate gets its own set of eval copies, and each eval is copied num_samples times.
@@ -821,7 +828,7 @@ class EvalHarness:
         responses = await self._generate_all_responses(eval_copies)
         return await self._run_all_evals(responses, eval_copies)
 
-    def __call__(self) -> list[CandidateRunResult]:
+    def __call__(self) -> list[CandidateRunResults]:
         """
         Executes the EvalHarness. The response_mode and eval_mode can be set to "sync" (default),
         "async", or "parallel". The "sync" mode runs the corresponding tasks (generating responses

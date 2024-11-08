@@ -30,7 +30,7 @@ from examples.nvidia_chatrag_bench.source import (
     build_evals,
 )
 from llm_eval.candidates import Candidate, CandidateResponse
-from llm_eval.eval import CandidateRunResult, EvalHarness, Mode
+from llm_eval.eval import CandidateRunResults, EvalHarness, Mode
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -115,19 +115,18 @@ harness.add_candidates(candidates)
 
 print(f"Starting Evals: {len(harness.evals)} evals and {len(harness.candidates)} candidates (total {len(harness.evals) * len(harness.candidates)} eval-candidate pairs)")  # noqa: E501
 print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-results: list[CandidateRunResult] = harness()
+results: list[CandidateRunResults] = harness()
 print(f"Finished - Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-for candidate_result in results:
-    print(f"Num Errors: {candidate_result.num_errors}")
-    if candidate_result.num_errors > 0:
-        for index, error in enumerate(candidate_result.response_errors):
-            if error is not None:
-                print(f"Response Error ({index}): {error}")
-        for index, error in enumerate(candidate_result.eval_errors):
-            if error is not None:
-                print(f"Eval Error ({index}): {error}")
-    for eval_result in candidate_result.eval_results:
-        if eval_result is not None:
+
+for index, candidate_result in enumerate(results):
+    print(f"Candidate {index} has errors: {candidate_result.num_errors > 0}")
+    for eval_result, response_error, eval_error in candidate_result:
+        if response_error:
+            print(f"Response Error: {response_error}")
+        if eval_error:
+            print(f"Eval Error: {eval_error}")
+        if eval_result:
             eval_file = f"examples/nvidia_chatrag_bench/results/{eval_result.eval.metadata['uuid']}-{eval_result.candidate.metadata['uuid']}.yaml"  # noqa: E501
-            # print(f"Saving: {eval_file}")
             eval_result.to_yaml(eval_file)
+        else:
+            print(f"Skipping/error Eval=`{eval_result.eval.metadata['uuid']}` - Candidate=`{eval_result.candidate.metadata['uuid']}`")  # noqa: E501
