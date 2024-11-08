@@ -386,12 +386,12 @@ class MockCandidateCausesError(Candidate):  # noqa: D101
 
 @pytest.mark.parametrize('candidate_type', ['AsyncMockCandidate', 'MockCandidate'])
 @pytest.mark.parametrize('num_samples', [1, 5])
-@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('response_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 @pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 def test__EvalHarness__non_async__single_processor(
         candidate_type: str,
         num_samples: int,
-        generate_mode: str,
+        response_mode: str,
         eval_mode: str,
         fake_eval_subtract_two_numbers: dict,
         fake_eval_sum_two_numbers: dict,
@@ -416,7 +416,7 @@ def test__EvalHarness__non_async__single_processor(
     candidate_2_dict['metadata']['uuid'] = 'candidate_2'
 
     eval_harness = EvalHarness(
-        generate_mode=generate_mode,
+        response_mode=response_mode,
         eval_mode=eval_mode,
         num_samples=num_samples,
     )
@@ -568,11 +568,11 @@ class MockCheckCausesError(Check):  # noqa: D101
     def __call__(self, response: object) -> CheckResult:  # noqa
         raise RuntimeError("This check always fails.")
 
-@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('response_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 @pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 def test__EvalHarness__Check_raises_error(
         fake_eval_subtract_two_numbers: dict,
-        generate_mode: str,
+        response_mode: str,
         eval_mode: str,
         ):
     eval_config = fake_eval_subtract_two_numbers.copy()
@@ -580,7 +580,7 @@ def test__EvalHarness__Check_raises_error(
     eval_obj = Eval(**eval_config)
     eval_obj.checks = [check, *eval_obj.checks]
     eval_harness = EvalHarness(
-        generate_mode=generate_mode,
+        response_mode=response_mode,
         eval_mode=eval_mode,
         evals=eval_obj,
         candidates=[UnregisteredCandidate(response=eval_obj.input), MockCandidateCausesError()],
@@ -822,9 +822,9 @@ def test__Eval_with_numeric_values_loads_correctly(fake_eval_non_string_values: 
     assert 'content' in eval_.input[0]
     assert eval_.input[0]['content'] == 6
 
-@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('response_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 def test__openai_candidates__across_all_modes(
-        generate_mode: Mode,
+        response_mode: Mode,
         openai_candidate_template: dict,
         fake_eval_sum_two_numbers: dict,
         fake_eval_subtract_two_numbers: dict,
@@ -841,7 +841,7 @@ def test__openai_candidates__across_all_modes(
     harness = EvalHarness(
         evals=[eval_1, eval_2],
         candidates=[candidate_1, candidate_2],
-        generate_mode=generate_mode,
+        response_mode=response_mode,
         eval_mode=Mode.SYNC,
     )
     results = harness()
@@ -884,14 +884,14 @@ def test__Eval__unregistered_check__non_string_prompt_and_response():
     assert result.to_dict()['candidate'] == UnregisteredCandidate(42).to_dict()
     assert result.to_dict()['check_results'][0] == check_result.to_dict()
 
-@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('response_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 @pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 def test__EvalHarness__unregistered_check__unregistered_candidate__non_string_prompt_and_response(
-        generate_mode: Mode,
+        response_mode: Mode,
         eval_mode: Mode,
     ):
         harness = EvalHarness(
-            generate_mode=generate_mode,
+            response_mode=response_mode,
             eval_mode=eval_mode,
             evals=[
                 Eval(
@@ -1019,11 +1019,11 @@ def mock_check_1(data):  # noqa
 def mock_check_2(data):  # noqa
     return 'Response2' in data.response['response']
 
-@pytest.mark.parametrize('generate_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
+@pytest.mark.parametrize('response_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 @pytest.mark.parametrize('eval_mode', [Mode.SYNC, Mode.ASYNC, Mode.PARALLEL])
 @pytest.mark.parametrize('use_async_candidate', [True, False])
 def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and_response(
-        generate_mode: Mode,
+        response_mode: Mode,
         eval_mode: Mode,
         use_async_candidate: bool,
     ):
@@ -1034,7 +1034,7 @@ def test__EvalHarness__callable_check__callable_candidate__non_string_prompt_and
 
     num_samples = 100
     harness = EvalHarness(
-        generate_mode=generate_mode,
+        response_mode=response_mode,
         eval_mode=eval_mode,
         num_samples=num_samples,
         evals=[

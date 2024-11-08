@@ -366,7 +366,7 @@ class EvalHarness:
             evals: list[Eval | dict ] | Eval | dict | None = None,
             candidates: list[Candidate | Callable | dict] | Candidate | dict | None = None,
             num_samples: int = 1,
-            generate_mode: Mode = Mode.SYNC,
+            response_mode: Mode = Mode.SYNC,
             eval_mode: Mode = Mode.SYNC,
             num_cpus: int | None = None,
             async_batch_size: int = 50,  # only applicable when using async mode
@@ -415,7 +415,7 @@ class EvalHarness:
                 `num_samples > 1` effectively copies the Eval object num_samples times and runs
                 each copy against the Candidate. An id should be used in the Eval metadata to
                 identify unique evals in order to aggregate accordingly.
-            generate_mode:
+            response_mode:
                 The mode for generating responses. The mode can be set to `SYNC` (default),
                 `ASYNC`, or `PARALLEL. The `SYNC` mode generates responses synchronously, the
                 `ASYNC` mode generates responses asynchronously using the event loop, and the
@@ -428,15 +428,15 @@ class EvalHarness:
                 in parallel using ProcessPoolExecutor across all CPU cores.
             num_cpus:
                 The number of CPUs to use for parallel processing. This parameters is only used
-                if generate_mode or eval_mode is set to "parallel".
+                if response_mode or eval_mode is set to "parallel".
 
                 If num_cpus is None or less than 1, then the corresponding tasks will use all
                 available CPUs.
             async_batch_size:
                 The number of tasks (e.g. response generation) to run asynchronously at a time.
-                This parameter is only used if generate_mode or eval_mode is set to "async".
+                This parameter is only used if response_mode or eval_mode is set to "async".
         """  # noqa: D412
-        self.generate_mode = generate_mode
+        self.response_mode = response_mode
         self.eval_mode = eval_mode
         self.async_batch_size = async_batch_size
         self.num_cpus = num_cpus if num_cpus is not None and num_cpus >= 1 else os.cpu_count()
@@ -667,7 +667,7 @@ class EvalHarness:
         """
         responses = []
         semaphore = asyncio.Semaphore(self.async_batch_size)
-        if self.generate_mode == Mode.SYNC:
+        if self.response_mode == Mode.SYNC:
             # Synchronous generation
             for candidate, candidate_evals in zip(self.candidates, eval_copies):
                 candidate_responses = []
@@ -679,7 +679,7 @@ class EvalHarness:
                     )
                     candidate_responses.append((candidate_response, response_error))
                 responses.append(candidate_responses)
-        elif self.generate_mode == Mode.ASYNC or any(is_async_candidate(candidate) for candidate in self.candidates):  # noqa: E501
+        elif self.response_mode == Mode.ASYNC or any(is_async_candidate(candidate) for candidate in self.candidates):  # noqa: E501
             # Asynchronous generation using the event loop
             generate_tasks = [
                 self._generate_single_response_async(
@@ -697,7 +697,7 @@ class EvalHarness:
                 num_evals = len(candidate_evals)
                 responses.append(flat_responses[index:index + num_evals])
                 index += num_evals
-        elif self.generate_mode == Mode.PARALLEL:
+        elif self.response_mode == Mode.PARALLEL:
             # Parallel generation using ProcessPoolExecutor
             with ProcessPoolExecutor(max_workers=self.num_cpus) as executor:
                 arg_pairs = [
@@ -823,7 +823,7 @@ class EvalHarness:
 
     def __call__(self) -> list[CandidateRunResult]:
         """
-        Executes the EvalHarness. The generate_mode and eval_mode can be set to "sync" (default),
+        Executes the EvalHarness. The response_mode and eval_mode can be set to "sync" (default),
         "async", or "parallel". The "sync" mode runs the corresponding tasks (generating responses
         or running evals) synchronously, the "async" mode runs the tasks asynchronously using the
         event loop, and the "parallel" mode runs the tasks in parallel using ProcessPoolExecutor

@@ -109,7 +109,7 @@ class CustomRAGAgentCandidate(Candidate):
         )
 
 candidates = [CustomRAGAgentCandidate(**params) for params in param_combinations]
-harness = EvalHarness(generate_mode=Mode.PARALLEL, eval_mode=Mode.PARALLEL)
+harness = EvalHarness(response_mode=Mode.PARALLEL, eval_mode=Mode.PARALLEL)
 harness.add_evals_from_files("examples/nvidia_chatrag_bench/evals/*.yaml")
 harness.add_candidates(candidates)
 

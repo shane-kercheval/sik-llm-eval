@@ -12,8 +12,8 @@ Get started with examples found in the [examples](https://github.com/anaconda/ll
 
 In this framework, there are two fundamental concepts:
 
-- **Eval**: An Eval represents a single test scenario. Each Eval is associated with "checks" which evaluate the response of the LLM against the criteria specified in the check. Examples of checks include verifying if the response matches an exact value, contains specific content, includes code blocks, determining if those code blocks successfully run, and validating the variables/functions created by those code blocks. Users can also create and register custom checks.
-- **Candidate**: A Candidate encapsulates an underlying LLM, model parameters, and its corresponding client. The purpose of a Candidate is to provide a standard interface to pass input to models (or agents), and convert responses to a format that the framework expects.
+- **Eval**: An Eval represents a single test scenario. Each Eval defines an `input` to an LLM or agent, and "checks" which evaluate the response of the agent against the criteria specified in the check. Users can also create and custom checks.
+- **Candidate**: A Candidate is a lightweight wrapper around an LLM or agent that used to standardize the inputs and outputs of the agent with the inputs and outputs associated with the Eval. In other words, different models might expect inputs to be formatted in different ways (and might return responses formatted in different ways) and a Candidate is an adaptor for those models so that the Evals can be defined in one format, regardless of the various formats expected by various models.
 
 ### Examples
 
