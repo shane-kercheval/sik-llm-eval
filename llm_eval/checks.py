@@ -1,14 +1,14 @@
 """
-Defines classes for different types of checks and corresponding registry systems.
+Defines classes for Check objects.
 
-A "check" is a single test defined within an Eval which corresponding to a specific prompt/input.
+A "check" is a single test defined within an Eval which correspondes to a specific prompt/input.
 The goal of a check is to test various aspects of the LLMs response. The intent of the check can
-range from simple matching (i.e. does the LLM response exactly match the expected value provided?)
-to using an LLM to evaluate the response.
+range from simple matching (e.g. does the LLM response match the expected value provided?)
+to calculating a score (e.g. F1 score). Users can create custom Check classes.
 
-A registry system is used to allow the user to save and load checks and check results from a
-dictionary (e.g. from an underlying yaml file). This is useful for defining/storing/running large
-amounts of checks/results.
+A registry system is used to allow the user to save and load checks and check results to/from a
+dictionary (e.g. from an underlying yaml or json file). This is useful for defining/storing/running
+large amounts of checks/results.
 """
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -177,7 +177,7 @@ class ScoreResult(CheckResult):
 @dataclass
 class ResponseModel:
     """
-    Stores the data associated with a request/response. This object is created by the
+    Stores the data associated with a request/response. This object is created by, for example, the
     Eval/EvalHarness and passed to the Check objects' __call__ function to evaluate the response,
     potentially using additional information like input, metadata, or ideal_response.
     """
@@ -192,6 +192,9 @@ class ResponseModel:
         Extracts the values from the ResponseData object based on the path. If the path
         is a string, then a single value is extracted from the ResponseData object according to the
         specified path.
+
+        For example, if the path is `response['content']`, then the response property is assumed
+        to be a dictionary and the value associated with the key 'content' is extracted.
 
         If the path is a dictionary, the dictionary keys should correspond to the names of the
         keys of the dictionary returned, and the values should be the paths to the values in the
@@ -211,16 +214,18 @@ class ResponseModel:
 
 class Check(BaseModel, ABC):
     """
-    Represents a single check in an Eval. A check is responsible for evaluating the response of an
-    LLM or agent. The intent of the check can range from simple matching (i.e. does the LLM
-    response exactly match the expected value provided) to using custom logic (e.g. using an LLM to
-    evaluate the response).
+    Represents a single check in an Eval.
 
-    A Check can be saved to and loaded from a dictionary (e.g. from an underlying yaml file). If
-    the user wants to load the Check into memory as a Check object the, then corresponding Check
-    subclass must be registered with the `register` decorator. This allows the Check to be
-    created from a dictionary by calling `from_dict` with the name of the check in the dictionary
-    with key `check_type` (registered with the decorator) and any parameters for the Check.
+    A Check is a single test defined within an Eval which correspondes to a specific prompt/input.
+    The goal of a check is to test various aspects of the LLMs response. The intent of the check
+    can range from simple matching (e.g. does the LLM response match the expected value provided?)
+    to calculating a score (e.g. F1 score). Users can create custom Check classes.
+
+    A Check can be saved to and loaded from a dictionary (e.g. to/from an underlying yaml or json
+    file). If the user wants to load the Check into memory as a Check object the, then
+    corresponding Check subclass must be registered with the `register` decorator (e.g.
+    `@Check.register(<check name>)`). This allows the Check to be created from a dictionary by
+    calling `from_dict`.
     """
 
     registry: ClassVar[Registry] = Registry()
@@ -228,16 +233,24 @@ class Check(BaseModel, ABC):
         default=None,
         description="""
         `data_path` is a string, list, or dictionary specifying where to extract the value from
-        ResponseModel.
+        the ResponseModel. When the Check is ran from an Eval, the check is called via
+        `run_on_model`, and the ResponseModel object is passed to the check so that the object has
+        access to all data associated with the eval (e.g. response, original input, the ideal
+        response, etc.).
 
         If the value is a string, then a single value is extracted from the ResponseModel object
-        according to the specified path. The path is a string that specifies the attribute access,
+        according to the specified path. The string path value specifies the attribute access,
         dictionary key access, or list index access to the value in the ResponseModel object.
 
-        The default data_path is 'response', which extracts the `response` attribute from
-        the ResponseModel object.
+        For example, if the path is `response['content']`, then the response property is assumed
+        to be a dictionary and the value associated with the key 'content' is extracted.
 
-        If the data_path is set to an empty string, the entire ResponseModel object will be
+        The default `data_path` is 'response', which extracts the `response` attribute from
+        the ResponseModel object. Therefore, by default, all Check objects will be passed the
+        `response` attribute from the ResponseModel object, unless the class overrides the
+        `default_data_path` property, or the `data_path` is set to a different value.
+
+        If `data_path` is set to an empty string, the entire ResponseModel object will be
         passed to the check. This is useful if the check needs to access multiple fields in the
         ResponseModel object.
 
@@ -260,10 +273,10 @@ class Check(BaseModel, ABC):
         a list of values is returned.
 
         If the data_path is a dictionary, the dictionary dictionary keys should correspond to
-        the names of the parameters in the Check subclass `_call` method. The values in the
+        the names of the parameters in the Check subclass `__call__` method. The values in the
         dictionary should be the paths to the values in the ResponseModel object (in the same
         format as the string data_path, described above). The values extracted from the
-        ResponseModel object will be passed to the Check subclass `_call` method as keyword
+        ResponseModel object will be passed to the Check subclass `__call__` method as keyword
         arguments.
 
         Example:
@@ -274,7 +287,7 @@ class Check(BaseModel, ABC):
             'metadata': 'response.metadata',
         }
         class MyCheck(Check):
-            def _call(self, response: str, metadata: dict[str, Any]) -> CheckResult:
+            def __call__(self, response: str, metadata: dict[str, Any]) -> CheckResult:
                 # response will be the value at response['content']
                 # metadata will be the value at response.metadata
                 pass

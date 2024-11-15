@@ -6,8 +6,8 @@ A Candidate is a callable object that takes input (e.g. OpenAI-style messages) a
 response. The input and response can be any type of object that can be serialized/de-serialized
 (e.g. string, dictionary, list, etc.).
 
-IMPORTANT: Candidate objects should be stateless, such that the objects should not retain any
-state between calls (__call__ invocations). This is because the Candidate objects are reused
+IMPORTANT: Candidate objects should be stateless, meaning the objects should not retain any
+state between calls (`__call__` invocations). This is because the Candidate objects are reused
 between different evals and tests, and the state of the object should not be retained/used between
 different evals/tests.
 
@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import os
 import contextlib
+import time
 from datetime import datetime, timezone
 from inspect import iscoroutinefunction
 from copy import deepcopy
@@ -266,7 +267,9 @@ class ServiceCandidate(Candidate, ABC):
 
     def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
+        start = time.time()
         response = self._invoke_client_callable(input)
+        duration = time.time() - start
         prompt_tokens = response.usage.get("prompt_tokens")
         completion_tokens = response.usage.get("completion_tokens")
         total_tokens = response.usage.get("total_tokens")
@@ -300,6 +303,7 @@ class ServiceCandidate(Candidate, ABC):
                 "completion_cost": completion_cost,
                 "total_cost": total_cost,
                 "completion_characters": completion_characters,
+                "duration_seconds": duration,
             },
         )
 
