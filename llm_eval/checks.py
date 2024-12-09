@@ -17,7 +17,7 @@ from enum import Enum, auto
 from inspect import getsource
 import re
 from textwrap import dedent
-from typing import Any, Callable, ClassVar, Type
+from typing import Any, Callable, ClassVar
 from pydantic import BaseModel, ConfigDict, Field
 from llm_eval.candidates import Candidate
 from llm_eval.internal_utilities import (
@@ -99,9 +99,9 @@ class CheckResult(BaseModel, ABC):
         """).strip()
 
     @classmethod
-    def register(cls, result_type: str | Enum):  # noqa: ANN102
+    def register(cls, result_type: str | Enum):
         """Register a subclass of Check."""
-        def decorator(subclass: Type[CheckResult]) -> Type[CheckResult]:
+        def decorator(subclass: type[CheckResult]) -> type[CheckResult]:
             assert issubclass(subclass, CheckResult), \
                 f"CheckResult '{result_type}' ({subclass.__name__}) must extend CheckResult"
             cls.registry.register(type_name=result_type, item=subclass)
@@ -109,7 +109,7 @@ class CheckResult(BaseModel, ABC):
         return decorator
 
     @classmethod
-    def from_dict(cls, data: dict):  # noqa: ANN102
+    def from_dict(cls, data: dict):
         """
         Create a Checkresult object from a dictionary. This method requires that the Checkresult
         subclass has been registered with the `register` decorator.
@@ -358,9 +358,9 @@ class Check(BaseModel, ABC):
         return result
 
     @classmethod
-    def register(cls, check_type: str | Enum):  # noqa: ANN102
+    def register(cls, check_type: str | Enum):
         """Register a subclass of Check."""
-        def decorator(subclass: Type[Check]) -> Type[Check]:
+        def decorator(subclass: type[Check]) -> type[Check]:
             assert issubclass(subclass, Check), \
                 f"Check '{check_type}' ({subclass.__name__}) must extend Check"
             cls.registry.register(type_name=check_type, item=subclass)
@@ -368,7 +368,7 @@ class Check(BaseModel, ABC):
         return decorator
 
     @classmethod
-    def from_dict(cls, data: dict):  # noqa: ANN102
+    def from_dict(cls, data: dict):
         """
         Create a Check object from a dictionary. This method requires that the Check subclass has
         been registered with the `register` decorator.

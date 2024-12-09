@@ -10,7 +10,8 @@ from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
 from textwrap import dedent
-from typing import Callable, Iterator
+from typing import Callable
+from collections.abc import Iterator
 from llm_eval.candidates import Candidate, CandidateResponse, is_async_candidate
 from llm_eval.checks import (
     Check,

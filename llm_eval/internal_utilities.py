@@ -17,7 +17,7 @@ import re
 import io
 import contextlib
 from textwrap import dedent
-from typing import Any, Type, TypeVar
+from typing import Any, TypeVar
 import tenacity
 import yaml
 
@@ -358,7 +358,7 @@ class Registry:
 
     def __init__(self):
         """Initialize the registry with an empty dictionary."""
-        self._registry: dict[str, Type[T]] = {}
+        self._registry: dict[str, type[T]] = {}
 
     @staticmethod
     def _clean_type_name(type_name: str | Enum) -> str:
@@ -367,7 +367,7 @@ class Registry:
             return type_name.name.upper()
         return type_name.upper()
 
-    def register(self, type_name: str | Enum, item: Type[T]) -> None:
+    def register(self, type_name: str | Enum, item: type[T]) -> None:
         """
         Register a class with a specified type name (case-insensitive).
 
@@ -386,7 +386,7 @@ class Registry:
         item._type_name = type_name
         self._registry[type_name] = item
 
-    def get(self, type_name: str | Enum) -> Type[T]:
+    def get(self, type_name: str | Enum) -> type[T]:
         """
         Get the class associated with the given type name.
 
@@ -431,7 +431,7 @@ class EnumMixin:
     """
 
     @classmethod
-    def to_enum(cls, name: str) -> 'Enum':  # noqa: ANN102
+    def to_enum(cls, name: str) -> 'Enum':
         """Get an Enum member from its string name (case-insensitive)."""
         if isinstance(name, cls):
             return name

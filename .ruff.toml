@@ -7,7 +7,7 @@ select = [
     "PD", "PL", "NPY", "RUF",
 ]
 ignore = [
-    "ANN101", "ANN204", "ANN206",
+    "ANN204", "ANN206",
     "D105", "D107", "D203", "D205", "D212", "D401", "D407", "D413",
     "PLR0913", "PLR2004"
 ]
@@ -15,7 +15,7 @@ ignore = [
 [lint.per-file-ignores]
 "tests/*" = [
     # ignore same warnings as above
-    "ANN101", "ANN204", "ANN206",
+    "ANN204", "ANN206",
     "D105", "D107", "D203", "D205", "D212", "D401", "D407", "D413",
     "PLR0913", "PLR2004",
     # ignore additional warnings

@@ -140,7 +140,7 @@ class Candidate(SerializationMixin, DictionaryEqualsMixin, ABC):
         """Invokes the underlying model with the input and returns the response."""
 
     @classmethod
-    def register(cls, candidate_type: str | Enum):  # noqa: ANN102
+    def register(cls, candidate_type: str | Enum):
         """Register a subclass of Candidate."""
 
         def decorator(subclass: type[Candidate]) -> type[Candidate]:
@@ -154,7 +154,7 @@ class Candidate(SerializationMixin, DictionaryEqualsMixin, ABC):
         return decorator
 
     @classmethod
-    def is_registered(cls, candidate_type: str | Enum) -> bool:  # noqa: ANN102
+    def is_registered(cls, candidate_type: str | Enum) -> bool:
         """Check if a candidate type is registered."""
         return candidate_type in cls.registry
 
