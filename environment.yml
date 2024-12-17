@@ -14,7 +14,7 @@ dependencies:
   - markdownify=0.11
   - mistralai=1.1
   - numpy=1.26
-  - openai=1.25
+  - openai=1.57
   - pandas=2.2
   - pip=23.3
   - pydantic=2.8
@@ -27,7 +27,7 @@ dependencies:
   - ruff=0.7
   - tenacity=8.2
   - tensorflow=2.15
-  - tiktoken=0.7
+  - tiktoken=0.8
   - tomlkit=0.12
   - transformers=4.37
   - 'urllib3>=2.2.2 # not directly required, pinned by Snyk to avoid a vulnerability'
