@@ -13,11 +13,9 @@ from tiktoken import Encoding
 
 CHAT_MODEL_COST_PER_TOKEN = {
     # LATEST MODELS
-    'gpt-4o': {'input': 5.00 / 1_000_000, 'output': 15.00 / 1_000_000},
     'gpt-4o-2024-05-13': {'input': 5.00 / 1_000_000, 'output': 15.00 / 1_000_000},
     'gpt-4o-2024-08-06': {'input': 2.50 / 1_000_000, 'output': 10.00 / 1_000_000},
 
-    'gpt-4o-mini':  {'input': 0.15 / 1_000_000, 'output': 0.60 / 1_000_000},
     'gpt-4o-mini-2024-07-18':  {'input': 0.15 / 1_000_000, 'output': 0.60 / 1_000_000},
     # GPT-4-Turbo 128K
     'gpt-4-turbo-2024-04-09': {'input': 10.00 / 1_000_000, 'output': 30.00 / 1_000_000},
@@ -39,6 +37,8 @@ CHAT_MODEL_COST_PER_TOKEN = {
     # GPT-3.5-Turbo 16K
     # 'gpt-3.5-turbo-16k-0613': {'input': 0.003 / 1_000, 'output': 0.004 / 1_000},
 }
+CHAT_MODEL_COST_PER_TOKEN['gpt-4o'] = CHAT_MODEL_COST_PER_TOKEN['gpt-4o-2024-08-06']
+CHAT_MODEL_COST_PER_TOKEN['gpt-4o-mini'] = CHAT_MODEL_COST_PER_TOKEN['gpt-4o-mini-2024-07-18']
 
 EMBEDDING_MODEL_COST_PER_TOKEN = {
     # "Prices are per 1,000 tokens. You can think of tokens as pieces of words, where 1,000 tokens
@@ -295,7 +295,7 @@ class OpenAICompletion(OpenAICompletionWrapperBase):
         """Non-Async __call__."""
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
             start_time = time.time()
@@ -357,7 +357,7 @@ class AsyncOpenAICompletion(OpenAICompletionWrapperBase):
         """Async __call__."""
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
             start_time = time.time()
@@ -503,7 +503,7 @@ class OpenAITools(OpenAICompletionWrapperBase):
         For example, OpenAICompletionResponse can be returned if `auto` and unrelated question.
         """
         model = model or self.model
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         start_time = time.time()
         response = self.client.chat.completions.create(
             model=model,

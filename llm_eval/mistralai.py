@@ -213,7 +213,7 @@ class MistralAICompletion(MistralAICompletionWrapperBase):
         """Non-Async __call__."""
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
             start_time = time.time()
@@ -279,7 +279,7 @@ class AsyncMistralAICompletion(MistralAICompletionWrapperBase):
         """Async __call__."""
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
             start_time = time.time()
@@ -343,7 +343,7 @@ class MistralAITools(MistralAICompletionWrapperBase):
         ) -> MistralAIToolsResponse | MistralAICompletionResponse:
         """Call the MistralAI Tools API and return the response."""
         model = model or self.model
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         start_time = time.time()
         response = self.client.chat.complete(
             model=model,

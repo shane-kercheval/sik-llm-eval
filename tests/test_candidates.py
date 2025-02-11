@@ -4,6 +4,7 @@ from copy import deepcopy
 from openai import BadRequestError
 import pytest
 from llm_eval.candidates import (
+    BedrockCandidate,
     Candidate,
     CandidateResponse,
     CandidateType,
@@ -228,3 +229,28 @@ def test__OpenAIToolsCandidate__from_yaml(
     assert isinstance(arguments['location'], str)
     assert 'unit' in arguments
     assert arguments['unit'] in ['celsius', 'fahrenheit']
+
+
+@pytest.mark.skipif('BEDROCK_API_KEY' not in os.environ, reason="BEDROCK_API_KEY not set in environment variables")  # noqa
+@pytest.mark.skipif('BEDROCK_API_URL' not in os.environ, reason="BEDROCK_API_URL not set in environment variables")  # noqa
+def test__BedrockCandidate__default__no_parameters(bedrock_model: str):
+    candidate = BedrockCandidate(model=bedrock_model)
+    assert candidate.to_dict() == {'candidate_type': CandidateType.BEDROCK.name, 'model': bedrock_model}  # noqa
+    messages = [user_message("What is the capital of France?")]
+    response = candidate(messages)
+    assert 'Paris' in response.response
+    assert response.metadata['prompt_tokens'] > 0
+    assert response.metadata['completion_tokens'] > 0
+    assert response.metadata['total_tokens'] > 0
+    assert response.metadata['prompt_cost'] > 0
+    assert response.metadata['completion_cost'] > 0
+    assert response.metadata['total_cost'] > 0
+    assert response.metadata['completion_characters'] > 0
+    # test that the model generated from the dict is the same as the original
+    # but that they don't share history (i.e. there is a new underlying object for the model)
+    recreated_candidate = Candidate.from_dict(candidate.to_dict())
+    assert candidate == recreated_candidate
+    assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.BEDROCK.name, 'model': bedrock_model}  # noqa
+    messages = [user_message("What is the capital of Germany?")]
+    response = recreated_candidate(messages)
+    assert 'Berlin' in response.response

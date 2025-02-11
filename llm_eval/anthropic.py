@@ -205,7 +205,7 @@ class AnthropicCompletion(AnthropicCompletionWrapperBase):
         created = int(datetime.datetime.now().timestamp())
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
             start_time = time.time()
@@ -280,7 +280,7 @@ class AsyncAnthropicCompletion(AnthropicCompletionWrapperBase):
         created = datetime.datetime.now().timestamp()
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
             start_time = time.time()
@@ -358,7 +358,7 @@ class AnthropicTools(AnthropicCompletionWrapperBase):
     ) -> AnthropicToolsResponse | AnthropicCompletionResponse:
         """Call the Anthropic Tools API and return the response."""
         model = model or self.model
-        model_parameters = model_kwargs or self.model_parameters
+        model_parameters = {**self.model_parameters, **model_kwargs}
         start_time = time.time()
         response = self.client.messages.create(
             model=model,

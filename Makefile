@@ -63,3 +63,7 @@ build_package:
 gen_build_files:
 	# Generate files required for building project as a wheel file or a conda package
 	python scripts/generate_build_files.py
+
+build_local:
+	# After running this commands you can now do `conda install -c local llm-eval` from anywhere and with any activated environment to install `llm-eval`.
+	conda build conda.recipe

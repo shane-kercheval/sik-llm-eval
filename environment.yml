@@ -5,27 +5,28 @@ channels:
   - conda-forge
 dependencies:
   - PyYAML=6.0
-  - anthropic=0.37.1
+  - anthropic=0.37
   - 'anyio>=4.4.0 # not directly required, pinned by Snyk to avoid a vulnerability'
   - coverage=7.2
   - faker=18.9
   - joblib=1.4
   - markdown=3.4
   - markdownify=0.11
-  - mistralai=1.1
   - numpy=1.26
-  - openai=1.57
+  - openai=1.61
   - pandas=2.2
   - pip=23.3
   - pydantic=2.8
   - pygments=2.15
-  - pytest=7.4
-  - python-dotenv=0.21
+  - pytest-asyncio=0.25
+  - pytest-mock=3.14
+  - pytest=8.3
+  - python-dotenv=1.0
   - pytorch=2.1
   - 'requests>=2.32.2 # not directly required, pinned by Snyk to avoid a vulnerability'
   - ruamel.yaml=0.18
-  - ruff=0.7
-  - tenacity=8.2
+  - ruff=0.9
+  - tenacity=9.0
   - tensorflow=2.15
   - tiktoken=0.8
   - tomlkit=0.12

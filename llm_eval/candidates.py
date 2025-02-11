@@ -44,6 +44,10 @@ from textwrap import dedent
 from typing import Any, Callable, Literal, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from openai import OpenAI
+from llm_eval.bedrock import (
+    MODEL_COST_PER_TOKEN as BEDROCK_MODEL_COST_PER_TOKEN,
+    BedrockCompletion,
+)
 from llm_eval.openai import (
     MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
     OpenAICompletion,
@@ -85,12 +89,13 @@ def is_async_candidate(candidate: Callable | Candidate) -> bool:
 class CandidateType(EnumMixin, Enum):
     """Provides a typesafe representation of the built-in types of Candidates."""
 
-    OPENAI = auto()
-    OPENAI_TOOLS = auto()
-    MISTRALAI = auto()
-    MISTRALAI_TOOLS = auto()
     ANTHROPIC = auto()
     ANTROPIC_TOOLS = auto()
+    BEDROCK = auto()
+    MISTRALAI = auto()
+    MISTRALAI_TOOLS = auto()
+    OPENAI = auto()
+    OPENAI_TOOLS = auto()
 
 
 class CandidateResponse(BaseModel):
@@ -664,3 +669,41 @@ class AnthropicToolsCandidate(AnthropicCandidate):
             if isinstance(response, AnthropicToolsResponse)
             else response.content
         )
+
+
+@Candidate.register(CandidateType.BEDROCK)
+class BedrockCandidate(ServiceCandidate):
+    """
+    Wrapper around the OpenAI API that allows the user to create a AWS Bedrock candidate from a
+    dictionary.
+
+    NOTE: the `BEDROCK_API_KEY` environment variable must be set to use this class. The url can
+    either be passed in the init or set as an environment variable (`BEDROCK_AP_URL`).
+    """
+
+    @property
+    def model_cost_per_token(self) -> float | None:
+        """
+        Return the cost per token for the model. This is used to calculate the cost of the
+        completion.
+        """
+        return BEDROCK_MODEL_COST_PER_TOKEN.get(self.model)
+
+    @property
+    def client_callable(self) -> BedrockCompletion:
+        """Return the client for the Bedrock service."""
+        return BedrockCompletion(
+            client=OpenAI(
+                base_url=self.endpoint_url or os.getenv('BEDROCK_API_URL'),
+                api_key=os.getenv('BEDROCK_API_KEY'),
+            ),
+            model=self.model,
+            **self.parameters or {},
+        )
+
+    def _invoke_client_callable(
+        self,
+        input: list[dict[str, str]],  # noqa: A002
+    ) -> OpenAICompletionResponse:
+        """Invoke the client with the input and return the response."""
+        return self.client_callable(input)

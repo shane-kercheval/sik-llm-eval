@@ -21,7 +21,13 @@ load_dotenv()
 @pytest.fixture
 def openai_model() -> str:
     """Returns the name of the OpenAI model."""
-    return "gpt-4o-mini"
+    return 'gpt-4o-mini'
+
+
+@pytest.fixture
+def bedrock_model() -> str:
+    """Returns the name of the OpenAI model."""
+    return 'anthropic.claude-3-haiku-20240307-v1:0'
 
 
 @Candidate.register('MockCandidate')

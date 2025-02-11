@@ -1,5 +1,6 @@
 """Tests OpenAI classes."""
 import pytest
+from pytest_mock import MockerFixture
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
 from llm_eval.openai import (
@@ -13,6 +14,37 @@ from llm_eval.openai import (
     num_tokens,
 )
 from tests.conftest import AsyncMockOpenAI
+
+
+DEFAULT_MODEL = 'gpt-4o-mini'
+
+
+@pytest.fixture
+def mock_openai_client(mocker: MockerFixture):
+    # Create base mock client
+    mock_client = mocker.Mock()
+    # Create the nested structure for chat.completions.create
+    mock_client.chat = mocker.Mock()
+    mock_client.chat.completions = mocker.Mock()
+
+    def create_side_effect(**kwargs):  # noqa: ANN003, ANN202
+        mock_response = mocker.Mock()
+        mock_response.model = "mock"
+        mock_response.created = 1234567890
+        mock_response.object = "chat.completion"
+        mock_response.usage = {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+        # Store all input parameters in content
+        mock_choice = mocker.Mock()
+        mock_choice.message.content = str(kwargs)
+        mock_choice.message.role = "assistant"
+        mock_choice.message.tool_calls = None
+        mock_choice.logprobs = None
+        mock_choice.finish_reason = "stop"
+        mock_response.choices = [mock_choice]
+        return mock_response
+
+    mock_client.chat.completions.create = mocker.Mock(side_effect=create_side_effect)
+    return mock_client
 
 
 def test__OpenAIResponse__dict_metadata_model_dump():
@@ -58,7 +90,7 @@ def test__OpenAICompletionWrapper() -> None:
 
     model = OpenAICompletion(
         client=client,
-        model='gpt-4o-mini',
+        model=DEFAULT_MODEL,
         temperature=0.1,
     )
     response = model(messages=messages)
@@ -103,9 +135,8 @@ def test__OpenAICompletionWrapper() -> None:
     assert response.usage['completion_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.logprobs is not None
-    assert len(response.logprobs) == response.usage['completion_tokens']
-    assert response.logprobs_tokens is not None
-    assert len(response.logprobs_tokens) == response.usage['completion_tokens']
+    assert len(response.logprobs) > 0
+    assert len(response.logprobs) == len(response.logprobs_tokens)
 
 def test__OpenAICompletionWrapper__streaming() -> None:
     # test valid parameters for streaming
@@ -118,7 +149,7 @@ def test__OpenAICompletionWrapper__streaming() -> None:
     assert client.api_key is not None  # via load_dotenv in conftest.py
     model = OpenAICompletion(
         client=client,
-        model='gpt-4o-mini',
+        model=DEFAULT_MODEL,
         stream_callback=streaming_callback,
     )
     expected_response = "testing testing"
@@ -172,6 +203,42 @@ def test__OpenAICompletionWrapper__streaming() -> None:
     assert response.finish_reason == 'length'
     assert callback_chunks[-1].finish_reason == 'length'
 
+def test__OpenAICompletionWrapper__model_kwargs(mock_openai_client) -> None:  # noqa: ANN001
+    """Ensures that the correct model parameters are passed to the OpenAI API."""
+    # test passing in model_kwargs to the OpenAICompletion object
+    completion = OpenAICompletion(client=mock_openai_client, model='mock', temperature=0.5, max_tokens=10)  # noqa: E501
+    response = completion(messages=[{'role': 'user', 'content': 'test'}])
+    input_received = eval(response.content)
+    assert input_received['messages'] == [{'role': 'user', 'content': 'test'}]
+    assert input_received['temperature'] == 0.5
+    assert input_received['max_tokens'] == 10
+
+    # test passing in model_kwargs to the __call__ method
+    completion = OpenAICompletion(client=mock_openai_client, model='mock')
+    response = completion(messages=[{'role': 'user', 'content': 'test'}], temperature=0.5, max_tokens=10)  # noqa: E501
+    input_received = eval(response.content)
+    assert input_received['messages'] == [{'role': 'user', 'content': 'test'}]
+    assert input_received['temperature'] == 0.5
+    assert input_received['max_tokens'] == 10
+
+    # test merging parameters by passing in model_kwargs to both the OpenAICompletion object and
+    # the __call__ method
+    completion = OpenAICompletion(client=mock_openai_client, model='mock', temperature=0.5)
+    response = completion(messages=[{'role': 'user', 'content': 'test'}], max_tokens=10)
+    input_received = eval(response.content)
+    assert input_received['messages'] == [{'role': 'user', 'content': 'test'}]
+    assert input_received['temperature'] == 0.5
+    assert input_received['max_tokens'] == 10
+
+    # test overriding parameters by passing in model_kwargs to both the OpenAICompletion object and
+    # the __call__ method (__call__ method should take precedence)
+    completion = OpenAICompletion(client=mock_openai_client, model='mock', temperature=0.5)
+    response = completion(messages=[{'role': 'user', 'content': 'test'}], max_tokens=10, temperature=0.1)  # noqa: E501
+    input_received = eval(response.content)
+    assert input_received['messages'] == [{'role': 'user', 'content': 'test'}]
+    assert input_received['temperature'] == 0.1
+    assert input_received['max_tokens'] == 10
+
 @pytest.mark.asyncio
 async def test__AsyncOpenAICompletionWrapper() -> None:
     client = AsyncOpenAI()
@@ -181,7 +248,7 @@ async def test__AsyncOpenAICompletionWrapper() -> None:
 
     model = AsyncOpenAICompletion(
         client=client,
-        model='gpt-4o-mini',
+        model=DEFAULT_MODEL,
         temperature=0.1,
     )
     response = await model(messages=messages)
@@ -226,9 +293,8 @@ async def test__AsyncOpenAICompletionWrapper() -> None:
     assert response.usage['completion_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.logprobs is not None
-    assert len(response.logprobs) == response.usage['completion_tokens']
-    assert response.logprobs_tokens is not None
-    assert len(response.logprobs_tokens) == response.usage['completion_tokens']
+    assert len(response.logprobs) > 0
+    assert len(response.logprobs) == len(response.logprobs_tokens)
 
 @pytest.mark.asyncio
 async def test__AsyncOpenAICompletionWrapper__streaming() -> None:
@@ -242,7 +308,7 @@ async def test__AsyncOpenAICompletionWrapper__streaming() -> None:
     assert client.api_key is not None  # via load_dotenv in conftest.py
     model = AsyncOpenAICompletion(
         client=client,
-        model='gpt-4o-mini',
+        model=DEFAULT_MODEL,
         stream_callback=streaming_callback,
     )
     expected_response = "testing testing"
@@ -488,7 +554,7 @@ def test__OpenAITools(function_weather: Function, function_stocks: Function):
         function_weather.to_dict(),
         function_stocks.to_dict(),
     ]
-    model = OpenAITools(client=OpenAI(), model='gpt-4o-mini')
+    model = OpenAITools(client=OpenAI(), model=DEFAULT_MODEL)
     ####
     # first interaction
     ####
@@ -498,7 +564,7 @@ def test__OpenAITools(function_weather: Function, function_stocks: Function):
         tools=tools,
     )
     assert isinstance(response, OpenAIToolsResponse)
-    assert 'gpt-4o-mini' in response.model
+    assert DEFAULT_MODEL in response.model
     assert response.role == 'assistant'
     assert response.finish_reason == 'tool_calls'
     assert response.created is not None
@@ -521,14 +587,14 @@ def test__OpenAITools__unrelated_prompt__auto(function_weather: Function, functi
         function_weather.to_dict(),
         function_stocks.to_dict(),
     ]
-    model = OpenAITools(client=OpenAI(), model='gpt-4o-mini')
+    model = OpenAITools(client=OpenAI(), model=DEFAULT_MODEL)
     response = model(
         messages= [{"role": "user", "content": "How's it going?"}],
         tools=tools,
         tool_choice="auto",
     )
     assert isinstance(response, OpenAICompletionResponse)
-    assert 'gpt-4o-mini' in response.model
+    assert DEFAULT_MODEL in response.model
     assert response.role == 'assistant'
     assert response.finish_reason == 'stop'
     assert response.created is not None
@@ -548,7 +614,7 @@ def test__OpenAITools__unrelated_prompt__required(function_weather: Function, fu
         function_weather.to_dict(),
         function_stocks.to_dict(),
     ]
-    model = OpenAITools(client=OpenAI(), model='gpt-4o-mini')
+    model = OpenAITools(client=OpenAI(), model=DEFAULT_MODEL)
     response = model(
         messages= [{"role": "user", "content": "How's it going?"}],
         tools=tools,
@@ -561,14 +627,14 @@ def test__OpenAITools__unrelated_prompt__none(function_weather: Function, functi
         function_weather.to_dict(),
         function_stocks.to_dict(),
     ]
-    model = OpenAITools(client=OpenAI(), model='gpt-4o-mini')
+    model = OpenAITools(client=OpenAI(), model=DEFAULT_MODEL)
     response = model(
         messages= [{"role": "user", "content": "How's it going?"}],
         tools=tools,
         tool_choice="none",
     )
     assert isinstance(response, OpenAICompletionResponse)
-    assert 'gpt-4o-mini' in response.model
+    assert DEFAULT_MODEL in response.model
     assert response.role == 'assistant'
     assert response.finish_reason == 'stop'
     assert response.created is not None

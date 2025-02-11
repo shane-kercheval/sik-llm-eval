@@ -18,12 +18,12 @@ requirements:
     - PyYAML=6.0
     - joblib=1.4
     - numpy=1.26
-    - openai=1.57
+    - openai=1.61
     - pydantic=2.8
     - python
-    - python-dotenv=0.21
+    - python-dotenv=1.0
     - pytorch=2.1
-    - tenacity=8.2
+    - tenacity=9.0
     - tiktoken=0.8
     - transformers=4.37
 about:
