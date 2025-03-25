@@ -2,7 +2,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import time
-from typing import Callable, Literal
+from collections.abc import Callable
+from typing import Literal
 from functools import cache
 import json
 from openai import OpenAI
@@ -163,6 +164,16 @@ class OpenAIChatResponse(OpenAICompletionResponse):
     logprobs_tokens: list[str] | None = None
     logprobs: list[float] | None = None
 
+class OpenAIStructuredOutputResponse(OpenAIResponse):
+    """
+    Stores the parsed response of an OpenAI structured output request. If OpenAI refuses to
+    generate a structured output, the response will be stored in the `refusal` field.
+    """
+
+    parsed: BaseModel | None
+    refusal: str | None
+    usage: dict | None = None
+    duration_seconds: float | None = None
 
 class OpenAICompletionWrapperBase(ABC):
     """
@@ -172,6 +183,9 @@ class OpenAICompletionWrapperBase(ABC):
     The user can specify the model name, timeout, stream, and other parameters for the API call
     either in the constructor or when calling the object. If the latter, the parameters specified
     when calling the object will override the parameters specified in the constructor.
+
+    `response_format` is used for structured output and should be a pydantic model. If provided,
+    the response will be parsed into the specified model and returned in `.content`.
     """
 
     def __init__(
@@ -179,12 +193,14 @@ class OpenAICompletionWrapperBase(ABC):
             client: OpenAI,
             model: str,
             stream_callback: Callable | None = None,
+            response_format: type[BaseModel] | None = None,
             **model_kwargs: dict,
             ) -> None:
         self.client = client
         self.model = model
         self.stream_callback = stream_callback
         self.model_parameters = model_kwargs or {}
+        self.response_format = response_format
 
     @staticmethod
     def _parse_response(response) -> OpenAIChatResponse | OpenAICompletionResponse:  # noqa: ANN001
@@ -291,14 +307,33 @@ class OpenAICompletion(OpenAICompletionWrapperBase):
             model: str | None = None,
             stream_callback: Callable | None = None,
             **model_kwargs: dict,
-        ) -> OpenAIChatResponse | OpenAICompletionResponse:
+        ) -> OpenAIChatResponse | OpenAICompletionResponse | OpenAIStructuredOutputResponse:
         """Non-Async __call__."""
         model = model or self.model
         stream_callback = stream_callback or self.stream_callback
         model_parameters = {**self.model_parameters, **model_kwargs}
+        if self.response_format:
+            start_time = time.perf_counter()
+            response = self.client.beta.chat.completions.parse(
+                model=model,
+                messages=messages,
+                response_format=self.response_format,
+                **model_parameters,
+            )
+            end_time = time.perf_counter()
+            return OpenAIStructuredOutputResponse(
+                object_name='client.beta.chat.completions.parse',
+                model=response.model,
+                created=response.created,
+                parsed=response.choices[0].message.parsed,
+                refusal=response.choices[0].message.refusal,
+                usage=dict(response.usage) if response.usage else None,
+                duration_seconds=end_time - start_time,
+            )
+
         if stream_callback:
             chunks = []
-            start_time = time.time()
+            start_time = time.perf_counter()
             response = self.client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -318,7 +353,7 @@ class OpenAICompletion(OpenAICompletionWrapperBase):
                 content="",
                 finish_reason=chunk.choices[0].finish_reason,  # last finish reason
             ))
-            end_time = time.time()
+            end_time = time.perf_counter()
             return OpenAIChatResponse(
                 object_name='chat.completion',
                 model=chunks[0].model,
@@ -328,14 +363,14 @@ class OpenAICompletion(OpenAICompletionWrapperBase):
                 content="".join([chunk.content for chunk in chunks]),
                 finish_reason=chunk.choices[0].finish_reason,
             )
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = self.client.chat.completions.create(
             model=model,
             messages=messages,
             stream=False,
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = OpenAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response
@@ -360,7 +395,7 @@ class AsyncOpenAICompletion(OpenAICompletionWrapperBase):
         model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
-            start_time = time.time()
+            start_time = time.perf_counter()
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -380,7 +415,7 @@ class AsyncOpenAICompletion(OpenAICompletionWrapperBase):
                 content="",
                 finish_reason=chunk.choices[0].finish_reason,  # last finish reason
             ))
-            end_time = time.time()
+            end_time = time.perf_counter()
             return OpenAIChatResponse(
                 object_name='chat.completion',
                 model=chunks[0].model,
@@ -390,14 +425,14 @@ class AsyncOpenAICompletion(OpenAICompletionWrapperBase):
                 content="".join([chunk.content for chunk in chunks]),
                 finish_reason=chunk.choices[0].finish_reason,
             )
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = await self.client.chat.completions.create(
             model=model,
             messages=messages,
             stream=False,
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = OpenAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response
@@ -504,7 +539,7 @@ class OpenAITools(OpenAICompletionWrapperBase):
         """
         model = model or self.model
         model_parameters = {**self.model_parameters, **model_kwargs}
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = self.client.chat.completions.create(
             model=model,
             messages=messages,
@@ -512,7 +547,7 @@ class OpenAITools(OpenAICompletionWrapperBase):
             tool_choice=tool_choice,
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = OpenAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response

@@ -1,5 +1,5 @@
 """Provides a simple interface for using AWS Bedrock via the OpenAI API."""
-from typing import Callable
+from collections.abc import Callable
 from llm_eval.openai import (
     AsyncOpenAICompletion,
     OpenAIChatResponse,

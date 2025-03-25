@@ -1,11 +1,9 @@
 """Contains tests for eval Check objects."""
-from copy import deepcopy
 import re
 from textwrap import dedent
 import pandas as pd
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 import pytest
-from llm_eval.candidates import Candidate
 from llm_eval.checks import (
     Check,
     CheckResult,
@@ -26,10 +24,9 @@ from llm_eval.checks import (
     ResponseModel,
     ScoreResult,
     ToolCallsCheck,
-    ToxicityCheck,
 )
-from llm_eval.openai import user_message
 from llm_eval.utilities import f1_score, precision_score_tokens, recall_score_tokens
+from tests.conftest import OPENAI_DEFAULT_MODEL
 
 
 def test__CheckType__mixin_behavior():
@@ -492,6 +489,13 @@ def test__Check__data_path__override():
                 },
             )
     try:
+        check = FakeCheck(metadata={'foo': 'bar'})
+        assert check.to_dict() == {
+            'check_type': 'FAKECHECK__VALUE_EXTRACT',
+            'metadata': {'foo': 'bar'},
+        }
+        assert Check.from_dict(check.to_dict()) == check
+
         check = FakeCheck()
         result = check.run_on_model(ResponseModel(input='foo', response='bar'))
         assert result.value
@@ -2919,42 +2923,71 @@ def test__ToolCallsCheck__string_response():
     assert result.success is False
     assert result.value == 0
 
-def test__LLMCheck__openai(openai_candidate_template: dict):
+def test__LLMCheck__openai():
     """Test that the template for an OpenAI candidate works."""
-    template = deepcopy(openai_candidate_template)
-    candidate = Candidate.from_dict(template)
+
+    class ContainsToxicity(BaseModel):
+        contains_toxicity: bool
+        toxicity_phrase: str | None = None
+
+    ####
+    # Check Toxicity
+    ####
     check = LLMCheck(
-        eval_prompt = "What is the number returned in the question?",
-        evaluator=candidate,
+        eval_prompt="Check if the response contains toxicity.",
+        response_format=ContainsToxicity,
+        openai_model_name=OPENAI_DEFAULT_MODEL,
     )
-    result = check.run_on_model(ResponseModel(
-        input=[user_message("What is the secret number?")],
-        response="The secret number is 42.",
-    ))
+    check_to_dict = check.to_dict()
+    assert check_to_dict['eval_prompt'] == "Check if the response contains toxicity."
+    assert check_to_dict['response_format'] == ContainsToxicity
+    assert check_to_dict['openai_model_name'] == OPENAI_DEFAULT_MODEL
+    assert check.from_dict(check.to_dict()) == check
+
+    result = check.run_on_model(ResponseModel(response="This is bullshit. I don't understand."))
     assert isinstance(result, CheckResult)
-    assert result.success is None
     assert result.metadata['check_type'] == CheckType.LLM
-    assert '42' in result.value
-    assert result.metadata['metadata']['total_cost'] > 0
+    assert isinstance(result.value['parsed'], ContainsToxicity)
+    assert not result.value['refusal']
+    assert "ContainsToxicity" in result.metadata['response_format']
 
-def test__ToxicityCheck__openai(openai_candidate_template: dict):
-    """Test that the template for an OpenAI candidate works."""
-    template = deepcopy(openai_candidate_template)
-    check = ToxicityCheck(evaluator=Candidate.from_dict(template))
-    result = check.run_on_model(ResponseModel(response="This is bullshit."))
-    assert isinstance(result, CheckResult)
-    assert result.success is False
-    assert 'true' in result.value.lower()
-    assert result.metadata['check_type'] == CheckType.TOXICITY
-    assert result.metadata['metadata']['total_cost'] > 0
+    # Check that the response correctly contains toxicity and the phrase
+    assert result.value['parsed'].contains_toxicity is True
+    assert 'bullshit' in result.value['parsed'].toxicity_phrase.lower()
 
-    check = ToxicityCheck(evaluator=Candidate.from_dict(template))
-    result = check.run_on_model(ResponseModel(response="This is great."))
+    assert result.metadata['usage']['prompt_tokens'] > 0
+    assert result.metadata['usage']['completion_tokens'] > 0
+    assert result.metadata['usage']['total_tokens'] > 0
+    assert result.metadata['usage']['prompt_cost'] > 0
+    assert result.metadata['usage']['completion_cost'] > 0
+    assert result.metadata['usage']['total_cost'] > 0
+    assert result.metadata['duration_seconds'] > 0
+
+    ####
+    # Check that the response does not contain toxicity
+    ####
+    check = LLMCheck(
+        eval_prompt="Check if the response contains toxicity.",
+        response_format=ContainsToxicity,
+        openai_model_name=OPENAI_DEFAULT_MODEL,
+    )
+    result = check.run_on_model(ResponseModel(response="Well hello there."))
     assert isinstance(result, CheckResult)
-    assert result.success is True
-    assert 'false' in result.value.lower()
-    assert result.metadata['check_type'] == CheckType.TOXICITY
-    assert result.metadata['metadata']['total_cost'] > 0
+    assert result.metadata['check_type'] == CheckType.LLM
+    assert isinstance(result.value['parsed'], ContainsToxicity)
+    assert not result.value['refusal']
+
+    # Check that the response correctly contains toxicity and the phrase
+    assert result.value['parsed'].contains_toxicity is False
+    assert not result.value['parsed'].toxicity_phrase
+
+    assert result.metadata['usage']['prompt_tokens'] > 0
+    assert result.metadata['usage']['completion_tokens'] > 0
+    assert result.metadata['usage']['total_tokens'] > 0
+    assert result.metadata['usage']['prompt_cost'] > 0
+    assert result.metadata['usage']['completion_cost'] > 0
+    assert result.metadata['usage']['total_cost'] > 0
+    assert result.metadata['duration_seconds'] > 0
 
 def test__PrecisionScore():
     actual_response = "This is the generated TEXT."

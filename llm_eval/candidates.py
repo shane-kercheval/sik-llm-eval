@@ -41,7 +41,8 @@ from copy import deepcopy
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
-from typing import Any, Callable, Literal, TYPE_CHECKING
+from collections.abc import Callable
+from typing import Any, Literal, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from openai import OpenAI
 from llm_eval.bedrock import (
@@ -272,9 +273,9 @@ class ServiceCandidate(Candidate, ABC):
 
     def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
-        start = time.time()
+        start = time.perf_counter()
         response = self._invoke_client_callable(input)
-        duration = time.time() - start
+        duration = time.perf_counter() - start
         prompt_tokens = response.usage.get("prompt_tokens")
         completion_tokens = response.usage.get("completion_tokens")
         total_tokens = response.usage.get("total_tokens")
@@ -678,7 +679,7 @@ class BedrockCandidate(ServiceCandidate):
     dictionary.
 
     NOTE: the `BEDROCK_API_KEY` environment variable must be set to use this class. The url can
-    either be passed in the init or set as an environment variable (`BEDROCK_AP_URL`).
+    either be passed in the init or set as an environment variable (`BEDROCK_API_URL`).
     """
 
     @property

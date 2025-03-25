@@ -13,9 +13,12 @@ from llm_eval.candidates import Candidate, CandidateResponse
 
 from dotenv import load_dotenv
 
-from llm_eval.checks import Check, CheckResult
+from llm_eval.checks import Check, CheckResult, PassFailResult
 from llm_eval.openai import Function, FunctionParameter
 load_dotenv()
+
+
+OPENAI_DEFAULT_MODEL = 'gpt-4o-mini'
 
 
 @pytest.fixture
@@ -101,6 +104,16 @@ class AsyncMockCandidate(Candidate):
         return value
 
 
+class MockCandidateCausesError(Candidate):  # noqa: D101
+    def __call__(self, input: object) -> CandidateResponse:  # noqa
+        raise ValueError("This candidate always fails.")
+
+
+class AsyncMockCandidateCausesError(Candidate):  # noqa: D101
+    async def __call__(self, input: object) -> CandidateResponse:  # noqa
+        raise ValueError("This candidate always fails.")
+
+
 @Candidate.register('MockCandidateCannedResponse')
 class MockCandidateCannedResponse(Candidate):  # noqa
     def __init__(
@@ -134,47 +147,50 @@ class MockCandidateCannedResponse(Candidate):  # noqa
         return Candidate.from_dict(deepcopy(self.to_dict()))
 
 
-# @pytest.fixture
-# def fake_docs_abcd() -> list[Document]:
-#     """Meant to be used MockABCDEmbeddings model."""
-#     return [
-#         Document(content="Doc A", metadata={'id': 0}),
-#         Document(content="Doc B", metadata={'id': 1}),
-#         Document(content="Doc C", metadata={'id': 3}),
-#         Document(content="Doc D", metadata={'id': 4}),
-#     ]
+class MockRetryTestCandidate(Candidate):
+    """Mock candidate that fails first `fail_until` attempts, then succeeds."""
+
+    def __init__(
+            self,
+            fail_until_attempt: int=2,
+            error_message: str = "Simulated failure",
+            response: str = "success",
+            metadata: dict | None=None,
+            parameters: dict | None=None,
+        ):
+        super().__init__(metadata=metadata, parameters=parameters)
+        self.fail_until = fail_until_attempt
+        self.error_message = error_message
+        self.response = response
+        self.metadata['attempts'] = 0
+
+    async def __call__(self, input_):  # noqa: ANN001, ARG002
+        self.metadata['attempts'] += 1
+        # <DO WORK HERE>
+        if self.metadata['attempts'] <= self.fail_until:  # Fail first two attempts
+            raise ValueError(self.error_message)
+        return CandidateResponse(
+            response=self.response,
+            metadata=self.metadata,
+        )
 
 
-# class MockABCDEmbeddings(EmbeddingModel):
-#     """
-#     Used for unit tests to mock the behavior of an LLM.
+class MockCheckCausesError(Check):  # noqa: D101
+    def __call__(self, response: object) -> CheckResult:  # noqa
+        raise RuntimeError("This check always fails.")
 
-#     Used in conjunction with a specific document list `fake_docs_abcd`.
-#     """
+class MockRetryTestCheck(Check):
+    """Mock check that fails first `fail_until_attempt` attempts, then succeeds."""
 
-#     def __init__(self) -> None:
-#         super().__init__()
-#         self.cost_per_token = 7
-#         self._next_lookup_index = None
-#         self.lookup = {
-#             0: [0.5, 0.5, 0.5, 0.5, 0.5],
-#             1: [1, 1, 1, 1, 1],
-#             3: [3, 3, 3, 3, 3],
-#             4: [4, 4, 4, 4, 4],
-#         }
+    fail_until_attempt: int=2
+    error_message: str = "Simulated failure"
+    attempts: int = 0
 
-#     def _run(self, docs: list[Document]) -> tuple[list[Document], EmbeddingRecord]:
-#         if self._next_lookup_index:
-#             embeddings = [self.lookup[self._next_lookup_index]]
-#         else:
-#             embeddings = [self.lookup[x.metadata['id']] for x in docs]
-#         total_tokens = sum(len(x.content) for x in docs)
-#         cost = total_tokens * self.cost_per_token
-#         return embeddings, EmbeddingRecord(
-#             total_tokens=total_tokens,
-#             cost=cost,
-#             metadata={'content': [x.content for x in docs]},
-#         )
+    def __call__(self, response: object) -> CheckResult:  # noqa: ARG002
+        self.attempts += 1
+        if self.attempts <= self.fail_until_attempt:
+            raise ValueError(self.error_message)
+        return PassFailResult(value=True, metadata={'attempts': self.attempts})
 
 
 class FakeRetryHandler:
@@ -389,22 +405,27 @@ class UnregisteredCheckResult(CheckResult):  # noqa
     pass
 
 class UnregisteredCheck(Check):  # noqa
-    def __call__(self, value: str) -> UnregisteredCheckResult:  # noqa: D102
+    def __call__(self, value: str) -> UnregisteredCheckResult:
         return UnregisteredCheckResult(
             success=value is not None,
             value=value,
             metadata={},
         )
 
-    def clone(self) -> Check:  # noqa
+    def clone(self) -> Check:
         return UnregisteredCheck()
 
 class UnregisteredCandidate(Candidate):  # noqa
-    def __init__(self, response: object) -> None:
-        super().__init__()
+    def __init__(
+            self,
+            response: object,
+            metadata: dict | None = None,
+            parameters: dict | None = None,
+        ) -> None:
+        super().__init__(metadata=metadata, parameters=parameters)
         self.response = response
 
-    def __call__(self, prompt: dict) -> dict:  # noqa
+    def __call__(self, prompt: dict) -> dict:
         # returns dictionary instead of string
         return CandidateResponse(response={'prompt': prompt, 'response': self.response})
 

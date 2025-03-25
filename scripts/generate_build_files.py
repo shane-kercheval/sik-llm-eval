@@ -1,5 +1,6 @@
+"""Generate build files for the project."""
 from pathlib import Path
-from typing import Any, Dict, List, NoReturn
+from typing import Any, NoReturn
 
 import tomlkit
 from pydantic import BaseModel
@@ -30,15 +31,15 @@ class TemplateManager:
         self.project_name = config.project_name
         self.project_version = config.project_version
 
-    def load_template(self) -> Dict[str, Any]:
+    def load_template(self) -> dict[str, Any]:
         """Load the template data from a file. This method should be implemented by subclasses."""
         raise NotImplementedError
 
-    def save_updated_file(self, content: Dict[str, Any]) -> NoReturn:
+    def save_updated_file(self, content: dict[str, Any]) -> NoReturn:
         """Save the updated content to a file. This method should be implemented by subclasses."""
         raise NotImplementedError
 
-    def update_dependencies(self, dependencies: List[str]) -> NoReturn:
+    def update_dependencies(self, dependencies: list[str]) -> NoReturn:
         """
         Update the dependency list in the template.
         This method should be implemented by subclasses.
@@ -49,18 +50,18 @@ class TemplateManager:
 class PyProjectManager(TemplateManager):
     """Manages 'pyproject.toml' files for Python projects, inheriting from TemplateManager."""
 
-    def load_template(self) -> Dict[str, Any]:
+    def load_template(self) -> dict[str, Any]:
         """Load a TOML formatted template file and return the content as a dictionary."""
         with open(self.template_path, encoding="utf-8") as file:
             return tomlkit.parse(file.read())
 
-    def save_updated_file(self, content: Dict[str, Any]) -> None:
+    def save_updated_file(self, content: dict[str, Any]) -> None:
         """Save the updated TOML content to the output file."""
         with open(self.output_path, "w", encoding="utf-8") as file:
             tomlkit.dump(tomlkit.comment(self.warning_header), file)
             tomlkit.dump(content, file)
 
-    def update_dependencies(self, dependencies: List[str]) -> None:
+    def update_dependencies(self, dependencies: list[str]) -> None:
         """Update the 'pyproject.toml' file with the specified dependencies."""
         content = self.load_template()
 
@@ -68,7 +69,7 @@ class PyProjectManager(TemplateManager):
         content["project"]["version"] = self.project_version
 
         updated_deps = sorted(
-            set(content["project"]["dependencies"]).union(dependencies)
+            set(content["project"]["dependencies"]).union(dependencies),
         )
         content["project"]["dependencies"] = list(updated_deps)
 
@@ -85,17 +86,17 @@ class YamlManager(TemplateManager):
         self.yaml.preserve_quotes = True
         self.yaml.indent(mapping=2, sequence=4, offset=2)
 
-    def load_template(self) -> Dict[str, Any]:
+    def load_template(self) -> dict[str, Any]:
         """Load the YAML formatted template file and return the content as a dictionary."""
         with open(self.template_path) as file:
             return self.yaml.load(file)
 
-    def save_updated_file(self, content: Dict[str, Any]) -> None:
+    def save_updated_file(self, content: dict[str, Any]) -> None:
         """Save the updated YAML content to the output file."""
         with open(self.output_path, "w") as file:
             self.yaml.dump(content, file)
 
-    def update_dependencies(self, dependencies: List[str]) -> None:
+    def update_dependencies(self, dependencies: list[str]) -> None:
         """
         Update the 'environment.yml' file for conda
         with the specified dependencies.
@@ -113,7 +114,7 @@ class YamlManager(TemplateManager):
 class CondaMetaManager(YamlManager):
     """Manages 'meta.yaml' files specifically for building conda packages."""
 
-    def update_dependencies(self, dependencies: List[str]) -> None:
+    def update_dependencies(self, dependencies: list[str]) -> None:
         """
         Update the 'meta.yaml' file for building a conda package
         with the specified dependencies.
@@ -134,14 +135,14 @@ class CondaMetaManager(YamlManager):
 class RequirementsManager(TemplateManager):
     """Manages 'requirements.txt' files for Python projects, inheriting from TemplateManager."""
 
-    def load_template(self) -> Dict[str, Any]:
+    def load_template(self) -> dict[str, Any]:
         """
         As there's no template to load for a requirements file,
         this method can simply return an empty dictionary.
         """
         return {}
 
-    def save_updated_file(self, content: Dict[str, Any]) -> None:
+    def save_updated_file(self, content: dict[str, Any]) -> None:
         """Save the list of dependencies to the 'requirements.txt' file."""
         requirements_path = self.output_path
         formatted_deps = "\n".join(sorted(set(content["dependencies"])))
@@ -149,7 +150,7 @@ class RequirementsManager(TemplateManager):
             file.write(f"# {self.warning_header}\n")
             file.write(f"{formatted_deps}\n")
 
-    def update_dependencies(self, dependencies: List[str]) -> None:
+    def update_dependencies(self, dependencies: list[str]) -> None:
         """
         Directly save the updated dependencies into 'requirements.txt'.
         This method uses the provided dependency list without modification.
@@ -165,7 +166,7 @@ def pip_to_conda_version(pip_version: str) -> str:
     return pip_version.replace("~=", "=").replace("==", "=").replace("torch", "pytorch")
 
 
-def load_dependencies(file_path: Path) -> List[str]:
+def load_dependencies(file_path: Path) -> list[str]:
     """
     Load dependencies from a given file path.
     Each line in the file should contain a single dependency string in pip-compatible format.
@@ -181,7 +182,7 @@ def _build_config(template_path: Path, output_path: Path) -> TemplateConfig:
         output_path=output_path,
         warning_header="DO NOT EDIT THIS FILE DIRECTLY AS IT IS GENERATED",
         project_name="llm-eval",
-        project_version="0.0.2",
+        project_version="0.0.7",
     )
 
 
@@ -222,7 +223,7 @@ def main() -> None:
         ),
     )
     environment_manager.update_dependencies(
-        [pip_to_conda_version(dep) for dep in all_dependencies]
+        [pip_to_conda_version(dep) for dep in all_dependencies],
     )
 
     meta_manager = CondaMetaManager(
@@ -232,7 +233,7 @@ def main() -> None:
         ),
     )
     meta_manager.update_dependencies(
-        [pip_to_conda_version(dep) for dep in run_dependencies]
+        [pip_to_conda_version(dep) for dep in run_dependencies],
     )
 
 

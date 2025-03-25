@@ -1,17 +1,17 @@
-
 """Classes and functions to evaluate LLMs."""
-
 import asyncio
+import glob
+import json
+import os
+import time
+import uuid
 from dataclasses import dataclass
 from enum import Enum, auto
-import glob
-import os
-from concurrent.futures import ProcessPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timezone
 from textwrap import dedent
-from typing import Callable
-from collections.abc import Iterator
+from concurrent.futures import ProcessPoolExecutor
+from collections.abc import Callable, Iterator
 from llm_eval.candidates import Candidate, CandidateResponse, is_async_candidate
 from llm_eval.checks import (
     Check,
@@ -19,7 +19,9 @@ from llm_eval.checks import (
     PassFailResult,
     ResponseModel,
 )
+from llm_eval.delayed_semaphore import DelayedSemaphore
 from llm_eval.internal_utilities import DictionaryEqualsMixin, SerializationMixin
+from llm_eval.utilities import CustomEncoder
 
 
 class Eval(SerializationMixin, DictionaryEqualsMixin):
@@ -90,7 +92,7 @@ class Eval(SerializationMixin, DictionaryEqualsMixin):
             if isinstance(check, dict):
                 assert 'check_type' in check, "Check dictionary must contain a 'check_type' key"
                 checks_created.append(Check.from_dict(check))
-            elif isinstance(check, (Callable, Check)):
+            elif isinstance(check, Callable | Check):
                 checks_created.append(deepcopy(check))
             else:
                 raise TypeError("Checks must be either a Check, dictionary, or callable.")
@@ -367,8 +369,7 @@ class EvalHarness:
         harness.add_evals_from_files('xxx/evals/')
         harness.add_candidates_from_files('xxx/candidates/')
         results = harness()
-    ```
-
+        ```
     """
 
     def __init__(
@@ -379,7 +380,13 @@ class EvalHarness:
             response_mode: Mode = Mode.SYNC,
             eval_mode: Mode = Mode.SYNC,
             num_cpus: int | None = None,
-            async_batch_size: int = 50,  # only applicable when using async mode
+            log_directory: str | None = None,
+            async_batch_size: int = 50,
+            async_batch_delay: float = 0.0,
+            max_retries: int = 0,
+            retry_delay: float = 2.0,
+            retry_backoff: float = 1.0,
+            max_retry_delay: float = 60.0,
             ) -> None:
         """
         Initializes the EvalHarness. The user can either pass in Eval and Candidate objects in the
@@ -393,7 +400,6 @@ class EvalHarness:
         objects.
 
         Example:
-
         ```
         harness = EvalHarness(
             num_cpus=None,
@@ -441,15 +447,40 @@ class EvalHarness:
 
                 If num_cpus is None or less than 1, then the corresponding tasks will use all
                 available CPUs.
+            log_directory:
+                The directory to save eval results as JSON files. Each EvalResult will be saved
+                with a unique filename based on the timestamp and a random UUID.
             async_batch_size:
                 The number of tasks (e.g. response generation) to run asynchronously at a time.
                 This parameter is only used if response_mode or eval_mode is set to `Mode.ASYNC`.
-        """  # noqa: D412, E501
+            async_batch_delay:
+                The delay in seconds between batches of async operations. When using async mode,
+                this introduces a delay after every async_batch_size operations to help prevent
+                rate limiting. Only used when response_mode or eval_mode is `Mode.ASYNC`.
+            max_retries:
+                Maximum number of retry attempts for failed operations. A value of 0 means no
+                retries.
+            retry_delay:
+                Initial delay in seconds between retry attempts.
+            retry_backoff:
+                Multiplicative factor to increase delay between retry attempts. For example, with
+                retry_delay=2 and retry_backoff=2, delays would be 2, 4, 8 seconds.
+            max_retry_delay:
+                Maximum delay in seconds between retry attempts, regardless of backoff calculation.
+        """  # noqa: E501
         self.response_mode = response_mode
         self.eval_mode = eval_mode
-        self.async_batch_size = async_batch_size
         self.num_cpus = num_cpus if num_cpus is not None and num_cpus >= 1 else os.cpu_count()
         self.num_samples = num_samples
+        self.log_directory = log_directory
+
+        self.async_batch_size = async_batch_size
+        self.async_batch_delay = async_batch_delay
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+        self.retry_backoff = retry_backoff
+        self.max_retry_delay = max_retry_delay
+
         self.evals = []
         self.candidates = []
         if evals:
@@ -533,7 +564,7 @@ class EvalHarness:
         elif isinstance(candidate, list):
             for obj in candidate:
                 self.add_candidates(obj)
-        elif isinstance(candidate, (Candidate, Callable)):
+        elif isinstance(candidate, Candidate | Callable):
             self.candidates.append(candidate)
         else:
             raise TypeError(f"incompatible type {type(candidate)} for candidate")
@@ -573,96 +604,319 @@ class EvalHarness:
     def _generate_single_response(
             candidate: Candidate,
             eval: Eval,  # noqa: A002
+            max_retries: int,
+            retry_delay: float,
+            retry_backoff: float,
+            max_retry_delay: float,
         ) -> tuple[CandidateResponse, Exception | None]:
         """
         Generates a response for a given candidate and eval, returning a tuple containing the
         response and any exception generated during the response generation. If no exception is
         generated, the exception will be None.
+
+        Args:
+            candidate: The candidate to generate a response from
+            eval: The eval to generate a response for
+            max_retries: Maximum number of retry attempts for failed operations
+            retry_delay: Initial delay in seconds between retry attempts
+            retry_backoff: Multiplicative factor to increase delay between retry attempts
+            max_retry_delay: Maximum delay in seconds between retry attempts
         """
-        try:
-            candidate = deepcopy(candidate)
-            if is_async_candidate(candidate):
-                candidate_response = candidate(eval.input)
-            else:
-                candidate_response = candidate(eval.input)
-            return candidate_response, None
-        except Exception as e:
-            return None, e
+        current_delay = retry_delay
+        last_exception = None
+        # +1 for initial attempt which doesn't count towards "retries"
+        for attempt in range(max_retries + 1):
+            try:
+                # in theory candidate should be stateless and we don't want any side effects
+                local_candidate = deepcopy(candidate)
+                if is_async_candidate(local_candidate):
+                    raise ValueError("Candidate is an async candidate and cannot be run in a thread pool")  # noqa: E501
+                candidate_response = local_candidate(eval.input)
+                return candidate_response, None
+            except Exception as e:
+                # Edge case: if candidate.metadata changes during response generation, (e.g. the
+                # candidate object itself updates metadata (costs, attempts, etc.)) we want to
+                # carry over the updated metadata to the response metadata and so we need update
+                # the candidate since it gets deep copied every time (in theory it should be
+                # stateless) These two objectives conflict, not sure the best way to handle this.
+                candidate.metadata = local_candidate.metadata
+                last_exception = e
+                # Don't sleep on the last attempt; we're going to return the error anyway
+                if attempt < max_retries:
+                    time.sleep(min(current_delay, max_retry_delay))
+                    current_delay *= retry_backoff
+        return None, last_exception
 
     @staticmethod
     async def _generate_single_response_async(
-            semaphore: asyncio.Semaphore,
+            semaphore: DelayedSemaphore,
             candidate: Candidate,
             eval: Eval,  # noqa: A002
+            max_retries: int,
+            retry_delay: float,
+            retry_backoff: float,
+            max_retry_delay: float,
         ) -> tuple[CandidateResponse, Exception | None]:
         """
         Generates a response for a given candidate and eval, returning a tuple containing the
         response and any exception generated during the response generation. If no exception is
         generated, the exception will be None.
+
+        Args:
+            semaphore:
+                DelayedSemaphore to control concurrency and add delays between batches
+            candidate:
+                The candidate to generate a response from
+            eval:
+                The eval to generate a response for
+            max_retries:
+                Maximum number of retry attempts for failed operations
+            retry_delay:
+                Initial delay in seconds between retry attempts
+            retry_backoff:
+                Multiplicative factor to increase delay between retry attempts. For example, with
+                retry_dalay=2 and retry_backoff=1, there would be no delay between attempts. With
+                retry_delay=2 and retry_backoff=2, delays would be 2, 4, 8 seconds.
+            max_retry_delay:
+                Maximum delay in seconds between retry attempts
         """
         async with semaphore:
-            try:
-                candidate = deepcopy(candidate)
-                if is_async_candidate(candidate):
-                    candidate_response = await candidate(eval.input)
-                else:
-                    # we need to run the synchronous candidate in a thread pool to avoid blocking
-                    loop = asyncio.get_running_loop()
-                    candidate_response = await loop.run_in_executor(
-                        None,
-                        lambda: candidate(eval.input),
-                    )
-                return candidate_response, None
-            except Exception as e:
-                return None, e
+            current_delay = retry_delay
+            last_exception = None
+            # +1 for initial attempt which doesn't count towards "retries"
+            # e.g. max_retries=3 means 4 attempts total
+            for attempt in range(max_retries + 1):
+                try:
+                    # in theory candidate should be stateless and we don't want any side effects
+                    local_candidate = deepcopy(candidate)
+                    if is_async_candidate(local_candidate):
+                        candidate_response = await local_candidate(eval.input)
+                    else:
+                        # we need to run the synchronous candidate in a thread pool to avoid
+                        # blocking
+                        loop = asyncio.get_running_loop()
+                        candidate_response = await loop.run_in_executor(
+                            None,
+                            lambda: local_candidate(eval.input),
+                        )
+                    return candidate_response, None
+                except Exception as e:
+                    # Edge case: if candidate.metadata changes during response generation, (e.g.
+                    # the candidate object itself updates metadata (costs, attempts, etc.)) we want
+                    # to carry over the updated metadata to the response metadata and so we need
+                    # update the candidate since it gets deep copied every time (in theory it
+                    # should be stateless) These two objectives conflict, not sure the best way to
+                    # handle this.
+                    candidate.metadata = local_candidate.metadata
+                    last_exception = e
+                    # Don't sleep on the last attempt; we're going to break out of the loop anyway
+                    if attempt < max_retries:
+                        await asyncio.sleep(min(current_delay, max_retry_delay))
+                        current_delay *= retry_backoff
+            return None, last_exception
+
+    @staticmethod
+    def _save_eval_result(eval_result: EvalResult, log_directory: str) -> None:
+        """
+        Saves an EvalResult to a JSON file in the log directory if one is specified.
+
+        Args:
+            eval_result: The EvalResult to save.
+            log_directory: The directory to save the result to.
+        """
+        if not log_directory:
+            return
+
+        # Create the log directory if it doesn't exist
+        os.makedirs(log_directory, exist_ok=True)
+
+        # Generate a unique filename using timestamp and UUID
+        filename = f"eval_result_{eval_result.timestamp}_{uuid.uuid4()}.json"
+        filepath = os.path.join(log_directory, filename)
+
+        # Save the eval result as JSON
+        with open(filepath, 'w') as f:
+            json.dump(eval_result.to_dict(), f, indent=2, cls=CustomEncoder)
 
     @staticmethod
     def _run_single_eval(
-            eval: Eval,  # noqa: A002
-            candidate: Candidate,
-            candidate_response: CandidateResponse,
-        ) -> tuple[EvalResult, Exception | None]:
+        eval: Eval,  # noqa: A002
+        candidate: Candidate,
+        candidate_response: CandidateResponse,
+        candidate_error: Exception | None,
+        max_retries: int,
+        retry_delay: float,
+        retry_backoff: float,
+        max_retry_delay: float,
+        log_directory: str | None,
+    ) -> tuple[EvalResult, Exception | None]:
         """
-        Runs an Eval object against a CandidateResponse object, returning a tuple containing the
-        EvalResult and any exception generated during the eval execution. If no exception is
-        generated, the exception will be None.
+        Runs an Eval object against a CandidateResponse object, with retry logic.
+
+        Args:
+            eval: The eval to run
+            candidate: The candidate to run the eval against
+            candidate_response: The response from the candidate
+            candidate_error: Any error that occurred during response generation
+            max_retries: Maximum number of retry attempts for failed eval execution
+            retry_delay: Initial delay in seconds between retry attempts
+            retry_backoff: Multiplicative factor to increase delay between retry attempts
+            max_retry_delay: Maximum delay in seconds between retry attempts
+            sleep_func: Function to use for sleeping
+            log_directory: Directory to save evaluation results
         """
+        response = None
+        metadata = {}
         if candidate_response:
             response = candidate_response.response
-            metadata = {
-                'response_metadata': candidate_response.metadata,
-                'response_timestamp': candidate_response.timestamp,
-            }
-        else:
-            response = None
-            metadata = {}
-        try:
-            eval_result = eval(
-                response=response,
-                metadata=metadata,
-                candidate=candidate,
-            )
-            return eval_result, None
-        except Exception as e:
-            return None, e
+            metadata['response_metadata'] = candidate_response.metadata
+            metadata['response_timestamp'] = candidate_response.timestamp
+
+        if candidate_error:
+            metadata['error'] = str(candidate_error)
+            metadata['error_type'] = type(candidate_error).__name__
+
+        current_delay = retry_delay
+        last_exception = None
+
+        # Try to run the eval with retries
+        for attempt in range(max_retries + 1):
+            try:
+                # Run the eval
+                eval_result = eval(
+                    response=response,
+                    metadata=metadata,
+                    candidate=candidate,
+                )
+
+                # Save the eval result if log_directory is specified
+                if log_directory:
+                    EvalHarness._save_eval_result(eval_result, log_directory)
+
+                return eval_result, None
+            except Exception as e:
+                last_exception = e
+                # Don't sleep on the last attempt
+                if attempt < max_retries:
+                    time.sleep(min(current_delay, max_retry_delay))
+                    current_delay *= retry_backoff
+
+        # If we get here, all retries failed
+        # Create an EvalResult with error information
+        error_result = EvalResult(
+            eval=eval,
+            candidate=candidate,
+            response=response,
+            metadata={
+                **metadata,
+                'error': str(last_exception),
+                'error_type': type(last_exception).__name__,
+                'retries': max_retries,
+            },
+            check_results=[],  # No check results when there's an error
+        )
+
+        # Save the error result if log_directory is specified
+        if log_directory:
+            EvalHarness._save_eval_result(error_result, log_directory)
+
+        return None, last_exception
 
     @staticmethod
     async def _run_single_eval_async(
-            semaphore: asyncio.Semaphore,
-            eval: Eval,  # noqa: A002
-            candidate: Candidate,
-            candidate_response: CandidateResponse,
-        ) -> tuple[EvalResult, Exception | None]:
-        """Helper function to run evals asynchronously."""
+        semaphore: DelayedSemaphore,
+        eval: Eval,  # noqa: A002
+        candidate: Candidate,
+        candidate_response: CandidateResponse,
+        candidate_error: Exception | None,
+        max_retries: int,
+        retry_delay: float,
+        retry_backoff: float,
+        max_retry_delay: float,
+        log_directory: str | None,
+    ) -> tuple[EvalResult, Exception | None]:
+        """
+        Helper function to run evals asynchronously with retry logic.
+
+        Args:
+            semaphore: The semaphore to use for concurrency control
+            eval: The eval to run
+            candidate: The candidate to run the eval against
+            candidate_response: The response from the candidate
+            candidate_error: Any error that occurred during response generation
+            max_retries: Maximum number of retry attempts for failed eval execution
+            retry_delay: Initial delay in seconds between retry attempts
+            retry_backoff: Multiplicative factor to increase delay between retry attempts
+            max_retry_delay: Maximum delay in seconds between retry attempts
+            log_directory: Directory to save evaluation results
+        """
         async with semaphore:
+            response = None
+            metadata = {}
+            if candidate_response:
+                response = candidate_response.response
+                metadata['response_metadata'] = candidate_response.metadata
+                metadata['response_timestamp'] = candidate_response.timestamp
+
+            if candidate_error:
+                metadata['error'] = str(candidate_error)
+                metadata['error_type'] = type(candidate_error).__name__
+
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(
-                None,
-                EvalHarness._run_single_eval,
-                eval,
-                candidate,
-                candidate_response,
+            current_delay = retry_delay
+            last_exception = None
+
+            # Try to run the eval with retries
+            for attempt in range(max_retries + 1):
+                try:
+                    # Run the eval in a thread pool
+                    eval_result = await loop.run_in_executor(
+                        None,
+                        lambda: eval(
+                            response=response,
+                            metadata=metadata,
+                            candidate=candidate,
+                        ),
+                    )
+
+                    # Save the eval result if log_directory is specified
+                    if log_directory:
+                        await loop.run_in_executor(
+                            None,
+                            lambda: EvalHarness._save_eval_result(eval_result, log_directory),
+                        )
+
+                    return eval_result, None
+                except Exception as e:
+                    last_exception = e
+                    # Don't sleep on the last attempt
+                    if attempt < max_retries:
+                        await asyncio.sleep(min(current_delay, max_retry_delay))
+                        current_delay *= retry_backoff
+
+            # If we get here, all retries failed
+            # Create an EvalResult with error information
+            error_result = EvalResult(
+                eval=eval,
+                candidate=candidate,
+                response=response,
+                metadata={
+                    **metadata,
+                    'error': str(last_exception),
+                    'error_type': type(last_exception).__name__,
+                    'retries': max_retries,
+                },
+                check_results=[],  # No check results when there's an error
             )
+
+            # Save the error result if log_directory is specified
+            if log_directory:
+                await loop.run_in_executor(
+                    None,
+                    lambda: EvalHarness._save_eval_result(error_result, log_directory),
+                )
+
+            return None, last_exception
 
     async def _generate_all_responses(
             self,
@@ -675,16 +929,19 @@ class EvalHarness:
         outer list is indexed by candidate and the inner list is indexed by eval.
         """
         responses = []
-        semaphore = asyncio.Semaphore(self.async_batch_size)
         if self.response_mode == Mode.SYNC:
             # Synchronous generation
             for candidate, candidate_evals in zip(self.candidates, eval_copies):
                 candidate_responses = []
                 for eval_ in candidate_evals:
                     candidate_response, response_error = await EvalHarness._generate_single_response_async(  # noqa: E501
-                        semaphore=semaphore,
+                        semaphore=DelayedSemaphore(value=1, batch_delay=0),
                         candidate=candidate,
                         eval=eval_,
+                        max_retries=self.max_retries,
+                        retry_delay=self.retry_delay,
+                        retry_backoff=self.retry_backoff,
+                        max_retry_delay=self.max_retry_delay,
                     )
                     candidate_responses.append((candidate_response, response_error))
                 responses.append(candidate_responses)
@@ -692,9 +949,13 @@ class EvalHarness:
             # Asynchronous generation using the event loop
             generate_tasks = [
                 self._generate_single_response_async(
-                    semaphore=semaphore,
+                    semaphore=DelayedSemaphore(self.async_batch_size, self.async_batch_delay),
                     candidate=candidate,
                     eval=eval_,
+                    max_retries=self.max_retries,
+                    retry_delay=self.retry_delay,
+                    retry_backoff=self.retry_backoff,
+                    max_retry_delay=self.max_retry_delay,
                 )
                 for candidate, candidate_evals in zip(self.candidates, eval_copies)
                 for eval_ in candidate_evals
@@ -707,14 +968,15 @@ class EvalHarness:
                 responses.append(flat_responses[index:index + num_evals])
                 index += num_evals
         elif self.response_mode == Mode.PARALLEL:
-            # Parallel generation using ProcessPoolExecutor
             with ProcessPoolExecutor(max_workers=self.num_cpus) as executor:
-                arg_pairs = [
-                    (candidate, eval_)
+                args = [
+                    (candidate, eval_, self.max_retries, self.retry_delay,
+                     self.retry_backoff, self.max_retry_delay)
                     for candidate, candidate_evals in zip(self.candidates, eval_copies)
                     for eval_ in candidate_evals
                 ]
-                flat_responses = list(executor.map(EvalHarness._generate_single_response, *zip(*arg_pairs)))  # noqa: E501
+                # Use the module-level helper function
+                flat_responses = list(executor.map(EvalHarness._generate_single_response, *zip(*args)))  # noqa: E501
             # Reshape responses by candidate
             index = 0
             for candidate_evals in eval_copies:
@@ -743,6 +1005,12 @@ class EvalHarness:
                         eval=eval_,
                         candidate=candidate,
                         candidate_response=candidate_response,
+                        candidate_error=response_error,
+                        max_retries=self.max_retries,
+                        retry_delay=self.retry_delay,
+                        retry_backoff=self.retry_backoff,
+                        max_retry_delay=self.max_retry_delay,
+                        log_directory=self.log_directory,
                     )
                     candidate_results.append(EvalRunResult(
                         eval=eval_,
@@ -755,16 +1023,22 @@ class EvalHarness:
                     run_results=candidate_results,
                 ))
         elif self.eval_mode == Mode.ASYNC:
-            semaphore = asyncio.Semaphore(self.async_batch_size)
+            semaphore = DelayedSemaphore(self.async_batch_size)
             eval_tasks = [
-                self._run_single_eval_async(
+                EvalHarness._run_single_eval_async(
                     semaphore=semaphore,
                     eval=eval_,
                     candidate=candidate,
                     candidate_response=candidate_response,
+                    candidate_error=response_error,
+                    max_retries=self.max_retries,
+                    retry_delay=self.retry_delay,
+                    retry_backoff=self.retry_backoff,
+                    max_retry_delay=self.max_retry_delay,
+                    log_directory=self.log_directory,
                 )
                 for candidate, candidate_responses, candidate_evals in zip(self.candidates, responses, eval_copies)  # noqa: E501
-                for eval_, (candidate_response, _) in zip(candidate_evals, candidate_responses)
+                for eval_, (candidate_response, response_error) in zip(candidate_evals, candidate_responses)  # noqa: E501
             ]
             flat_eval_results = await asyncio.gather(*eval_tasks)
             # Reshape results by candidate
@@ -786,12 +1060,18 @@ class EvalHarness:
                 ))
         elif self.eval_mode == Mode.PARALLEL:
             with ProcessPoolExecutor(max_workers=self.num_cpus) as executor:
-                arg_pairs = [
-                    (eval_, candidate, candidate_response)
+                args = [
+                    (
+                        eval_, candidate, candidate_response, response_error,
+                        self.max_retries, self.retry_delay, self.retry_backoff,
+                        self.max_retry_delay, self.log_directory,
+                    )
                     for candidate, candidate_responses, candidate_evals in zip(self.candidates, responses, eval_copies)  # noqa: E501
-                    for eval_, (candidate_response, _) in zip(candidate_evals, candidate_responses)
+                    for eval_, (candidate_response, response_error) in zip(candidate_evals, candidate_responses)  # noqa: E501
                 ]
-                flat_eval_results = list(executor.map(EvalHarness._run_single_eval, *zip(*arg_pairs)))  # noqa: E501
+                # Use the module-level helper function
+                # flat_eval_results = list(executor.map(_run_eval_with_args, arg_tuples))
+                flat_eval_results = list(executor.map(EvalHarness._run_single_eval, *zip(*args)))
             # Reshape results by candidate
             index = 0
             for candidate, candidate_responses, candidate_evals in zip(self.candidates, responses, eval_copies):  # noqa: E501

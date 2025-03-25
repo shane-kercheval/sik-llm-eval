@@ -1,5 +1,21 @@
 """Utility functions."""
+import json
 import re
+
+
+class CustomEncoder(json.JSONEncoder):
+    """
+    Custom JSON encoder that can serialize custom classes. For example, the LLMCheck class
+    will fail to json serialize because response_format is a type and python can't serialize
+    types. This encoder will convert the class to a string.
+    """
+
+    def default(self, obj: object) -> str:
+        """Serialize ModelMetaclass to a string."""
+        if hasattr(obj, "__class__") and obj.__class__.__name__ == "ModelMetaclass":
+            # Return a string representation of the class
+            return f"{obj.__module__}.{obj.__name__}"
+        return super().default(obj)
 
 
 def simple_tokenizer(text: str) -> list[str]:

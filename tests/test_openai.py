@@ -12,11 +12,10 @@ from llm_eval.openai import (
     OpenAITools,
     OpenAIToolsResponse,
     num_tokens,
+    system_message,
+    user_message,
 )
-from tests.conftest import AsyncMockOpenAI
-
-
-DEFAULT_MODEL = 'gpt-4o-mini'
+from tests.conftest import AsyncMockOpenAI, OPENAI_DEFAULT_MODEL
 
 
 @pytest.fixture
@@ -90,7 +89,7 @@ def test__OpenAICompletionWrapper() -> None:
 
     model = OpenAICompletion(
         client=client,
-        model=DEFAULT_MODEL,
+        model=OPENAI_DEFAULT_MODEL,
         temperature=0.1,
     )
     response = model(messages=messages)
@@ -149,7 +148,7 @@ def test__OpenAICompletionWrapper__streaming() -> None:
     assert client.api_key is not None  # via load_dotenv in conftest.py
     model = OpenAICompletion(
         client=client,
-        model=DEFAULT_MODEL,
+        model=OPENAI_DEFAULT_MODEL,
         stream_callback=streaming_callback,
     )
     expected_response = "testing testing"
@@ -248,7 +247,7 @@ async def test__AsyncOpenAICompletionWrapper() -> None:
 
     model = AsyncOpenAICompletion(
         client=client,
-        model=DEFAULT_MODEL,
+        model=OPENAI_DEFAULT_MODEL,
         temperature=0.1,
     )
     response = await model(messages=messages)
@@ -308,7 +307,7 @@ async def test__AsyncOpenAICompletionWrapper__streaming() -> None:
     assert client.api_key is not None  # via load_dotenv in conftest.py
     model = AsyncOpenAICompletion(
         client=client,
-        model=DEFAULT_MODEL,
+        model=OPENAI_DEFAULT_MODEL,
         stream_callback=streaming_callback,
     )
     expected_response = "testing testing"
@@ -554,7 +553,7 @@ def test__OpenAITools(function_weather: Function, function_stocks: Function):
         function_weather.to_dict(),
         function_stocks.to_dict(),
     ]
-    model = OpenAITools(client=OpenAI(), model=DEFAULT_MODEL)
+    model = OpenAITools(client=OpenAI(), model=OPENAI_DEFAULT_MODEL)
     ####
     # first interaction
     ####
@@ -564,7 +563,7 @@ def test__OpenAITools(function_weather: Function, function_stocks: Function):
         tools=tools,
     )
     assert isinstance(response, OpenAIToolsResponse)
-    assert DEFAULT_MODEL in response.model
+    assert OPENAI_DEFAULT_MODEL in response.model
     assert response.role == 'assistant'
     assert response.finish_reason == 'tool_calls'
     assert response.created is not None
@@ -587,14 +586,14 @@ def test__OpenAITools__unrelated_prompt__auto(function_weather: Function, functi
         function_weather.to_dict(),
         function_stocks.to_dict(),
     ]
-    model = OpenAITools(client=OpenAI(), model=DEFAULT_MODEL)
+    model = OpenAITools(client=OpenAI(), model=OPENAI_DEFAULT_MODEL)
     response = model(
         messages= [{"role": "user", "content": "How's it going?"}],
         tools=tools,
         tool_choice="auto",
     )
     assert isinstance(response, OpenAICompletionResponse)
-    assert DEFAULT_MODEL in response.model
+    assert OPENAI_DEFAULT_MODEL in response.model
     assert response.role == 'assistant'
     assert response.finish_reason == 'stop'
     assert response.created is not None
@@ -614,7 +613,7 @@ def test__OpenAITools__unrelated_prompt__required(function_weather: Function, fu
         function_weather.to_dict(),
         function_stocks.to_dict(),
     ]
-    model = OpenAITools(client=OpenAI(), model=DEFAULT_MODEL)
+    model = OpenAITools(client=OpenAI(), model=OPENAI_DEFAULT_MODEL)
     response = model(
         messages= [{"role": "user", "content": "How's it going?"}],
         tools=tools,
@@ -627,14 +626,14 @@ def test__OpenAITools__unrelated_prompt__none(function_weather: Function, functi
         function_weather.to_dict(),
         function_stocks.to_dict(),
     ]
-    model = OpenAITools(client=OpenAI(), model=DEFAULT_MODEL)
+    model = OpenAITools(client=OpenAI(), model=OPENAI_DEFAULT_MODEL)
     response = model(
         messages= [{"role": "user", "content": "How's it going?"}],
         tools=tools,
         tool_choice="none",
     )
     assert isinstance(response, OpenAICompletionResponse)
-    assert DEFAULT_MODEL in response.model
+    assert OPENAI_DEFAULT_MODEL in response.model
     assert response.role == 'assistant'
     assert response.finish_reason == 'stop'
     assert response.created is not None
@@ -644,3 +643,32 @@ def test__OpenAITools__unrelated_prompt__none(function_weather: Function, functi
     assert response.usage['completion_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.content
+
+def test__OpenAITools__structured_response():
+    class CalendarEvent(BaseModel):
+        name: str
+        date: str
+        participants: list[str]
+
+    messages=[
+        system_message("Extract the event information."),
+        user_message("Alice and Bob went to a science fair on 1984-01-30."),
+    ]
+    model = OpenAICompletion(
+        client= OpenAI(),
+        model=OPENAI_DEFAULT_MODEL,
+        response_format=CalendarEvent,
+        temperature=0.1,
+    )
+    response = model(messages=messages)
+    assert isinstance(response.parsed, CalendarEvent)
+    assert response.parsed.name.lower() == "science fair"
+    assert response.parsed.date == "1984-01-30"
+    assert set(response.parsed.participants) == {"Alice", "Bob"}
+    assert response.model is not None
+    assert response.created is not None
+    assert response.duration_seconds > 0
+    assert response.usage is not None
+    assert response.usage['prompt_tokens'] > 0
+    assert response.usage['completion_tokens'] > 0
+    assert response.usage['total_tokens'] > 0

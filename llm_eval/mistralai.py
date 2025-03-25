@@ -2,9 +2,9 @@
 
 from abc import ABC
 import time
-from typing import Callable, Literal
+from collections.abc import Callable
+from typing import Literal
 import json
-
 from mistralai import Mistral
 from mistralai.models.chatcompletionresponse import ChatCompletionResponse
 from pydantic import BaseModel, SerializeAsAny
@@ -216,7 +216,7 @@ class MistralAICompletion(MistralAICompletionWrapperBase):
         model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
-            start_time = time.time()
+            start_time = time.perf_counter()
             response = self.client.chat.stream(
                 model=model,
                 messages=messages,
@@ -238,7 +238,7 @@ class MistralAICompletion(MistralAICompletionWrapperBase):
                     finish_reason=chunk.data.choices[0].finish_reason,  # last finish reason
                 ),
             )
-            end_time = time.time()
+            end_time = time.perf_counter()
             if hasattr(chunk, "data"):
                 chunk = chunk.data
             return MistralAIChatResponse(
@@ -250,14 +250,14 @@ class MistralAICompletion(MistralAICompletionWrapperBase):
                 content="".join([chunk.content for chunk in chunks]),
                 finish_reason=chunk.choices[0].finish_reason,
             )
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = self.client.chat.complete(
             model=model,
             messages=messages,
             stream=False,
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = MistralAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response
@@ -282,7 +282,7 @@ class AsyncMistralAICompletion(MistralAICompletionWrapperBase):
         model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
-            start_time = time.time()
+            start_time = time.perf_counter()
             response = await self.client.chat.complete_async(
                 model=model,
                 messages=messages,
@@ -302,7 +302,7 @@ class AsyncMistralAICompletion(MistralAICompletionWrapperBase):
                 content="",
                 finish_reason=chunk.data.choices[0].finish_reason,  # last finish reason
             ))
-            end_time = time.time()
+            end_time = time.perf_counter()
             if hasattr(chunk, "data"):
                 chunk = chunk.data
             return MistralAIChatResponse(
@@ -314,14 +314,14 @@ class AsyncMistralAICompletion(MistralAICompletionWrapperBase):
                 content="".join([chunk.content for chunk in chunks]),
                 finish_reason=chunk.choices[0].finish_reason,
             )
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = await self.client.chat.complete_async(
             model=model,
             messages=messages,
             stream=False,
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = MistralAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response
@@ -344,7 +344,7 @@ class MistralAITools(MistralAICompletionWrapperBase):
         """Call the MistralAI Tools API and return the response."""
         model = model or self.model
         model_parameters = {**self.model_parameters, **model_kwargs}
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = self.client.chat.complete(
             model=model,
             messages=messages,
@@ -352,7 +352,7 @@ class MistralAITools(MistralAICompletionWrapperBase):
             tool_choice=tool_choice,
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = MistralAICompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response

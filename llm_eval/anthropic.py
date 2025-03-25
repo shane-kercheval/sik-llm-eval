@@ -1,9 +1,10 @@
 """Contains helper functions for interacting with Anthropic models."""
 
 from abc import ABC
+from collections.abc import Callable
 import time
 import datetime
-from typing import Callable, Literal
+from typing import Literal
 import json
 
 from anthropic import Anthropic
@@ -208,7 +209,7 @@ class AnthropicCompletion(AnthropicCompletionWrapperBase):
         model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
-            start_time = time.time()
+            start_time = time.perf_counter()
             response = self.client.messages.create(
                 model=model,
                 messages=messages,
@@ -240,7 +241,7 @@ class AnthropicCompletion(AnthropicCompletionWrapperBase):
                     finish_reason=stop_reason,  # last finish reason
                 ),
             )
-            end_time = time.time()
+            end_time = time.perf_counter()
             return AnthropicChatResponse(
                 object_name="chat.completion",
                 model=model,
@@ -249,7 +250,7 @@ class AnthropicCompletion(AnthropicCompletionWrapperBase):
                 content="".join(chunk.content for chunk in chunks),
                 finish_reason=stop_reason,
             )
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = self.client.messages.create(
             model=model,
             messages=messages,
@@ -257,7 +258,7 @@ class AnthropicCompletion(AnthropicCompletionWrapperBase):
             max_tokens=model_parameters.pop("max_tokens", 2048),
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = AnthropicCompletion._parse_response(response)
         response.duration_seconds = end_time - start_time
         return response
@@ -283,7 +284,7 @@ class AsyncAnthropicCompletion(AnthropicCompletionWrapperBase):
         model_parameters = {**self.model_parameters, **model_kwargs}
         if stream_callback:
             chunks = []
-            start_time = time.time()
+            start_time = time.perf_counter()
             response = self.client.messages.create(
                 model=model,
                 messages=messages,
@@ -315,7 +316,7 @@ class AsyncAnthropicCompletion(AnthropicCompletionWrapperBase):
                     finish_reason=stop_reason,  # last finish reason
                 ),
             )
-            end_time = time.time()
+            end_time = time.perf_counter()
             return AnthropicChatResponse(
                 object_name="chat.completion",
                 model=model,
@@ -324,7 +325,7 @@ class AsyncAnthropicCompletion(AnthropicCompletionWrapperBase):
                 content="".join(chunk.content for chunk in chunks),
                 finish_reason=stop_reason,
             )
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = self.client.messages.create(
             model=model,
             messages=messages,
@@ -332,7 +333,7 @@ class AsyncAnthropicCompletion(AnthropicCompletionWrapperBase):
             max_tokens=model_parameters.pop("max_tokens", 2048),
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = AnthropicCompletion._parse_response(
             response,
             is_function_call="tool_use" in response.stop_reason,
@@ -359,7 +360,7 @@ class AnthropicTools(AnthropicCompletionWrapperBase):
         """Call the Anthropic Tools API and return the response."""
         model = model or self.model
         model_parameters = {**self.model_parameters, **model_kwargs}
-        start_time = time.time()
+        start_time = time.perf_counter()
         response = self.client.messages.create(
             model=model,
             messages=messages,
@@ -368,7 +369,7 @@ class AnthropicTools(AnthropicCompletionWrapperBase):
             max_tokens=model_parameters.pop("max_tokens", 2048),
             **model_parameters,
         )
-        end_time = time.time()
+        end_time = time.perf_counter()
         response = AnthropicCompletion._parse_response(
             response,
             is_function_call="tool_use" in response.stop_reason,
