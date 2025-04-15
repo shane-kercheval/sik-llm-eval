@@ -14,10 +14,15 @@ from tiktoken import Encoding
 
 CHAT_MODEL_COST_PER_TOKEN = {
     # LATEST MODELS
+    'gpt-4.1-2025-04-14': {'input': 2.00 / 1_000_000, 'output': 8.00 / 1_000_000},
+    'gpt-4.1-mini-2025-04-14': {'input': 0.40 / 1_000_000, 'output': 1.60 / 1_000_000},
+    'gpt-4.1-nano-2025-04-14': {'input': 0.10 / 1_000_000, 'output': 0.40 / 1_000_000},
+
     'gpt-4o-2024-05-13': {'input': 5.00 / 1_000_000, 'output': 15.00 / 1_000_000},
     'gpt-4o-2024-08-06': {'input': 2.50 / 1_000_000, 'output': 10.00 / 1_000_000},
 
     'gpt-4o-mini-2024-07-18':  {'input': 0.15 / 1_000_000, 'output': 0.60 / 1_000_000},
+
     # GPT-4-Turbo 128K
     'gpt-4-turbo-2024-04-09': {'input': 10.00 / 1_000_000, 'output': 30.00 / 1_000_000},
     'gpt-4-0125-preview': {'input': 0.01 / 1_000, 'output': 0.03 / 1_000},
@@ -39,6 +44,9 @@ CHAT_MODEL_COST_PER_TOKEN = {
     # 'gpt-3.5-turbo-16k-0613': {'input': 0.003 / 1_000, 'output': 0.004 / 1_000},
 }
 CHAT_MODEL_COST_PER_TOKEN['gpt-4o'] = CHAT_MODEL_COST_PER_TOKEN['gpt-4o-2024-08-06']
+CHAT_MODEL_COST_PER_TOKEN['gpt-4.1'] = CHAT_MODEL_COST_PER_TOKEN['gpt-4.1-2025-04-14']
+CHAT_MODEL_COST_PER_TOKEN['gpt-4.1-mini'] = CHAT_MODEL_COST_PER_TOKEN['gpt-4.1-mini-2025-04-14']
+CHAT_MODEL_COST_PER_TOKEN['gpt-4.1-nano'] = CHAT_MODEL_COST_PER_TOKEN['gpt-4.1-nano-2025-04-14']
 CHAT_MODEL_COST_PER_TOKEN['gpt-4o-mini'] = CHAT_MODEL_COST_PER_TOKEN['gpt-4o-mini-2024-07-18']
 
 EMBEDDING_MODEL_COST_PER_TOKEN = {
