@@ -28,8 +28,8 @@ requirements:
     - transformers=4.37
 about:
   home: https://github.com/anaconda/llm-eval
-  license: Anaconda license
-  license_family: PROPRIETARY
+  license: BSD-3-Clause
+  license_family: BSD
   license_file: LICENSE
   summary: LLM eval framework
   description: Evaluate the performance and quality of Large Language Models (LLMs)
