@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from inspect import iscoroutinefunction
 from copy import deepcopy
 from abc import ABC, abstractmethod
@@ -55,6 +55,11 @@ from sik_llm_eval.internal_utilities import (
     EnumMixin,
     Registry,
     SerializationMixin,
+)
+from sik_llm_eval.anthropic import (
+    AnthropicCompletion,
+    AnthropicCompletionResponse,
+    AnthropicToolsResponse,
 )
 
 
@@ -89,7 +94,7 @@ class CandidateResponse(BaseModel):
 
     response: object
     metadata: dict | None = None
-    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class Candidate(SerializationMixin, DictionaryEqualsMixin, ABC):

@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass
 from enum import Enum, auto
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from textwrap import dedent
 from concurrent.futures import ProcessPoolExecutor
 from collections.abc import Callable, Iterator
@@ -209,7 +209,7 @@ class EvalResult(SerializationMixin, DictionaryEqualsMixin):
             self.candidate = str(candidate)
         self.response = response
         self.metadata = metadata
-        self.timestamp = timestamp if timestamp else datetime.now(timezone.utc).isoformat()
+        self.timestamp = timestamp if timestamp else datetime.now(UTC).isoformat()
         results = check_results or []
         results_created = []
         # convert dictionaries to CheckResults

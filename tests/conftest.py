@@ -42,7 +42,7 @@ class MockCandidate(Candidate):
 
     This candidate takes a dictionary of prompts (keys) and responses (values) and returns the
     response for the given prompt.
-    """  # noqa: D404
+    """
 
     def __init__(
             self,
@@ -75,7 +75,7 @@ class AsyncMockCandidate(Candidate):
 
     This candidate takes a dictionary of prompts (keys) and responses (values) and returns the
     response for the given prompt.
-    """  # noqa: D404
+    """
 
     def __init__(
             self,
