@@ -4,7 +4,7 @@ from textwrap import dedent
 import pandas as pd
 from pydantic import BaseModel, ValidationError
 import pytest
-from llm_eval.checks import (
+from sik_llm_eval.checks import (
     Check,
     CheckResult,
     CheckResultsType,
@@ -25,7 +25,7 @@ from llm_eval.checks import (
     ScoreResult,
     ToolCallsCheck,
 )
-from llm_eval.utilities import f1_score, precision_score_tokens, recall_score_tokens
+from sik_llm_eval.utilities import f1_score, precision_score_tokens, recall_score_tokens
 from tests.conftest import OPENAI_DEFAULT_MODEL
 
 

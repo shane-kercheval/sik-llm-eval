@@ -1,7 +1,7 @@
 """Unit tests for the filtering module."""
-from llm_eval.candidates import Candidate, CandidateResponse
-from llm_eval.eval import Eval
-from llm_eval.filtering import (
+from sik_llm_eval.candidates import Candidate, CandidateResponse
+from sik_llm_eval.eval import Eval
+from sik_llm_eval.filtering import (
     eval_contains_code_block_tests,
     eval_expects_code_blocks,
     filter_contains_code_block_tests,

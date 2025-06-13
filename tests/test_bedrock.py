@@ -2,7 +2,7 @@
 import os
 import pytest
 from openai import AsyncOpenAI, OpenAI
-from llm_eval.bedrock import AsyncBedrockCompletion, BedrockCompletion
+from sik_llm_eval.bedrock import AsyncBedrockCompletion, BedrockCompletion
 
 BEDROCK_API_KEY = os.getenv('BEDROCK_API_KEY')
 BEDROCK_URL = os.getenv('BEDROCK_API_URL')

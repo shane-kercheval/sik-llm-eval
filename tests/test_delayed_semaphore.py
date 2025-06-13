@@ -2,7 +2,7 @@
 import asyncio
 import pytest
 from time import perf_counter
-from llm_eval.delayed_semaphore import DelayedSemaphore
+from sik_llm_eval.delayed_semaphore import DelayedSemaphore
 
 
 async def dummy_task(semaphore: DelayedSemaphore, task_time: float = 0.1) -> float:

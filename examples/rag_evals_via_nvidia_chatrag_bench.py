@@ -1,14 +1,14 @@
 """
-Demonstrates how to use the llm-eval framework to evaluate a RAG agent using Nvidia's ChatRAG
+Demonstrates how to use the sik-llm-eval framework to evaluate a RAG agent using Nvidia's ChatRAG
 benchmark and datasets.
 
 The datasets can be found here: https://huggingface.co/datasets/nvidia/ChatRAG-Bench/
 
 The `source.py` script has functions to download the datasets, process them, and build evals for
-llm-eval. The `source.py` script also contains the `SimpleRAGAgent` class which is a simple
-implementation of a RAG agent used demonstrate how an agent is evaluated using llm-eval.
+sik-llm-eval. The `source.py` script also contains the `SimpleRAGAgent` class which is a simple
+implementation of a RAG agent used demonstrate how an agent is evaluated using sik-llm-eval.
 
-The F1 score, precision, and recall have been implemented in the llm-eval framework. The primary
+The F1 score, precision, and recall have been implemented in the sik-llm-eval framework. The primary
 metrics that are used to evaluate the RAG agent are the F1 score and the retrieval accuracy. The
 retrieval accuracy is the percentage of times the agent retrieves the correct document. The ground
 truth document index is provided in the Nvidia datasets and is compared to the actual index that
@@ -29,8 +29,8 @@ from examples.nvidia_chatrag_bench.source import (
     process_combine_datasets,
     build_evals,
 )
-from llm_eval.candidates import Candidate, CandidateResponse
-from llm_eval.eval import CandidateRunResults, EvalHarness, Mode
+from sik_llm_eval.candidates import Candidate, CandidateResponse
+from sik_llm_eval.eval import CandidateRunResults, EvalHarness, Mode
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -38,7 +38,7 @@ load_dotenv()
 
 download_datasets()  # download nvidia datasets from huggingface
 process_combine_datasets()  # combine datasets into single, consistant, dataset
-build_evals(sample_size_per_dataset=20)  # transform dataset into "evals" for llm-eval
+build_evals(sample_size_per_dataset=20)  # transform dataset into "evals" for sik-llm-eval
 
 params = {
     'model_name': ('gpt-4o-mini', 'gpt-3.5-turbo-0125'),
@@ -52,7 +52,7 @@ param_combinations = [dict(zip(keys, combination)) for combination in itertools.
 class CustomRAGAgentCandidate(Candidate):
     """
     This is an example of how a candidate can be created in order to convert the inputs/outputs
-    of the RAG agent to the format that the llm-eval framework expects.
+    of the RAG agent to the format that the sik-llm-eval framework expects.
 
     The Eval passes the candidate a dictionary with the keys "documents" and "messages". The Agent
     is expected to store the documents in a vector database and use the messages to generate a

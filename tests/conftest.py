@@ -9,12 +9,12 @@ import requests
 import yaml
 from faker import Faker
 from unittest.mock import MagicMock
-from llm_eval.candidates import Candidate, CandidateResponse
+from sik_llm_eval.candidates import Candidate, CandidateResponse
 
 from dotenv import load_dotenv
 
-from llm_eval.checks import Check, CheckResult, PassFailResult
-from llm_eval.openai import Function, FunctionParameter
+from sik_llm_eval.checks import Check, CheckResult, PassFailResult
+from sik_llm_eval.openai import Function, FunctionParameter
 load_dotenv()
 
 

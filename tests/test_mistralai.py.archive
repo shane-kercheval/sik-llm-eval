@@ -4,14 +4,14 @@ import os
 import pytest
 from mistralai import Mistral
 from pydantic import BaseModel
-from llm_eval.mistralai import (
+from sik_llm_eval.mistralai import (
     MistralAICompletion,
     MistralAICompletionResponse,
     MistralAIResponse,
     MistralAIToolsResponse,
     MistralAITools,
 )
-from llm_eval.openai import Function
+from sik_llm_eval.openai import Function
 
 
 def test__MistralAIResponse__dict_metadata_model_dump():

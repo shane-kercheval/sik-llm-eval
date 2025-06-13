@@ -1,4 +1,4 @@
-from llm_eval.eval import EvalResult
+from sik_llm_eval.eval import EvalResult
 
 
 def print_result(result: EvalResult) -> None:

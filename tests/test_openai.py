@@ -3,7 +3,7 @@ import pytest
 from pytest_mock import MockerFixture
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
-from llm_eval.openai import (
+from sik_llm_eval.openai import (
     AsyncOpenAICompletion,
     OpenAICompletion,
     OpenAICompletionResponse,

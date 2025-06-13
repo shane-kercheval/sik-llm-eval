@@ -1,9 +1,0 @@
-name:
-  - llm_eval
-channels:
-  - defaults
-  - conda-forge
-dependencies:
-  - pip=23.3
-  # - pip:
-  #     - duckduckgo_search==5.3

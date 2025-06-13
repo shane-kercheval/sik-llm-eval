@@ -4,7 +4,7 @@ from time import sleep
 import re
 import pytest
 from textwrap import dedent
-from llm_eval.internal_utilities import (
+from sik_llm_eval.internal_utilities import (
     Registry,
     create_function,
     create_hash,
@@ -19,7 +19,7 @@ from llm_eval.internal_utilities import (
     retry_handler,
     Timer,
 )
-from llm_eval.utilities import (
+from sik_llm_eval.utilities import (
     f1_score_tokens,
     precision_score,
     precision_score2,

@@ -4,14 +4,14 @@ import os
 import pytest
 from anthropic import Anthropic
 from pydantic import BaseModel
-from llm_eval.anthropic import (
+from sik_llm_eval.anthropic import (
     AnthropicCompletion,
     AnthropicCompletionResponse,
     AnthropicResponse,
     AnthropicToolsResponse,
     AnthropicTools,
 )
-from llm_eval.openai import Function
+from sik_llm_eval.openai import Function
 
 
 def test__AnthropicResponse__dict_metadata_model_dump():
@@ -138,7 +138,7 @@ def test__Function__get_weather__to_dict(function_weather: Function):
     assert function_weather.to_dict() == {
         "type": "function",
         "function": {
-            "name": "get_weather",
+            "name": "get_current_weather",
             "description": "Get the current weather in a given location",
             "parameters": {
                 "type": "object",

@@ -18,8 +18,8 @@ import pandas as pd
 import uuid
 import chromadb
 from datasets import load_dataset
-from llm_eval.eval import Eval
-from llm_eval.checks import MatchCheck, MaxF1Score
+from sik_llm_eval.eval import Eval
+from sik_llm_eval.checks import MatchCheck, MaxF1Score
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -237,7 +237,7 @@ def process_combine_datasets() -> None:  # noqa: PLR0915
 
 def build_evals(sample_size_per_dataset: int) -> None:
     """
-    Builds YAML files in the format that the llm-eval framework expects for the ChatRAG-Bench
+    Builds YAML files in the format that the sik-llm-eval framework expects for the ChatRAG-Bench
     dataset.
 
     Args:

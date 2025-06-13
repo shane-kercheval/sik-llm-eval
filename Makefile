@@ -1,38 +1,35 @@
 .PHONY: tests
 
-####
-# docker commands
-####
-docker_build:
-	# build the docker container used to run tests and build package
-	docker compose -f docker-compose.yml build
+-include .env
+export
 
-docker_run: docker_build
-	# run the docker container
-	docker compose -f docker-compose.yml up
+package-build:
+	rm -rf dist/*
+	uv build --no-sources
 
-docker_down:
-	docker compose down --remove-orphans
+package-publish:
+	uv publish --token ${UV_PUBLISH_TOKEN}
 
-docker_rebuild:
-	# rebuild docker container
-	docker compose -f docker-compose.yml build --no-cache
+package: package-build package-publish
 
 ####
 # project commands
+#
+# `uv add` to add new package
+# `uv add --dev` to add new package as a dev dependency
 ####
 # commands to run inside docker container
 linting:
-	ruff check llm_eval/
-	ruff check tests/
+	uv run ruff check src/sik_llm_eval/
+	uv run ruff check tests/
 
 unittests:
 	# pytest tests
-	coverage run -m pytest --durations=0 tests
-	coverage html
+	uv run coverage run -m pytest --durations=0 tests
+	uv run coverage html
 
 doctests:
-	# python -m doctest llm_eval/evals.py
+	# python -m doctest sik_llm_eval/evals.py
 
 tests: linting unittests doctests
 
@@ -42,28 +39,3 @@ tests: linting unittests doctests
 run_nvidia_ragbench:
 	# Run Nvidia RAGBench example
 	python -m examples.rag_evals_via_nvidia_chatrag_bench
-
-####
-# dev commands
-####
-# commands for development
-CONDA_ENV ?= ./env
-env := $(CONDA_ENV)
-setup_env:
-	# Setup local environment
-	@if [ -z "$${CONDA_SHLVL:+x}" ]; then echo "Conda is not installed." && exit 1; fi
-	conda env $(shell [ -d $(env) ] && echo update || echo create) -p $(env) --file environment.yml
-
-CONDA_RECIPE_DIR := conda.recipe
-CONDA_BUILD_OUTPUT := dist/conda
-build_package:
-	# Build Conda package
-	conda build $(CONDA_RECIPE_DIR) --output-folder $(CONDA_BUILD_OUTPUT)
-
-gen_build_files:
-	# Generate files required for building project as a wheel file or a conda package
-	python scripts/generate_build_files.py
-
-build_local:
-	# After running this commands you can now do `conda install -c local llm-eval` from anywhere and with any activated environment to install `llm-eval`.
-	conda build conda.recipe

@@ -15,12 +15,13 @@ ignore = [
 [lint.per-file-ignores]
 "tests/*" = [
     # ignore same warnings as above
-    "ANN204", "ANN206",
+    "ANN101", "ANN204", "ANN206",
     "D102", "D105", "D107", "D203", "D205", "D212", "D401", "D407", "D413",
     "PLR0913", "PLR2004",
     # ignore additional warnings
     "ANN201",  # missing-return-type-undocumented-public-function
     "D103",  # undocumented-public-function
+    "D404",  # first word of docstring should not be "This"
     "N802",  # invalid-function-name
     "PLR0915"  # too many statements
 ]

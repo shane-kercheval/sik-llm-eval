@@ -10,11 +10,11 @@ from copy import deepcopy
 import os
 from textwrap import dedent
 import yaml
-from llm_eval.candidates import (
+from sik_llm_eval.candidates import (
     Candidate,
     CandidateResponse,
 )
-from llm_eval.checks import (
+from sik_llm_eval.checks import (
     Check,
     CheckResult,
     CheckType,
@@ -26,16 +26,16 @@ from llm_eval.checks import (
     ScoreResult,
     ToolCallsCheck,
 )
-from llm_eval.delayed_semaphore import DelayedSemaphore
-from llm_eval.eval import (
+from sik_llm_eval.delayed_semaphore import DelayedSemaphore
+from sik_llm_eval.eval import (
     CandidateRunResults,
     Eval,
     EvalHarness,
     EvalResult,
     Mode,
 )
-from llm_eval.internal_utilities import extract_code_blocks
-from llm_eval.openai import user_message
+from sik_llm_eval.internal_utilities import extract_code_blocks
+from sik_llm_eval.openai import user_message
 from tests.conftest import (
     OPENAI_DEFAULT_MODEL,
     AsyncMockCandidateCausesError,

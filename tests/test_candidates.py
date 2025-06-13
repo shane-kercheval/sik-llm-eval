@@ -3,7 +3,7 @@ import os
 from copy import deepcopy
 from openai import BadRequestError
 import pytest
-from llm_eval.candidates import (
+from sik_llm_eval.candidates import (
     BedrockCandidate,
     Candidate,
     CandidateResponse,
@@ -11,7 +11,7 @@ from llm_eval.candidates import (
     OpenAICandidate,
     is_async_candidate,
 )
-from llm_eval.openai import Function, user_message
+from sik_llm_eval.openai import Function, user_message
 
 class MockLMM:
     """Mock class representing an LLM."""
