@@ -33,7 +33,6 @@ can be serialized into a dictionary and the information can be saved in the Eval
 from __future__ import annotations
 
 import os
-import contextlib
 import time
 from datetime import datetime, timezone
 from inspect import iscoroutinefunction
@@ -42,13 +41,9 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
 from collections.abc import Callable
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 from openai import OpenAI
-from sik_llm_eval.bedrock import (
-    MODEL_COST_PER_TOKEN as BEDROCK_MODEL_COST_PER_TOKEN,
-    BedrockCompletion,
-)
 from sik_llm_eval.openai import (
     MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
     OpenAICompletion,
@@ -61,20 +56,6 @@ from sik_llm_eval.internal_utilities import (
     Registry,
     SerializationMixin,
 )
-
-if TYPE_CHECKING:
-    with contextlib.suppress(ImportError):
-        from sik_llm_eval.mistralai import (
-            MistralAICompletion,
-            MistralAICompletionResponse,
-            MistralAIToolsResponse,
-        )
-    with contextlib.suppress(ImportError):
-        from sik_llm_eval.anthropic import (
-            AnthropicCompletion,
-            AnthropicCompletionResponse,
-            AnthropicToolsResponse,
-        )
 
 
 @staticmethod
@@ -92,9 +73,6 @@ class CandidateType(EnumMixin, Enum):
 
     ANTHROPIC = auto()
     ANTROPIC_TOOLS = auto()
-    BEDROCK = auto()
-    MISTRALAI = auto()
-    MISTRALAI_TOOLS = auto()
     OPENAI = auto()
     OPENAI_TOOLS = auto()
 
@@ -435,123 +413,6 @@ class OpenAIToolsCandidate(OpenAICandidate):
         return value
 
 
-@Candidate.register(CandidateType.MISTRALAI)
-class MistralAICandidate(ServiceCandidate):
-    """
-    Wrapper around the MistralAI API that allows the user to create an MistralAI candidate from a
-    dictionary.
-
-    NOTE: the `MISTRAL_API_KEY` environment variable must be set to use this class.
-    """
-
-    @property
-    def client_callable(self) -> MistralAICompletion:
-        """Return the client for the MistralAI service."""
-        from mistralai import Mistral
-        from sik_llm_eval.mistralai import MistralAICompletion
-
-        parameters = self.parameters or {}
-        api_key = parameters.pop("api_key", os.getenv("MISTRAL_API_KEY"))
-        return MistralAICompletion(
-            client=Mistral(api_key=api_key, server_url=self.endpoint_url),
-            model=self.model,
-            **parameters,
-        )
-
-    @property
-    def model_cost_per_token(self) -> float | None:
-        """
-        Return the cost per token for the model. This is used to calculate the cost of the
-        completion.
-        """
-        from sik_llm_eval.mistralai import (
-            MODEL_COST_PER_TOKEN as MISTRAL_MODEL_COST_PER_TOKEN,
-        )
-
-        return MISTRAL_MODEL_COST_PER_TOKEN.get(self.model)
-
-    def _invoke_client_callable(
-        self,
-        input: list[dict[str, str]],  # noqa: A002
-    ) -> MistralAICompletionResponse | MistralAIToolsResponse:
-        """Invoke the client with the input and return the response."""
-        return self.client_callable(messages=input)
-
-
-@Candidate.register(CandidateType.MISTRALAI_TOOLS)
-class MistralAIToolsCandidate(MistralAICandidate):
-    """
-    Wrapper around the MistralAI Tools API that allows the user to create an MistralAI candidate
-    from a dictionary.
-
-    NOTE: the `MISTRAL_API_KEY` environment variable must be set to use this class.
-    """
-
-    def __init__(  # noqa: D417
-        self,
-        tools: list[dict],
-        tool_choice: Literal["auto", "any", "none"] | dict[str] = "auto",
-        model: str | None = None,
-        endpoint_url: str | None = None,
-        metadata: dict | None = None,
-        parameters: dict | None = None,
-    ) -> None:
-        """
-        Initialize a MistralAIToolsCandidate object.
-
-        Args:
-            tools:
-                A list of tools to use with the MistralAI model. See
-                https://docs.mistral.ai/capabilities/function_calling/ for more
-                information.
-            tool_choice:
-                Select from "auto", "any", "none"; for more information, see
-                https://docs.mistral.ai/capabilities/function_calling/#tool_choice.
-            model:
-                The name of the MistralAI model to use (e.g. 'mistral-large-latest').
-            endpoint_url:
-                This parameter is used when running against a local MistralAI-compatible API
-                endpoint.
-            metadata:
-                A dictionary of metadata about the Candidate.
-
-        Parameters
-                A dictionary of model-specific parameters (e.g. `temperature`).
-        """
-        super().__init__(
-            model=model,
-            endpoint_url=endpoint_url,
-            metadata=metadata,
-            parameters=parameters,
-        )
-        self.tools = tools
-        self.tool_choice = tool_choice
-
-    def _invoke_client_callable(
-        self,
-        input: list[dict[str, str]],  # noqa: A002
-    ) -> MistralAICompletionResponse | MistralAIToolsResponse:
-        """Invoke the client with the input and return the response."""
-        return self.client_callable(
-            messages=input,
-            tools=self.tools,
-            tool_choice=self.tool_choice,
-        )
-
-    def _parse_response(
-        self,
-        response: MistralAICompletionResponse | MistralAIToolsResponse,
-    ) -> str | dict:
-        """Get the desired attribute from the response object."""
-        from sik_llm_eval.mistralai import MistralAIToolsResponse
-
-        return (
-            response.tools
-            if isinstance(response, MistralAIToolsResponse)
-            else response.content
-        )
-
-
 class AnthropicCandidate(ServiceCandidate):
     """
     Wrapper around the Anthropic API that allows the user to create an Anthropic candidate from
@@ -670,41 +531,3 @@ class AnthropicToolsCandidate(AnthropicCandidate):
             if isinstance(response, AnthropicToolsResponse)
             else response.content
         )
-
-
-@Candidate.register(CandidateType.BEDROCK)
-class BedrockCandidate(ServiceCandidate):
-    """
-    Wrapper around the OpenAI API that allows the user to create a AWS Bedrock candidate from a
-    dictionary.
-
-    NOTE: the `BEDROCK_API_KEY` environment variable must be set to use this class. The url can
-    either be passed in the init or set as an environment variable (`BEDROCK_API_URL`).
-    """
-
-    @property
-    def model_cost_per_token(self) -> float | None:
-        """
-        Return the cost per token for the model. This is used to calculate the cost of the
-        completion.
-        """
-        return BEDROCK_MODEL_COST_PER_TOKEN.get(self.model)
-
-    @property
-    def client_callable(self) -> BedrockCompletion:
-        """Return the client for the Bedrock service."""
-        return BedrockCompletion(
-            client=OpenAI(
-                base_url=self.endpoint_url or os.getenv('BEDROCK_API_URL'),
-                api_key=os.getenv('BEDROCK_API_KEY'),
-            ),
-            model=self.model,
-            **self.parameters or {},
-        )
-
-    def _invoke_client_callable(
-        self,
-        input: list[dict[str, str]],  # noqa: A002
-    ) -> OpenAICompletionResponse:
-        """Invoke the client with the input and return the response."""
-        return self.client_callable(input)
