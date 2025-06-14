@@ -229,3 +229,10 @@ def test__OpenAIToolsCandidate__from_yaml(
     assert isinstance(arguments['location'], str)
     assert 'unit' in arguments
     assert arguments['unit'] in ['celsius', 'fahrenheit']
+
+    assert response.metadata['input_tokens'] > 0
+    assert response.metadata['output_tokens'] > 0
+    assert response.metadata['total_tokens'] > 0
+    assert response.metadata['input_cost'] > 0
+    assert response.metadata['output_cost'] > 0
+    assert response.metadata['total_cost'] > 0

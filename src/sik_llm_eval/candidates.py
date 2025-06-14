@@ -44,13 +44,13 @@ from collections.abc import Callable
 from typing import Any, Literal
 from pydantic import BaseModel, Field
 # from openai import OpenAI
-from sik_llms import OpenAI, OpenAITools, Anthropic, AnthropicTools, Parameter, TextResponse, Tool, ToolChoice, ToolPredictionResponse
-from sik_llm_eval.openai import (
-    MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
-    OpenAICompletion,
-    OpenAIToolsResponse,
-    OpenAICompletionResponse,
-)
+from sik_llms import Client, OpenAI, OpenAITools, Anthropic, AnthropicTools, Parameter, TextResponse, Tool, ToolChoice, ToolPrediction, ToolPredictionResponse
+# from sik_llm_eval.openai import (
+#     MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
+#     OpenAICompletion,
+#     OpenAIToolsResponse,
+#     OpenAICompletionResponse,
+# )
 from sik_llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
@@ -264,7 +264,7 @@ class BuiltinCandidate(Candidate, ABC):
             metadata={
                 "type": (
                     "tools"
-                    if isinstance(summary, OpenAIToolsResponse)
+                    if isinstance(summary, ToolPredictionResponse)
                     else "completion"
                 ),
                 "input_tokens": input_tokens,
@@ -297,19 +297,11 @@ class OpenAICandidate(BuiltinCandidate):
     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
-    # @property
-    # def model_cost_per_token(self) -> float | None:
-    #     """
-    #     Return the cost per token for the model. This is used to calculate the cost of the
-    #     completion.
-    #     """
-    #     return OPENAI_MODEL_COST_PER_TOKEN.get(self.model)
-
     def _parse_response(self, response: TextResponse) -> str:
         return response.response
 
     @property
-    def client_callable(self) -> OpenAICompletion:
+    def client_callable(self) -> Client:
         """Return the client for the OpenAI service."""
         return OpenAI(
             server_url=self.endpoint_url,
@@ -320,9 +312,9 @@ class OpenAICandidate(BuiltinCandidate):
     def _invoke_client_callable(
         self,
         input: list[dict[str, str]],  # noqa: A002
-    ) -> OpenAICompletionResponse:
+    ) -> TextResponse:
         """Invoke the client with the input and return the response."""
-        return self.client_callable(input)
+        return self.client_callable(messages=input)
 
 
 @Candidate.register(CandidateType.OPENAI_TOOLS)
@@ -381,7 +373,7 @@ class OpenAIToolsCandidate(OpenAICandidate):
         self.tool_choice = tool_choice
 
     @property
-    def client_callable(self) -> OpenAICompletion:
+    def client_callable(self) -> OpenAITools:
         """Return the client for the OpenAI service."""
         tool_choice = self.tool_choice
         if isinstance(tool_choice, str):
@@ -397,16 +389,14 @@ class OpenAIToolsCandidate(OpenAICandidate):
     def _invoke_client_callable(
         self,
         input: list[dict[str, str]],  # noqa: A002
-    ) -> OpenAIToolsResponse | OpenAICompletionResponse:
+    ) -> ToolPredictionResponse:
         """Invoke the client with the input and return the response."""
-        return self.client_callable(
-            messages=input,
-        )
+        return self.client_callable(messages=input)
 
     def _parse_response(
         self,
         response: ToolPredictionResponse,
-    ) -> str | dict:
+    ) -> ToolPrediction | str:
         """Get the desired attribute from the response object."""
         return (
             response.tool_prediction
@@ -435,7 +425,7 @@ class OpenAIToolsCandidate(OpenAICandidate):
         return value
 
 
-@Candidate.register(CandidateType.ANTROPIC)
+@Candidate.register(CandidateType.ANTHROPIC)
 class AnthropicCandidate(BuiltinCandidate):
     """
     Wrapper around the Anthropic API that allows the user to create an Anthropic candidate from
