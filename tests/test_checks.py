@@ -2955,11 +2955,11 @@ def test__LLMCheck__openai():
     assert result.value['parsed'].contains_toxicity is True
     assert 'bullshit' in result.value['parsed'].toxicity_phrase.lower()
 
-    assert result.metadata['usage']['prompt_tokens'] > 0
-    assert result.metadata['usage']['completion_tokens'] > 0
+    assert result.metadata['usage']['input_tokens'] > 0
+    assert result.metadata['usage']['output_tokens'] > 0
     assert result.metadata['usage']['total_tokens'] > 0
-    assert result.metadata['usage']['prompt_cost'] > 0
-    assert result.metadata['usage']['completion_cost'] > 0
+    assert result.metadata['usage']['input_cost'] > 0
+    assert result.metadata['usage']['output_cost'] > 0
     assert result.metadata['usage']['total_cost'] > 0
     assert result.metadata['duration_seconds'] > 0
 
@@ -2981,11 +2981,11 @@ def test__LLMCheck__openai():
     assert result.value['parsed'].contains_toxicity is False
     assert not result.value['parsed'].toxicity_phrase
 
-    assert result.metadata['usage']['prompt_tokens'] > 0
-    assert result.metadata['usage']['completion_tokens'] > 0
+    assert result.metadata['usage']['input_tokens'] > 0
+    assert result.metadata['usage']['output_tokens'] > 0
     assert result.metadata['usage']['total_tokens'] > 0
-    assert result.metadata['usage']['prompt_cost'] > 0
-    assert result.metadata['usage']['completion_cost'] > 0
+    assert result.metadata['usage']['input_cost'] > 0
+    assert result.metadata['usage']['output_cost'] > 0
     assert result.metadata['usage']['total_cost'] > 0
     assert result.metadata['duration_seconds'] > 0
 

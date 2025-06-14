@@ -3,9 +3,9 @@ from copy import deepcopy
 import os
 import re
 from time import sleep
-from pydantic import BaseModel
 import pytest
 import requests
+from sik_llms import Parameter, Tool
 import yaml
 from faker import Faker
 from unittest.mock import MagicMock
@@ -14,7 +14,7 @@ from sik_llm_eval.candidates import Candidate, CandidateResponse
 from dotenv import load_dotenv
 
 from sik_llm_eval.checks import Check, CheckResult, PassFailResult
-from sik_llm_eval.openai import Function, FunctionParameter
+# from sik_llm_eval.openai import Function, FunctionParameter
 load_dotenv()
 
 
@@ -362,22 +362,23 @@ def hugging_face_candidate_template() -> dict:
 
 
 @pytest.fixture
-def function_weather() -> Function:
+def weather_tool() -> Tool:
     """Returns a dictionary defining a weather function."""
-    return Function(
+    return Tool(
         name="get_current_weather",
         description="Get the current weather in a given location",
         parameters=[
-            FunctionParameter(
+            Parameter(
                 name="location",
-                type="string",
+                param_type=str,
                 description="The city and state, e.g. San Francisco, CA",
                 required=True,
             ),
-            FunctionParameter(
+            Parameter(
                 name="unit",
-                type="string",
+                param_type=str,
                 valid_values=["celsius", "fahrenheit"],  # Using enum to constrain possible values
+                required=True,
                 # description="The unit of temperature",
             ),
         ],
@@ -385,15 +386,15 @@ def function_weather() -> Function:
 
 
 @pytest.fixture
-def function_stocks() -> Function:
+def stocks_tool() -> Tool:
     """Returns a dictionary defining a stock function."""
-    return Function(
+    return Tool(
         name="get_current_stocks",
         description="Get the current stock price of a given company",
         parameters=[
-            FunctionParameter(
+            Parameter(
                 name="company",
-                type="string",
+                param_type=str,
                 description="The name of the company, e.g. Apple",
                 required=True,
             ),
@@ -428,193 +429,3 @@ class UnregisteredCandidate(Candidate):  # noqa
     def __call__(self, prompt: dict) -> dict:
         # returns dictionary instead of string
         return CandidateResponse(response={'prompt': prompt, 'response': self.response})
-
-###################################################################################################
-# Mock OpenAI API Client
-# Designed to mimic the response structure of the OpenAI API
-###################################################################################################
-class MockOpenAIDelta(BaseModel):  # noqa: D101
-    content: str
-
-class MockOpenAIChoiceChunk(BaseModel):  # noqa: D101
-    delta: MockOpenAIDelta
-    finish_reason: str
-
-class MockOpenAIChoiceMessage(BaseModel):  # noqa: D101
-    content: str
-    role: str | None = None
-
-class MockOpenAIChoice(BaseModel):  # noqa: D101
-    message: MockOpenAIChoiceMessage
-    finish_reason: str
-    logprobs: list[float] | None = None
-
-class MockOpenAIUsage(BaseModel):  # noqa: D101
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-
-class MockOpenAIChatCompletionChunkResponse(BaseModel):  # noqa: D101
-    object: str
-    model: str
-    created: int
-    choices: list[MockOpenAIChoiceChunk]
-
-class MockOpenAIChatCompletionResponse(BaseModel):  # noqa: D101
-    object: str
-    model: str
-    created: int
-    choices: list[MockOpenAIChoice]
-    usage: MockOpenAIUsage
-
-class LegacyChoiceDelta(BaseModel):  # noqa: D101
-    content: str
-    function_call: str | None = None
-    role: str | None = None
-    tool_calls: str | None = None
-
-class LegacyChoice(BaseModel):  # noqa: D101
-    delta: LegacyChoiceDelta | None = None
-    message: MockOpenAIChoiceMessage | None = None
-    finish_reason: str | None = None
-    index: int = 0
-    logprobs: list[float] | None = None
-
-class LegacyCompletionUsage(BaseModel):  # noqa: D101
-    completion_tokens: int
-    prompt_tokens: int
-    total_tokens: int
-
-class LegacyChatCompletionChunkResponse(BaseModel):  # noqa: D101
-    choices: list[LegacyChoice]
-    created: int
-    model: str
-    object: str
-
-class LegacyChatCompletionResponse(BaseModel):  # noqa: D101
-    choices: list[LegacyChoice]
-    created: int
-    model: str
-    object: str
-    usage: LegacyCompletionUsage
-
-class AsyncMockOpenAI:
-    """
-    Mock OpenAI API client for testing. Returns a fixed response with the same structure as the
-    OpenAI API response.
-    """
-
-    def __init__(self, fake_responses: list[str], legacy: bool = False):
-        self.fake_responses = fake_responses
-        self.response_index = 0
-        self.legacy = legacy
-        self.chat = self.Chat(fake_responses=fake_responses, legacy=legacy)
-
-    class Chat:  # noqa: D106
-        def __init__(self, fake_responses: list[str], legacy: bool):
-            self.completions = AsyncMockOpenAI.Chat.Completions(
-                fake_responses=fake_responses,
-                legacy=legacy,
-            )
-            self.fake_responses = fake_responses
-            self.response_index = 0
-            self.legacy = legacy
-
-        class Completions:  # noqa: D106
-            def __init__(self, fake_responses: list[str], legacy: bool):
-                self.fake_responses = fake_responses
-                self.response_index = 0
-                self.legacy = legacy
-
-            class MockAsyncIterator:  # noqa
-                def __init__(self, chunks):  # noqa: ANN001
-                    self.chunks = chunks
-                    self.index = 0
-
-                def __aiter__(self):
-                    return self
-
-                async def __anext__(self):
-                    if self.index < len(self.chunks):
-                        chunk = self.chunks[self.index]
-                        self.index += 1
-                        return chunk
-                    raise StopAsyncIteration
-
-            async def create(self, *args, stream=False, **kwargs):  # noqa
-                messages = kwargs.get('messages', [])
-                assert isinstance(messages, list), "messages must be provided as a list"
-                for message in messages:
-                    assert isinstance(message, dict), "messages must be provided as a list of dictionaries"  # noqa: E501
-                    assert 'role' in message, "role must be provided for each message"
-                    assert 'content' in message, "content must be provided for each message"
-                assert len(messages) > 0, "messages must be provided to the OpenAI API"
-
-                response = self.fake_responses[self.response_index]
-                self.response_index += 1
-                model = kwargs.get('model')
-
-                if stream:
-                    if self.legacy:
-                        chunks = [
-                            LegacyChatCompletionChunkResponse(
-                                choices=[
-                                    LegacyChoice(
-                                        finish_reason='length',
-                                        delta=LegacyChoiceDelta(content=response[i:i + 4]),
-                                    ),
-                                ],
-                                created=1234567890,
-                                model='/repository',
-                                object='text_completion',
-                            )
-                            for i in range(0, len(response), 4)
-                        ]
-                    else:
-                        chunks = [
-                            MockOpenAIChatCompletionChunkResponse(
-                                object="chat.completion.chunk",
-                                model=model,
-                                created=1234567890,
-                                choices=[
-                                    MockOpenAIChoiceChunk(
-                                        finish_reason='length',
-                                        delta=MockOpenAIDelta(content=response[i:i + 4]),
-                                    ),
-                                ],
-                            )
-                            for i in range(0, len(response), 4)
-                        ]
-                    return self.MockAsyncIterator(chunks)
-
-                if self.legacy:
-                    return LegacyChatCompletionResponse(
-                        choices=[
-                            LegacyChoice(
-                                finish_reason='length',
-                                message=MockOpenAIChoiceMessage(
-                                    content=response,
-                                    role="assistant",
-                                ),
-                            )],
-                        created=1234567890,
-                        model='/repository',
-                        object='text_completion',
-                        usage=LegacyCompletionUsage(
-                            completion_tokens=20,
-                            prompt_tokens=10,
-                            total_tokens=30,
-                        ),
-                    )
-
-                return MockOpenAIChatCompletionResponse(
-                    object="chat.completion",
-                    model=model,
-                    created=1234567890,
-                    choices=[
-                        MockOpenAIChoice(
-                            finish_reason='length',
-                            message=MockOpenAIChoiceMessage(content=response, role="assistant"),
-                        )],
-                    usage=MockOpenAIUsage(prompt_tokens=5, completion_tokens=5, total_tokens=10),
-                )

@@ -15,7 +15,7 @@ from sik_llm_eval.openai import (
     system_message,
     user_message,
 )
-from tests.conftest import AsyncMockOpenAI, OPENAI_DEFAULT_MODEL
+from tests.conftest import OPENAI_DEFAULT_MODEL
 
 
 @pytest.fixture
@@ -31,7 +31,7 @@ def mock_openai_client(mocker: MockerFixture):
         mock_response.model = "mock"
         mock_response.created = 1234567890
         mock_response.object = "chat.completion"
-        mock_response.usage = {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+        mock_response.usage = {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30}
         # Store all input parameters in content
         mock_choice = mocker.Mock()
         mock_choice.message.content = str(kwargs)
@@ -100,8 +100,8 @@ def test__OpenAICompletionWrapper() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert 'logprobs' not in response
     assert 'logprobs_tokens' not in response
@@ -115,8 +115,8 @@ def test__OpenAICompletionWrapper() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] == 1
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] == 1
     assert response.usage['total_tokens'] > 0
     assert 'logprobs' not in response
     assert 'logprobs_tokens' not in response
@@ -130,8 +130,8 @@ def test__OpenAICompletionWrapper() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.logprobs is not None
     assert len(response.logprobs) > 0
@@ -258,8 +258,8 @@ async def test__AsyncOpenAICompletionWrapper() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert 'logprobs' not in response
     assert 'logprobs_tokens' not in response
@@ -273,8 +273,8 @@ async def test__AsyncOpenAICompletionWrapper() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] == 1
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] == 1
     assert response.usage['total_tokens'] > 0
     assert 'logprobs' not in response
     assert 'logprobs_tokens' not in response
@@ -288,8 +288,8 @@ async def test__AsyncOpenAICompletionWrapper() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.logprobs is not None
     assert len(response.logprobs) > 0
@@ -361,156 +361,11 @@ async def test__AsyncOpenAICompletionWrapper__streaming() -> None:
     assert response.finish_reason == 'length'
     assert callback_chunks[-1].finish_reason == 'length'
 
-@pytest.mark.asyncio
-async def test__async_MockOpenAI_object() -> None:
-    # ensure our mock object is working as expected before we use it in actual tests
-    expected_response = "Hello, world!"
-    expected_model = 'my-model'
-    messages = [{'role': 'user', 'content': expected_response}]
-    client = AsyncMockOpenAI(fake_responses=[expected_response])
-    wrapper = AsyncOpenAICompletion(
-        client,
-        model=expected_model,
-        logprobs=True,
-        temperature=0.8,
-    )
-    ####
-    # Non-streaming example
-    ####
-    response = await wrapper(messages=messages)
-    assert expected_response == response.content
-    assert response.model == expected_model
-    assert response.role == 'assistant'
-    assert response.created is not None
-    assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
-    assert response.usage['total_tokens'] > 0
-
-    # test valid parameters for streaming
-    callback_chunks = []
-    async def stream_callback(record) -> None:  # noqa: ANN001
-        nonlocal callback_chunks
-        callback_chunks.append(record)
-
-    client = AsyncMockOpenAI(fake_responses=[expected_response])
-    wrapper = AsyncOpenAICompletion(client, model=expected_model)
-    streaming_response = await wrapper(
-        messages=messages,
-        stream_callback=stream_callback,
-    )
-    print(streaming_response)
-    assert expected_response == response.content
-    # +1 to account for the empty chunk at the end with finished=True
-    assert len(callback_chunks) >= len(range(0, len(expected_response), 4)) + 1
-    assert callback_chunks[-1].finish_reason is not None
-    assert streaming_response.content == ''.join(x.content for x in callback_chunks)
-    assert streaming_response.model == expected_model
-    assert streaming_response.created is not None
-
-@pytest.mark.asyncio
-async def test__async_MockOpenAI_object_streaming() -> None:
-    callback_chunks = []
-    async def streaming_callback(record) -> None:  # noqa: ANN001
-        nonlocal callback_chunks
-        callback_chunks.append(record)
-
-    expected_response = "Hello, world!"
-    expected_model = 'my-model'
-    messages = [{'role': 'user', 'content': expected_response}]
-    client = AsyncMockOpenAI(fake_responses=[expected_response])
-    wrapper = AsyncOpenAICompletion(
-        client,
-        model=expected_model,
-        logprobs=True,
-        temperature=0.8,
-        stream_callback=streaming_callback,
-    )
-    ####
-    # Non-streaming example
-    ####
-    response = await wrapper(messages=messages)
-    assert expected_response == response.content
-    assert response.content == ''.join(x.content for x in callback_chunks)
-    assert callback_chunks[-1].finish_reason is not None
-
-@pytest.mark.asyncio
-async def test__async_MockOpenAI_object__legacy_structure() -> None:
-    expected_response = "Hello, world!"
-    expected_model = 'my-model'
-    messages = [{'role': 'user', 'content': expected_response}]
-    client = AsyncMockOpenAI(fake_responses=[expected_response], legacy=True)
-    wrapper = AsyncOpenAICompletion(
-        client,
-        model=expected_model,
-        logprobs=True,
-        temperature=0.8,
-    )
-    ####
-    # Non-streaming example
-    ####
-    response = await wrapper(messages=messages)
-    assert expected_response == response.content
-    assert response.model
-    assert response.role == 'assistant'
-    assert response.created is not None
-    assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
-    assert response.usage['total_tokens'] > 0
-
-    # test valid parameters for streaming
-    callback_chunks = []
-    async def stream_callback(record) -> None:  # noqa: ANN001
-        nonlocal callback_chunks
-        callback_chunks.append(record)
-
-    client = AsyncMockOpenAI(fake_responses=[expected_response])
-    wrapper = AsyncOpenAICompletion(client, model=expected_model)
-    streaming_response = await wrapper(
-        messages=messages,
-        stream_callback=stream_callback,
-    )
-    print(streaming_response)
-    assert expected_response == response.content
-    # +1 to account for the empty chunk at the end with finished=True
-    assert len(callback_chunks) >= len(range(0, len(expected_response), 4)) + 1
-    assert callback_chunks[-1].finish_reason is not None
-    assert streaming_response.content == ''.join(x.content for x in callback_chunks)
-    assert streaming_response.model == expected_model
-    assert streaming_response.created is not None
-
-@pytest.mark.asyncio
-async def test__async_MockOpenAI_object_streaming__legacy_structure() -> None:
-    callback_chunks = []
-    async def streaming_callback(record) -> None:  # noqa: ANN001
-        nonlocal callback_chunks
-        callback_chunks.append(record)
-
-    expected_response = "Hello, world!"
-    expected_model = 'my-model'
-    messages = [{'role': 'user', 'content': expected_response}]
-    client = AsyncMockOpenAI(fake_responses=[expected_response], legacy=True)
-    wrapper = AsyncOpenAICompletion(
-        client,
-        model=expected_model,
-        logprobs=True,
-        temperature=0.8,
-        stream_callback=streaming_callback,
-    )
-    ####
-    # Non-streaming example
-    ####
-    response = await wrapper(messages=messages)
-    assert expected_response == response.content
-    assert response.content == ''.join(x.content for x in callback_chunks)
-    assert callback_chunks[-1].finish_reason is not None
-
 def test__num_tokens():
     assert num_tokens(model='gpt-3.5-turbo-0613', value="This should be six tokens.") == 6
 
-def test__Function__get_current_weather__to_dict(function_weather: Function):
-    assert function_weather.to_dict() == {
+def test__Function__get_current_weather__to_dict(weather_tool: Function):
+    assert weather_tool.to_dict() == {
         "type": "function",
         "function": {
             "name": "get_current_weather",
@@ -529,8 +384,8 @@ def test__Function__get_current_weather__to_dict(function_weather: Function):
         },
     }
 
-def test__Function__get_current_stocks__to_dict(function_stocks: Function):
-    assert function_stocks.to_dict() == {
+def test__Function__get_current_stocks__to_dict(stocks_tool: Function):
+    assert stocks_tool.to_dict() == {
         "type": "function",
         "function": {
             "name": "get_current_stocks",
@@ -548,10 +403,10 @@ def test__Function__get_current_stocks__to_dict(function_stocks: Function):
         },
     }
 
-def test__OpenAITools(function_weather: Function, function_stocks: Function):
+def test__OpenAITools(weather_tool: Function, stocks_tool: Function):
     tools = [
-        function_weather.to_dict(),
-        function_stocks.to_dict(),
+        weather_tool.to_dict(),
+        stocks_tool.to_dict(),
     ]
     model = OpenAITools(client=OpenAI(), model=OPENAI_DEFAULT_MODEL)
     ####
@@ -569,22 +424,22 @@ def test__OpenAITools(function_weather: Function, function_stocks: Function):
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert len(response.tools) == 1
     assert response.tools[0]['type'] == 'function'
     assert response.tools[0]['name'] == 'get_current_weather'
     assert response.tools[0]['arguments'] == {'location': 'Boston, MA', 'unit': 'fahrenheit'}
 
-def test__OpenAITools__unrelated_prompt__auto(function_weather: Function, function_stocks: Function):  # noqa: E501
+def test__OpenAITools__unrelated_prompt__auto(weather_tool: Function, stocks_tool: Function):
     """
     When the prompt is unrelated to any tool and the tool_choice is 'auto', then we will get
     a OpenAICompletionResponse object rather than a OpenAIToolResponse object.
     """
     tools = [
-        function_weather.to_dict(),
-        function_stocks.to_dict(),
+        weather_tool.to_dict(),
+        stocks_tool.to_dict(),
     ]
     model = OpenAITools(client=OpenAI(), model=OPENAI_DEFAULT_MODEL)
     response = model(
@@ -599,19 +454,19 @@ def test__OpenAITools__unrelated_prompt__auto(function_weather: Function, functi
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.content
 
-def test__OpenAITools__unrelated_prompt__required(function_weather: Function, function_stocks: Function):  # noqa: E501
+def test__OpenAITools__unrelated_prompt__required(weather_tool: Function, stocks_tool: Function):
     """
     When the prompt is unrelated to any tool and the tool_choice is 'required', then we will get
     a OpenAIToolResponse object, because `required` means that a tool must be returned.
     """
     tools = [
-        function_weather.to_dict(),
-        function_stocks.to_dict(),
+        weather_tool.to_dict(),
+        stocks_tool.to_dict(),
     ]
     model = OpenAITools(client=OpenAI(), model=OPENAI_DEFAULT_MODEL)
     response = model(
@@ -621,10 +476,10 @@ def test__OpenAITools__unrelated_prompt__required(function_weather: Function, fu
     )
     assert isinstance(response, OpenAIToolsResponse)
 
-def test__OpenAITools__unrelated_prompt__none(function_weather: Function, function_stocks: Function):  # noqa: E501
+def test__OpenAITools__unrelated_prompt__none(weather_tool: Function, stocks_tool: Function):
     tools = [
-        function_weather.to_dict(),
-        function_stocks.to_dict(),
+        weather_tool.to_dict(),
+        stocks_tool.to_dict(),
     ]
     model = OpenAITools(client=OpenAI(), model=OPENAI_DEFAULT_MODEL)
     response = model(
@@ -639,8 +494,8 @@ def test__OpenAITools__unrelated_prompt__none(function_weather: Function, functi
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] > 0
     assert response.usage['total_tokens'] > 0
     assert response.content
 
@@ -669,6 +524,6 @@ def test__OpenAITools__structured_response():
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage['prompt_tokens'] > 0
-    assert response.usage['completion_tokens'] > 0
+    assert response.usage['input_tokens'] > 0
+    assert response.usage['output_tokens'] > 0
     assert response.usage['total_tokens'] > 0

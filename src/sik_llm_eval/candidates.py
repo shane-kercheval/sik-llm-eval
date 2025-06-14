@@ -43,7 +43,8 @@ from textwrap import dedent
 from collections.abc import Callable
 from typing import Any, Literal
 from pydantic import BaseModel, Field
-from openai import OpenAI
+# from openai import OpenAI
+from sik_llms import OpenAI, OpenAITools, Anthropic, AnthropicTools, Parameter, TextResponse, Tool, ToolChoice, ToolPredictionResponse
 from sik_llm_eval.openai import (
     MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
     OpenAICompletion,
@@ -117,10 +118,12 @@ class Candidate(SerializationMixin, DictionaryEqualsMixin, ABC):
         Initialize a Candidate object.
 
         Args:
-            metadata: A dictionary of metadata about the Candidate.
-            parameters: A dictionary of parameters for the Candidate (most likely, the model parameters
-                passed to the LLM).
-        """  # noqa
+            metadata: A dictionary of metadata about the Candidate. This information will be
+                included in the CandidateResponse and can be used to store information about the
+                Candidate (e.g. the model name, the model version, the model provider, etc.).
+            parameters: A dictionary of parameters for the Candidate (most likely, the model
+                parameters passed to the LLM).
+        """
         self.metadata = deepcopy(metadata) or {}
         self.parameters = deepcopy(parameters)
 
@@ -202,15 +205,12 @@ class Candidate(SerializationMixin, DictionaryEqualsMixin, ABC):
         ).strip()
 
 
-class ServiceCandidate(Candidate, ABC):
-    """
-    Wrapper around a service API that allows the user to create a service candidate from a
-    dictionary.
-    """
+class BuiltinCandidate(Candidate, ABC):
+    """Wrapper around classes that expose builtin Candidates (uses `sik-lmms` package)."""
 
     def __init__(  # noqa: D417
         self,
-        model: str | None = None,
+        model_name: str | None = None,
         endpoint_url: str | None = None,
         metadata: dict | None = None,
         parameters: dict | None = None,
@@ -229,8 +229,8 @@ class ServiceCandidate(Candidate, ABC):
                 A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
         super().__init__(metadata=metadata, parameters=parameters)
-        assert model or endpoint_url, "model or endpoint_url must be provided"
-        self.model = model
+        assert model_name or endpoint_url, "model or endpoint_url must be provided"
+        self.model = model_name
         self.endpoint_url = endpoint_url
 
     @property
@@ -238,60 +238,42 @@ class ServiceCandidate(Candidate, ABC):
     def client_callable(self) -> Any:  # noqa: ANN401
         """Return the client for the service."""
 
-    @property
     @abstractmethod
-    def model_cost_per_token(self) -> float | None:
-        """
-        Return the cost per token for the model. This is used to calculate the cost of the
-        completion.
-        """
-
-    @abstractmethod
-    def _invoke_client_callable(self, input: list[dict[str, str]]) -> Any:  # noqa: A002, ANN401
-        """Invoke the client with the input and return the response."""
-
     def _parse_response(self, response: Any) -> str | dict:  # noqa: ANN401
-        """Get the desired attribute from the response object."""
-        return response.content
+        """Get the response content from the response object."""
+        pass
 
     def __call__(self, input: list[dict[str, str]]) -> CandidateResponse:  # noqa: A002
         """Invokes the underlying model with the input and returns the response."""
         start = time.perf_counter()
-        response = self._invoke_client_callable(input)
+        summary = self._invoke_client_callable(input)
         duration = time.perf_counter() - start
-        prompt_tokens = response.usage.get("prompt_tokens")
-        completion_tokens = response.usage.get("completion_tokens")
-        total_tokens = response.usage.get("total_tokens")
+        input_tokens = summary.input_tokens
+        output_tokens = summary.output_tokens
+        total_tokens = summary.total_tokens
+        input_cost = summary.input_cost
+        output_cost = summary.output_cost
+        total_cost = summary.total_cost
 
-        cost_per_token = self.model_cost_per_token
-        if cost_per_token and prompt_tokens and completion_tokens:
-            prompt_cost = cost_per_token["input"] * prompt_tokens
-            completion_cost = cost_per_token["output"] * completion_tokens
-            total_cost = prompt_cost + completion_cost
-        else:
-            prompt_cost = None
-            completion_cost = None
-            total_cost = None
-
-        parsed_response = self._parse_response(response)
-        completion_characters = (
-            len(parsed_response) if isinstance(parsed_response, str) else None
+        response = self._parse_response(summary)
+        output_characters = (
+            len(response) if isinstance(response, str) else None
         )
         return CandidateResponse(
-            response=parsed_response,
+            response=response,
             metadata={
                 "type": (
                     "tools"
-                    if isinstance(response, OpenAIToolsResponse)
+                    if isinstance(summary, OpenAIToolsResponse)
                     else "completion"
                 ),
-                "prompt_tokens": prompt_tokens,
-                "completion_tokens": completion_tokens,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
                 "total_tokens": total_tokens,
-                "prompt_cost": prompt_cost,
-                "completion_cost": completion_cost,
+                "input_cost": input_cost,
+                "output_cost": output_cost,
                 "total_cost": total_cost,
-                "completion_characters": completion_characters,
+                "output_characters": output_characters,
                 "duration_seconds": duration,
             },
         )
@@ -300,14 +282,14 @@ class ServiceCandidate(Candidate, ABC):
         """Return a dictionary representation of the Candidate."""
         value = super().to_dict()
         if self.model:
-            value["model"] = self.model
+            value["model_name"] = self.model
         if self.endpoint_url:
             value["endpoint_url"] = self.endpoint_url
         return value
 
 
 @Candidate.register(CandidateType.OPENAI)
-class OpenAICandidate(ServiceCandidate):
+class OpenAICandidate(BuiltinCandidate):
     """
     Wrapper around the OpenAI API that allows the user to create an OpenAI candidate from a
     dictionary.
@@ -315,20 +297,23 @@ class OpenAICandidate(ServiceCandidate):
     NOTE: the `OPENAI_API_KEY` environment variable must be set to use this class.
     """
 
-    @property
-    def model_cost_per_token(self) -> float | None:
-        """
-        Return the cost per token for the model. This is used to calculate the cost of the
-        completion.
-        """
-        return OPENAI_MODEL_COST_PER_TOKEN.get(self.model)
+    # @property
+    # def model_cost_per_token(self) -> float | None:
+    #     """
+    #     Return the cost per token for the model. This is used to calculate the cost of the
+    #     completion.
+    #     """
+    #     return OPENAI_MODEL_COST_PER_TOKEN.get(self.model)
+
+    def _parse_response(self, response: TextResponse) -> str:
+        return response.response
 
     @property
     def client_callable(self) -> OpenAICompletion:
         """Return the client for the OpenAI service."""
-        return OpenAICompletion(
-            client=OpenAI(base_url=self.endpoint_url),
-            model=self.model,
+        return OpenAI(
+            server_url=self.endpoint_url,
+            model_name=self.model,
             **self.parameters or {},
         )
 
@@ -351,9 +336,9 @@ class OpenAIToolsCandidate(OpenAICandidate):
 
     def __init__(  # noqa: D417
         self,
-        tools: list[dict],
-        tool_choice: Literal["none", "auto", "required"] | dict[str] = "required",
-        model: str | None = None,
+        tools: list[dict] | list[Tool],
+        tool_choice: str | ToolChoice,
+        model_name: str | None = None,
         endpoint_url: str | None = None,
         metadata: dict | None = None,
         parameters: dict | None = None,
@@ -380,13 +365,34 @@ class OpenAIToolsCandidate(OpenAICandidate):
                 A dictionary of model-specific parameters (e.g. `temperature`).
         """  # noqa
         super().__init__(
-            model=model,
+            model_name=model_name,
             endpoint_url=endpoint_url,
             metadata=metadata,
             parameters=parameters,
         )
+        if isinstance(tools[0], dict):
+            tools = [Tool(**tool) for tool in tools]
+
+        if not all(isinstance(tool, Tool) for tool in tools):
+            raise ValueError(
+                "All tools must be instances of Tool or a dictionary that can be converted to Tool.",  # noqa: E501
+            )
         self.tools = tools
         self.tool_choice = tool_choice
+
+    @property
+    def client_callable(self) -> OpenAICompletion:
+        """Return the client for the OpenAI service."""
+        tool_choice = self.tool_choice
+        if isinstance(tool_choice, str):
+            tool_choice = ToolChoice[tool_choice.upper()]
+        return OpenAITools(
+            server_url=self.endpoint_url,
+            model_name=self.model,
+            tools=self.tools,
+            tool_choice=tool_choice,
+            **self.parameters or {},
+        )
 
     def _invoke_client_callable(
         self,
@@ -395,30 +401,42 @@ class OpenAIToolsCandidate(OpenAICandidate):
         """Invoke the client with the input and return the response."""
         return self.client_callable(
             messages=input,
-            tools=self.tools,
-            tool_choice=self.tool_choice,
         )
 
     def _parse_response(
         self,
-        response: OpenAIToolsResponse | OpenAICompletionResponse,
+        response: ToolPredictionResponse,
     ) -> str | dict:
         """Get the desired attribute from the response object."""
         return (
-            response.tools
-            if isinstance(response, OpenAIToolsResponse)
-            else response.content
+            response.tool_prediction
+            if response.tool_prediction
+            else response.message
         )
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
         value = super().to_dict()
-        value["tools"] = self.tools
+        tools = []
+        # convert parameter types to strings for serialization
+        # e.g. <class 'str'> to 'str'
+        for t in self.tools:
+            if not isinstance(t, Tool):
+                raise ValueError(
+                    "Tools must be instances of Tool or a dictionary that can be converted to Tool.",  # noqa: E501
+                )
+            tool = t.model_dump(exclude_defaults=True, exclude_none=True)
+            parameters = tool.get("parameters", [])
+            for param in parameters:
+                param['param_type'] = param['param_type'].__name__
+            tools.append(tool)
+        value["tools"] = tools
         value["tool_choice"] = self.tool_choice
         return value
 
 
-class AnthropicCandidate(ServiceCandidate):
+@Candidate.register(CandidateType.ANTROPIC)
+class AnthropicCandidate(BuiltinCandidate):
     """
     Wrapper around the Anthropic API that allows the user to create an Anthropic candidate from
     a dictionary.
@@ -501,7 +519,7 @@ class AnthropicToolsCandidate(AnthropicCandidate):
                 A dictionary of model-specific parameters (e.g. `temperature`).
         """
         super().__init__(
-            model=model,
+            model_name=model,
             endpoint_url=endpoint_url,
             metadata=metadata,
             parameters=parameters,

@@ -69,8 +69,8 @@ def test__AnthropicCompletionWrapper() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage["prompt_tokens"] > 0
-    assert response.usage["completion_tokens"] > 0
+    assert response.usage["input_tokens"] > 0
+    assert response.usage["output_tokens"] > 0
     assert response.usage["total_tokens"] > 0
 
     # max tokens == 1
@@ -82,8 +82,8 @@ def test__AnthropicCompletionWrapper() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage["prompt_tokens"] > 0
-    assert response.usage["completion_tokens"] == 1
+    assert response.usage["input_tokens"] > 0
+    assert response.usage["output_tokens"] == 1
     assert response.usage["total_tokens"] > 0
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
@@ -134,8 +134,8 @@ def test__AnthropicCompletionWrapper__streaming() -> None:
     assert callback_chunks[-1].finish_reason == "max_tokens"
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test__Function__get_weather__to_dict(function_weather: Function):
-    assert function_weather.to_dict() == {
+def test__Function__get_weather__to_dict(weather_tool: Function):
+    assert weather_tool.to_dict() == {
         "type": "function",
         "function": {
             "name": "get_current_weather",
@@ -155,8 +155,8 @@ def test__Function__get_weather__to_dict(function_weather: Function):
     }
 
 @pytest.mark.skipif('ANTHROPIC_API_KEY' not in os.environ, reason="ANTHROPIC_API_KEY not set in environment variables")  # noqa
-def test__Function__get_current_stocks__to_dict(function_stocks: Function):
-    assert function_stocks.to_dict() == {
+def test__Function__get_current_stocks__to_dict(stocks_tool: Function):
+    assert stocks_tool.to_dict() == {
         "type": "function",
         "function": {
             "name": "get_current_stocks",
@@ -222,8 +222,8 @@ def test__AnthropicTools():
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage["prompt_tokens"] > 0
-    assert response.usage["completion_tokens"] > 0
+    assert response.usage["input_tokens"] > 0
+    assert response.usage["output_tokens"] > 0
     assert response.usage["total_tokens"] > 0
     assert len(response.tools) == 1
     assert response.tools[0]["type"] == "tool_use"
@@ -269,8 +269,8 @@ def test__AnthropicTools__unrelated_prompt__auto() -> None:
     assert response.created is not None
     assert response.duration_seconds > 0
     assert response.usage is not None
-    assert response.usage["prompt_tokens"] > 0
-    assert response.usage["completion_tokens"] > 0
+    assert response.usage["input_tokens"] > 0
+    assert response.usage["output_tokens"] > 0
     assert response.usage["total_tokens"] > 0
     assert response.content
 

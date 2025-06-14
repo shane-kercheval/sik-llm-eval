@@ -50,8 +50,8 @@ EMBEDDING_MODEL_COST_PER_TOKEN = {}
 MODEL_COST_PER_TOKEN = CHAT_MODEL_COST_PER_TOKEN | EMBEDDING_MODEL_COST_PER_TOKEN
 
 USAGE_ALIASES = {
-    "input_tokens": "prompt_tokens",
-    "output_tokens": "completion_tokens",
+    "input_tokens": "input_tokens",
+    "output_tokens": "output_tokens",
 }
 
 
@@ -142,8 +142,8 @@ class AnthropicCompletionWrapperBase(ABC):
                 if response.usage
                 else None
             )
-            usage["total_tokens"] = usage.get("prompt_tokens", 0) + usage.get(
-                "completion_tokens", 0,
+            usage["total_tokens"] = usage.get("input_tokens", 0) + usage.get(
+                "output_tokens", 0,
             )
             return AnthropicToolsResponse(
                 object_name="tools",
@@ -174,8 +174,8 @@ class AnthropicCompletionWrapperBase(ABC):
                 if response.usage
                 else None
             )
-            usage["total_tokens"] = usage.get("prompt_tokens", 0) + usage.get(
-                "completion_tokens", 0,
+            usage["total_tokens"] = usage.get("input_tokens", 0) + usage.get(
+                "output_tokens", 0,
             )
             return AnthropicChatResponse(
                 object_name="chat.completion",

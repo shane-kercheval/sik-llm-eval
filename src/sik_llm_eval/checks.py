@@ -886,9 +886,9 @@ class LLMCheck(Check):
         from sik_llm_eval.openai import (
             MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
         )
-        prompt_cost = response.usage['prompt_tokens'] * \
+        input_cost = response.usage['input_tokens'] * \
             OPENAI_MODEL_COST_PER_TOKEN[self.openai_model_name]['input']
-        completion_cost = response.usage['completion_tokens'] * \
+        output_cost = response.usage['output_tokens'] * \
             OPENAI_MODEL_COST_PER_TOKEN[self.openai_model_name]['output']
         return CheckResult(
             value={
@@ -901,12 +901,12 @@ class LLMCheck(Check):
                 'response_format': str(self.response_format),
                 'check_metadata': self.metadata,
                 'usage': {
-                    'prompt_tokens': response.usage['prompt_tokens'],
-                    'completion_tokens': response.usage['completion_tokens'],
+                    'input_tokens': response.usage['input_tokens'],
+                    'output_tokens': response.usage['output_tokens'],
                     'total_tokens': response.usage['total_tokens'],
-                    'prompt_cost': prompt_cost,
-                    'completion_cost': completion_cost,
-                    'total_cost': prompt_cost + completion_cost,
+                    'input_cost': input_cost,
+                    'output_cost': output_cost,
+                    'total_cost': input_cost + output_cost,
                 },
                 'duration_seconds': response.duration_seconds,
             },

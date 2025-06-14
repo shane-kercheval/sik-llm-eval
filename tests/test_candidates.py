@@ -3,6 +3,7 @@ import os
 from copy import deepcopy
 from openai import BadRequestError
 import pytest
+from sik_llms import Tool, ToolPrediction, user_message
 from sik_llm_eval.candidates import (
     Candidate,
     CandidateResponse,
@@ -10,7 +11,6 @@ from sik_llm_eval.candidates import (
     OpenAICandidate,
     is_async_candidate,
 )
-from sik_llm_eval.openai import Function, user_message
 
 class MockLMM:
     """Mock class representing an LLM."""
@@ -135,23 +135,29 @@ def test__candidate__to_from_dict():
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
 def test__OpenAI__default__no_parameters(openai_model: str):
-    candidate = OpenAICandidate(model=openai_model)
-    assert candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model': openai_model}  # noqa
+    candidate = OpenAICandidate(model_name=openai_model)
+    assert candidate.to_dict() == {
+        'candidate_type': CandidateType.OPENAI.name,
+        'model_name': openai_model,
+    }
     messages = [user_message("What is the capital of France?")]
     response = candidate(messages)
     assert 'Paris' in response.response
-    assert response.metadata['prompt_tokens'] > 0
-    assert response.metadata['completion_tokens'] > 0
+    assert response.metadata['input_tokens'] > 0
+    assert response.metadata['output_tokens'] > 0
     assert response.metadata['total_tokens'] > 0
-    assert response.metadata['prompt_cost'] > 0
-    assert response.metadata['completion_cost'] > 0
+    assert response.metadata['input_cost'] > 0
+    assert response.metadata['output_cost'] > 0
     assert response.metadata['total_cost'] > 0
-    assert response.metadata['completion_characters'] > 0
+    assert response.metadata['output_characters'] > 0
     # test that the model generated from the dict is the same as the original
     # but that they don't share history (i.e. there is a new underlying object for the model)
     recreated_candidate = Candidate.from_dict(candidate.to_dict())
     assert candidate == recreated_candidate
-    assert recreated_candidate.to_dict() == {'candidate_type': CandidateType.OPENAI.name, 'model': openai_model}  # noqa
+    assert recreated_candidate.to_dict() == {
+        'candidate_type': CandidateType.OPENAI.name,
+        'model_name': openai_model,
+    }
     messages = [user_message("What is the capital of Germany?")]
     response = recreated_candidate(messages)
     assert 'Berlin' in response.response
@@ -161,7 +167,7 @@ def test__OpenAI__config():
     config = {
         'metadata': {'name': 'Test Name'},
         'candidate_type': CandidateType.OPENAI.name,
-        'model': 'test model name',
+        'model_name': 'test model name',
         'parameters': {
             'temperature': -1,
             'max_tokens': -2,
@@ -204,25 +210,20 @@ def test__OpenAI__invalid_parameters(openai_candidate_template: dict):
 
 def test__OpenAIToolsCandidate__from_yaml(
             openai_tools_candidate_template: dict,
-            function_weather: Function, function_stocks: Function,
+            weather_tool: Tool, stocks_tool: Tool,
         ):
     candidate = Candidate.from_yaml('examples/candidates/openai_tools_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI_TOOLS.name
+    assert candidate.tools[0].model_dump() == weather_tool.model_dump()
+    assert candidate.tools[1].model_dump() == stocks_tool.model_dump()
     assert candidate.to_dict() == openai_tools_candidate_template
-    assert isinstance(candidate.tools, list)
-    assert len(candidate.tools) == 2
-    assert isinstance(candidate.tools[0], dict)
-    assert candidate.tools[0] == function_weather.to_dict()
-    assert isinstance(candidate.tools[1], dict)
-    assert candidate.tools[1] == function_stocks.to_dict()
 
     response = candidate([user_message("What's the weather like in Boston today in degrees F?")])
     assert isinstance(response, CandidateResponse)
-    assert isinstance(response.response, list)
-    assert len(response.response) == 1
-    assert response.response[0]['type'] == 'function'
-    assert response.response[0]['name'] == 'get_current_weather'
-    arguments = response.response[0]['arguments']
+    assert isinstance(response.response, ToolPrediction)
+    tool_prediction = response.response
+    assert tool_prediction.name == 'get_current_weather'
+    arguments = tool_prediction.arguments
     assert 'location' in arguments
     assert arguments['location']
     assert isinstance(arguments['location'], str)

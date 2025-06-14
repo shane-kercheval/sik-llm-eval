@@ -1,7 +1,7 @@
 metadata:
   name: OpenAI GPT-4o-mini
 candidate_type: OPENAI
-model: gpt-4o-mini
+model_name: gpt-4o-mini
 parameters:
   temperature: 0.01
   max_tokens: 4096
