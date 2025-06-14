@@ -1,7 +1,7 @@
 metadata:
-  name: OpenAI GPT-4o-mini
-model_name: gpt-4o-mini
-candidate_type: OPENAI_TOOLS
+  name: Anthropic Claude-3.5-Sonnet Tools
+model_name: claude-3-5-sonnet-20241022
+candidate_type: ANTROPIC_TOOLS
 tool_choice: required
 tools: 
   - name: "get_current_weather"
@@ -25,4 +25,3 @@ tools:
 parameters:
   temperature: 0.01
   max_tokens: 4096
-  seed: 42

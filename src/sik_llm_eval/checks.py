@@ -19,7 +19,6 @@ import re
 from textwrap import dedent
 from collections.abc import Callable
 from typing import Any, ClassVar
-from openai import OpenAI
 from pydantic import BaseModel, Field
 from sik_llm_eval.internal_utilities import (
     EnumMixin,
@@ -28,7 +27,7 @@ from sik_llm_eval.internal_utilities import (
     extract_code_blocks,
     get_value_from_path,
 )
-from sik_llm_eval.openai import OpenAICompletion
+from sik_llms import OpenAI
 from sik_llm_eval.utilities import (
     f1_score,
     f1_score_tokens,
@@ -870,9 +869,8 @@ class LLMCheck(Check):
     # checks
     def __call__(self, data: ResponseModel) -> CheckResult:
         """Executes the check on the response and returns the response of the evaluator LLM."""
-        evaluator = OpenAICompletion(
-                client=OpenAI(),
-                model=self.openai_model_name,
+        evaluator = OpenAI(
+                model_name=self.openai_model_name,
                 response_format=self.response_format,
                 **(self.openai_model_params or {}),
         )
@@ -883,13 +881,11 @@ class LLMCheck(Check):
         response = evaluator(messages)
         if not response.parsed:
             raise ValueError(f"Evaluator response is empty: {response}")
-        from sik_llm_eval.openai import (
-            MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
-        )
-        prompt_cost = response.usage['prompt_tokens'] * \
-            OPENAI_MODEL_COST_PER_TOKEN[self.openai_model_name]['input']
-        completion_cost = response.usage['completion_tokens'] * \
-            OPENAI_MODEL_COST_PER_TOKEN[self.openai_model_name]['output']
+
+        input_cost = response.input_cost
+        output_cost = response.output_cost
+        total_cost = response.total_cost
+
         return CheckResult(
             value={
                 'parsed': response.parsed,
@@ -901,12 +897,12 @@ class LLMCheck(Check):
                 'response_format': str(self.response_format),
                 'check_metadata': self.metadata,
                 'usage': {
-                    'prompt_tokens': response.usage['prompt_tokens'],
-                    'completion_tokens': response.usage['completion_tokens'],
-                    'total_tokens': response.usage['total_tokens'],
-                    'prompt_cost': prompt_cost,
-                    'completion_cost': completion_cost,
-                    'total_cost': prompt_cost + completion_cost,
+                    'input_tokens': response.input_tokens,
+                    'output_tokens': response.output_tokens,
+                    'total_tokens': response.total_tokens,
+                    'input_cost': input_cost,
+                    'output_cost': output_cost,
+                    'total_cost': total_cost,
                 },
                 'duration_seconds': response.duration_seconds,
             },
@@ -915,93 +911,6 @@ class LLMCheck(Check):
     def __str__(self) -> str:
         """String representation."""
         return f"{self.__class__.__name__}()"
-
-
-@Check.register(CheckType.TOOL_CALL)
-class ToolCallsCheck(Check):
-    """Checks that the tool call contains the expected function name and arguments."""
-
-    success_threshold: float = Field(
-        default=1.0,
-        description="""
-        The minimum **percent** of successfully executed code blocks and custom tests (if
-        `code_tests` is used) required for the check to be considered successful. Defaulted to 1.0
-        (i.e. 100% of code blocks must run successfully).
-        """,
-    )
-    function_name: str = Field(description="The name of the function the tool should call.")
-    function_arguments: dict = Field(description="""
-        The function arguments the tool should call the function with.""")
-    allow_regex: bool = Field(
-        default=False,
-        description="""
-        If True, the function arguments will be treated as regex patterns. The check
-        will pass if  the regex pattern is found in the tool call arguments.
-        """,
-    )
-    penalize_extraneous_arguments: bool = Field(
-        default=True,
-        description="""
-        If True, the check will penalize the tool call if there are
-        extraneous arguments in the tool call.
-        """,
-    )
-
-    def __call__(self, value: list[dict]) -> CheckResult:
-        """Executes the check on the response/value and returns a ScoreResult."""
-        score = 0
-        metadata = {
-            'check_type': self.check_type,
-            'function_name': self.function_name,
-            'function_arguments': self.function_arguments,
-            'allow_regex': self.allow_regex,
-            'penalize_extraneous_arguments': self.penalize_extraneous_arguments,
-            'check_metadata': self.metadata,
-        }
-        if not isinstance(value, dict | list):
-            return ScoreResult(
-                value=score,
-                success_threshold=self.success_threshold,
-                metadata=metadata,
-            )
-        tools = value if isinstance(value, list) else [value]
-        for tool in tools:
-            tool_dict = tool
-            if tool_dict["name"] == self.function_name:
-                num_arguments = len(self.function_arguments)
-                num_arguments_successful = 0
-                tool_call_function_arguments = deepcopy(tool_dict["arguments"])
-                for key, val in dict(self.function_arguments).items():
-                    if key in tool_call_function_arguments:
-                        tool_call_value = tool_call_function_arguments.pop(key)
-                        # since re.search does not allow non-string types
-                        # first handle bools/ints/floats that are equal
-                        # or check if none
-                        if (
-                            (tool_call_value == val)
-                            or (tool_call_value is None and val is None)
-                            or (
-                                self.allow_regex
-                                and isinstance(val, str)
-                                and re.search(val, tool_call_value)
-                            )
-                        ):
-                            num_arguments_successful += 1
-                if self.penalize_extraneous_arguments:
-                    num_arguments_successful -= len(tool_call_function_arguments)
-                    num_arguments_successful = max(num_arguments_successful, 0)
-                score = num_arguments_successful / num_arguments
-                break
-
-        return ScoreResult(
-            value=score,
-            success_threshold=self.success_threshold,
-            metadata=metadata,
-        )
-
-    def __str__(self) -> str:
-        """String representation."""
-        return f"{self.__class__.__name__}(arguments='{self.arguments}', metadata={self.metadata})"
 
 
 class ActualIdealResponseMixin:

@@ -9,6 +9,7 @@ import pytest
 from copy import deepcopy
 import os
 from textwrap import dedent
+from sik_llms import ToolPrediction, user_message
 import yaml
 from sik_llm_eval.candidates import (
     Candidate,
@@ -24,7 +25,6 @@ from sik_llm_eval.checks import (
     MatchCheck,
     PassFailResult,
     ScoreResult,
-    ToolCallsCheck,
 )
 from sik_llm_eval.delayed_semaphore import DelayedSemaphore
 from sik_llm_eval.eval import (
@@ -35,7 +35,6 @@ from sik_llm_eval.eval import (
     Mode,
 )
 from sik_llm_eval.internal_utilities import extract_code_blocks
-from sik_llm_eval.openai import user_message
 from tests.conftest import (
     OPENAI_DEFAULT_MODEL,
     AsyncMockCandidateCausesError,
@@ -1171,23 +1170,46 @@ class TestEvalHarness:
         eval_ = Eval(
             input=[user_message("What's the weather like in Boston today in degrees F?")],
             checks=[
-                ToolCallsCheck(
-                    function_name='get_current_weather',
-                    function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
+                MatchCheck(
+                    value="get_current_weather",
+                    data_path='response.name',
+                    metadata={'type': 'tool_name'},
+                ),
+                MatchCheck(
+                    value='fahrenheit',
+                    data_path='response.arguments["unit"]',
+                    metadata={'type': 'argument'},
+                ),
+                ContainsCheck(
+                    value='Boston',
+                    data_path='response.arguments["location"]',
+                    metadata={'type': 'argument'},
                 ),
             ],
         )
         candidate_response = candidate(eval_.input)
         result = eval_(response=candidate_response.response, candidate=candidate)
-        tool_response = result.response[0]
-        assert tool_response['name'] == 'get_current_weather'
-        assert 'location' in tool_response['arguments']
-        assert tool_response['arguments']['location']
-        assert isinstance(tool_response['arguments']['location'], str)
-        assert 'unit' in tool_response['arguments']
-        assert tool_response['arguments']['unit'] in ['celsius', 'fahrenheit']
+        tool_response: ToolPrediction = result.response
+        assert tool_response.name == 'get_current_weather'
+        assert 'location' in tool_response.arguments
+        assert tool_response.arguments['location']
+        assert isinstance(tool_response.arguments['location'], str)
+        assert 'unit' in tool_response.arguments
+        assert tool_response.arguments['unit'] in ['celsius', 'fahrenheit']
         # check that it gets at least the function name correctly
-        assert result.check_results[0].value >= 0.5
+        assert len(result.check_results) == 3
+        assert result.check_results[0].metadata['check_metadata']['type'] == 'tool_name'
+        assert result.check_results[0].metadata['data_path'] == 'response.name'
+        assert result.check_results[0].metadata['value_extracted'] == tool_response.name
+        assert result.check_results[0].success is True
+        assert result.check_results[1].metadata['check_metadata']['type'] == 'argument'
+        assert result.check_results[1].metadata['data_path'] == 'response.arguments["unit"]'
+        assert result.check_results[1].metadata['value_extracted'] == tool_response.arguments['unit']  # noqa: E501
+        assert result.check_results[1].success is True
+        assert result.check_results[2].metadata['check_metadata']['type'] == 'argument'
+        assert result.check_results[2].metadata['data_path'] == 'response.arguments["location"]'
+        assert result.check_results[2].metadata['value_extracted'] == tool_response.arguments['location']  # noqa: E501
+        assert result.check_results[2].success is True
 
 
 class TestLogging:

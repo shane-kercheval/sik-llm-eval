@@ -23,7 +23,6 @@ from sik_llm_eval.checks import (
     RegexCheck,
     ResponseModel,
     ScoreResult,
-    ToolCallsCheck,
 )
 from sik_llm_eval.utilities import f1_score, precision_score_tokens, recall_score_tokens
 from tests.conftest import OPENAI_DEFAULT_MODEL
@@ -2737,192 +2736,6 @@ def test__PythonCodeBlockTests__with_env_namespace():
     assert Check.from_dict(check.to_dict()) == check
     assert CheckResult.from_dict(result.to_dict()) == result
 
-def test__ToolCallsCheck():
-    """Test that the template for an OpenAI candidate works."""
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
-    )
-    result = check.run_on_model(ResponseModel(response=[{
-        'arguments': {'location':'Boston, MA', 'unit':'fahrenheit'},
-        'name': 'get_current_weather',
-    }]))
-    assert isinstance(result, CheckResult)
-    assert result.success is True
-    assert result.value == 1
-    assert result.metadata['function_name'] == 'get_current_weather'
-    assert result.metadata['function_arguments'] == {
-        'location': 'Boston, MA', 'unit': 'fahrenheit',
-    }
-    assert result.metadata['allow_regex'] is False
-    assert result.metadata['check_type'] == CheckType.TOOL_CALL
-
-def test__ToolCallsCheck__multiple_functions():
-    """Test that the template for an OpenAI candidate works."""
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={'location': 'Boston, MA', 'unit': 'fahrenheit'},
-    )
-    result = check.run_on_model(ResponseModel(response=[
-        {
-            "arguments": {"location":"Boston, MA", "unit":"fahrenheit"},
-            "name": "get_current_weather",
-        },
-        {
-            "arguments": {"location":"Boston, MA"},
-            "name": "get_location",
-        },
-    ]))
-    assert isinstance(result, CheckResult)
-    assert result.success is True
-    assert result.value == 1
-    assert result.metadata['function_name'] == 'get_current_weather'
-    assert result.metadata['function_arguments'] == {
-        'location': 'Boston, MA', 'unit': 'fahrenheit',
-    }
-    assert result.metadata['allow_regex'] is False
-    assert result.metadata['check_type'] == CheckType.TOOL_CALL
-
-def test__ToolCallsCheck__allow_regex():
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={
-            'location': 'Boston',
-            'unit': 'fahrenheit',
-            'temperature': 70,
-            'raining': False,
-            'uv_index': None,
-        },
-        allow_regex=True,
-    )
-    result = check.run_on_model(ResponseModel(response=[{
-        'arguments': {
-            'location':'Boston, MA',
-            'unit':'fahrenheit',
-            'temperature': 70,
-            'raining': False,
-            'uv_index': None,
-        },
-        'name': 'get_current_weather',
-    }]))
-    assert isinstance(result, CheckResult)
-    assert result.success is True
-    assert result.value == 1
-    assert result.metadata['function_name'] == 'get_current_weather'
-    assert result.metadata['function_arguments'] == {
-        'location': 'Boston',
-        'unit': 'fahrenheit',
-        'temperature': 70,
-        'raining': False,
-        'uv_index': None,
-    }
-    assert result.metadata['allow_regex'] is True
-    assert result.metadata['check_type'] == CheckType.TOOL_CALL
-
-def test__ToolCallsCheck__penalize_extraneous_arguments():
-    """Test that the template for an OpenAI candidate works."""
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
-    )
-    fake_response = [{
-        'arguments': {
-            'location':'Boston, MA',
-            'unit':'fahrenheit',
-            'lat': 42.3601,
-            'lon': 71.0589,
-        },
-        'name': 'get_current_weather',
-    }]
-    result = check.run_on_model(ResponseModel(response=fake_response))
-    assert isinstance(result, CheckResult)
-    assert result.success is False
-    assert result.value == 0
-    assert result.metadata['function_name'] == 'get_current_weather'
-    assert result.metadata['function_arguments'] == {'location': 'Boston', 'unit': 'fahrenheit'}
-    assert result.metadata['allow_regex'] is False
-    assert result.metadata['check_type'] == CheckType.TOOL_CALL
-    assert result.metadata['penalize_extraneous_arguments']
-
-def test__ToolCallsCheck__incorrect_function_name():
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
-    )
-    result = check.run_on_model(ResponseModel(response=[{
-        'arguments': {'location':'Boston, MA', 'unit':'fahrenheit'},
-        'name': 'get_current_weather_2',
-    }]))
-    assert isinstance(result, CheckResult)
-    assert result.success is False
-    assert result.value == 0
-
-def test__ToolCallsCheck__allow_regex_partial_correct():
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={
-            'location': 'Boston',
-            'unit': 'fahrenheit',
-            'temperature': 70,
-            'raining': False,
-            'uv_index': None,
-        },
-        allow_regex=True,
-    )
-    result = check.run_on_model(ResponseModel(response=[{
-        'arguments': {
-            'location':'Boston, MA',
-            'unit':'fahrenheit',
-            'temperature': 70,
-            'raining': True,
-            'uv_index': 0,
-        },
-        'name': 'get_current_weather',
-    }]))
-    assert isinstance(result, CheckResult)
-    assert result.success is False
-    assert result.value == 0.6
-    assert result.metadata['function_name'] == 'get_current_weather'
-    assert result.metadata['function_arguments'] == {
-        'location': 'Boston',
-        'unit': 'fahrenheit',
-        'temperature': 70,
-        'raining': False,
-        'uv_index': None,
-    }
-    assert result.metadata['allow_regex'] is True
-    assert result.metadata['check_type'] == CheckType.TOOL_CALL
-
-def test__ToolCallsCheck__empty_string_response():
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
-    )
-    result = check.run_on_model(ResponseModel(response=""))
-    assert isinstance(result, CheckResult)
-    assert result.success is False
-    assert result.value == 0
-
-def test__ToolCallsCheck__empty_list_response():
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
-    )
-    result = check.run_on_model(ResponseModel(response=[]))
-    assert isinstance(result, CheckResult)
-    assert result.success is False
-    assert result.value == 0
-
-def test__ToolCallsCheck__string_response():
-    check = ToolCallsCheck(
-        function_name='get_current_weather',
-        function_arguments={'location': 'Boston', 'unit': 'fahrenheit'},
-    )
-    result = check.run_on_model(ResponseModel(response="This is a test."))
-    assert isinstance(result, CheckResult)
-    assert result.success is False
-    assert result.value == 0
-
 def test__LLMCheck__openai():
     """Test that the template for an OpenAI candidate works."""
 
@@ -2955,11 +2768,11 @@ def test__LLMCheck__openai():
     assert result.value['parsed'].contains_toxicity is True
     assert 'bullshit' in result.value['parsed'].toxicity_phrase.lower()
 
-    assert result.metadata['usage']['prompt_tokens'] > 0
-    assert result.metadata['usage']['completion_tokens'] > 0
+    assert result.metadata['usage']['input_tokens'] > 0
+    assert result.metadata['usage']['output_tokens'] > 0
     assert result.metadata['usage']['total_tokens'] > 0
-    assert result.metadata['usage']['prompt_cost'] > 0
-    assert result.metadata['usage']['completion_cost'] > 0
+    assert result.metadata['usage']['input_cost'] > 0
+    assert result.metadata['usage']['output_cost'] > 0
     assert result.metadata['usage']['total_cost'] > 0
     assert result.metadata['duration_seconds'] > 0
 
@@ -2981,11 +2794,11 @@ def test__LLMCheck__openai():
     assert result.value['parsed'].contains_toxicity is False
     assert not result.value['parsed'].toxicity_phrase
 
-    assert result.metadata['usage']['prompt_tokens'] > 0
-    assert result.metadata['usage']['completion_tokens'] > 0
+    assert result.metadata['usage']['input_tokens'] > 0
+    assert result.metadata['usage']['output_tokens'] > 0
     assert result.metadata['usage']['total_tokens'] > 0
-    assert result.metadata['usage']['prompt_cost'] > 0
-    assert result.metadata['usage']['completion_cost'] > 0
+    assert result.metadata['usage']['input_cost'] > 0
+    assert result.metadata['usage']['output_cost'] > 0
     assert result.metadata['usage']['total_cost'] > 0
     assert result.metadata['duration_seconds'] > 0
 
