@@ -353,6 +353,20 @@ def openai_tools_candidate_template() -> dict:
 
 
 @pytest.fixture
+def anthropic_candidate_template() -> dict:
+    """Returns the yaml template for an Anthropic candidate."""
+    with open('examples/candidates/anthropic_sonnet.yaml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture
+def anthropic_tools_candidate_template() -> dict:
+    """Returns the yaml template for an Anthropic Tools candidate."""
+    with open('examples/candidates/anthropic_tools_sonnet.yaml') as f:
+        return yaml.safe_load(f)
+
+
+@pytest.fixture
 def hugging_face_candidate_template() -> dict:
     """Returns the yaml template for a Hugging Face Endpoint candidate."""
     with open('examples/candidates/additional_examples/hugging_face_endpoint_mistral_a10g.yaml') as f:  # noqa

@@ -1,6 +1,6 @@
 [project]
 name = "sik-llm-eval"
-version = "0.0.1"
+version = "0.0.2"
 description = "sik-llm-eval is a simple, yet flexible, framework primarily designed for evaluating Language Model Models (LLMs) on custom use cases."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,7 +13,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     "requests>=2.32.4",
     "ruamel-yaml>=0.18.14",
-    "sik-llms>=0.3.18",
+    "sik-llms>=0.3.19",
     "tenacity>=9.1.2",
     "tiktoken>=0.9.0",
 ]

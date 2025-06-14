@@ -1305,7 +1305,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "requests", specifier = ">=2.32.4" },
     { name = "ruamel-yaml", specifier = ">=0.18.14" },
-    { name = "sik-llms", specifier = ">=0.3.18" },
+    { name = "sik-llms", specifier = ">=0.3.19" },
     { name = "tenacity", specifier = ">=9.1.2" },
     { name = "tiktoken", specifier = ">=0.9.0" },
 ]
@@ -1323,7 +1323,7 @@ dev = [
 
 [[package]]
 name = "sik-llms"
-version = "0.3.18"
+version = "0.3.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anthropic" },
@@ -1334,9 +1334,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "tiktoken" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/23/6d/cc277aab3e33f30475779ee9eaaf12c8dc8e6fb9e40a63b47b34606e4aec/sik_llms-0.3.18.tar.gz", hash = "sha256:feb6b53eed83af0ada928b36a0df5cc1007576d2de48d5c2fc67f56c4463dd2d", size = 143496, upload-time = "2025-06-14T20:28:49.424Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/32/c68055a67a2d25073b26e10fd4d6d31fbdcb405e5264891ff4b2f633e515/sik_llms-0.3.19.tar.gz", hash = "sha256:025144fba3ffb9426c477c3cea53d1bbdfcd36410e54e96c5363709efc7c3f80", size = 143516, upload-time = "2025-06-14T22:21:52.158Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/d4/fd5e6f2e74cb76611bfc03924847efce1a7d9f88990b350491888bd641c5/sik_llms-0.3.18-py3-none-any.whl", hash = "sha256:6c0591a5839b3fdb3eaaa343507bde81716c48c0dd0c0909c6b6687d1649758b", size = 40386, upload-time = "2025-06-14T20:28:48.357Z" },
+    { url = "https://files.pythonhosted.org/packages/4f/38/8200b6d4d2d8c31c261fac73d16687829403fa01db7927b2b3c2c4840aa2/sik_llms-0.3.19-py3-none-any.whl", hash = "sha256:48adb563c06c9a71586d2a5189ab7b2140d59ada10923945d7b1483cf9d9508b", size = 40380, upload-time = "2025-06-14T22:21:50.764Z" },
 ]
 
 [[package]]

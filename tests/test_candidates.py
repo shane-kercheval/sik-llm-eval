@@ -5,6 +5,7 @@ from openai import BadRequestError
 import pytest
 from sik_llms import Tool, ToolPrediction, user_message
 from sik_llm_eval.candidates import (
+    AnthropicCandidate,
     Candidate,
     CandidateResponse,
     CandidateType,
@@ -62,10 +63,12 @@ def test__is_async_candidate():
     assert is_async_candidate(AsyncCallable())
     assert not is_async_candidate(SyncCallable())
 
+
 def test__Candidate__from_yaml(openai_candidate_template: dict):
     candidate = Candidate.from_yaml('examples/candidates/openai_4o-mini.yaml')
     assert candidate.candidate_type == CandidateType.OPENAI.name
     assert candidate.to_dict() == openai_candidate_template
+
 
 def test__candidate__registration():
     assert not Candidate.is_registered('NotRegistered')
@@ -102,6 +105,7 @@ def test__candidate__registration():
     assert response == 'test_3'
     assert candidate.model.prompts == ['test_1', 'test_2']
 
+
 def test__candidate__to_from_dict():
     candidate_dict = {
         'candidate_type': 'MOCK_MODEL',
@@ -133,106 +137,166 @@ def test__candidate__to_from_dict():
     assert another_candidate.model.prompts == ['test_another']
     assert candidate.model.prompts == ['test']
 
-@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__default__no_parameters(openai_model: str):
-    candidate = OpenAICandidate(model_name=openai_model)
-    assert candidate.to_dict() == {
-        'candidate_type': CandidateType.OPENAI.name,
-        'model_name': openai_model,
-    }
-    messages = [user_message("What is the capital of France?")]
-    response = candidate(messages)
-    assert 'Paris' in response.response
-    assert response.metadata['input_tokens'] > 0
-    assert response.metadata['output_tokens'] > 0
-    assert response.metadata['total_tokens'] > 0
-    assert response.metadata['input_cost'] > 0
-    assert response.metadata['output_cost'] > 0
-    assert response.metadata['total_cost'] > 0
-    assert response.metadata['output_characters'] > 0
-    # test that the model generated from the dict is the same as the original
-    # but that they don't share history (i.e. there is a new underlying object for the model)
-    recreated_candidate = Candidate.from_dict(candidate.to_dict())
-    assert candidate == recreated_candidate
-    assert recreated_candidate.to_dict() == {
-        'candidate_type': CandidateType.OPENAI.name,
-        'model_name': openai_model,
-    }
-    messages = [user_message("What is the capital of Germany?")]
-    response = recreated_candidate(messages)
-    assert 'Berlin' in response.response
-
-def test__OpenAI__config():
-    """Test that the various config options for an OpenAI candidate work."""
-    config = {
-        'metadata': {'name': 'Test Name'},
-        'candidate_type': CandidateType.OPENAI.name,
-        'model_name': 'test model name',
-        'parameters': {
-            'temperature': -1,
-            'max_tokens': -2,
-            'seed': -3,
-        },
-    }
-    candidate = Candidate.from_dict(config)
-    assert candidate.metadata == config['metadata']
-    assert candidate.candidate_type == CandidateType.OPENAI.name
-    assert candidate.parameters == config['parameters']
-    assert candidate.to_dict() == config
-    assert candidate.from_dict(candidate.to_dict()) == candidate
 
 @pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__template__parameters(openai_candidate_template: dict):
-    """Test that the template for an OpenAI candidate works."""
-    template = deepcopy(openai_candidate_template)
-    expected_model_param_names = ['temperature', 'max_tokens']
-    expected_parameters = {
-        k:v for k, v in template['parameters'].items()
-        if k in expected_model_param_names
-    }
-    candidate = Candidate.from_dict(template)
-    candidate.parameters == expected_parameters
-    assert candidate.to_dict() == template
+class TestOpenAICandidate:
+    """Tests for the OpenAICandidate class."""
 
-    messages = [user_message("What is the capital of France?")]
-    response = candidate(messages)
-    assert 'Paris' in response.response
+    def test__OpenAI__default__no_parameters(self, openai_model: str):
+        candidate = OpenAICandidate(model_name=openai_model)
+        assert candidate.to_dict() == {
+            'candidate_type': CandidateType.OPENAI.name,
+            'model_name': openai_model,
+        }
+        messages = [user_message("What is the capital of France?")]
+        response = candidate(messages)
+        assert 'Paris' in response.response
+        assert response.metadata['input_tokens'] > 0
+        assert response.metadata['output_tokens'] > 0
+        assert response.metadata['total_tokens'] > 0
+        assert response.metadata['input_cost'] > 0
+        assert response.metadata['output_cost'] > 0
+        assert response.metadata['total_cost'] > 0
+        assert response.metadata['output_characters'] > 0
+        # test that the model generated from the dict is the same as the original
+        # but that they don't share history (i.e. there is a new underlying object for the model)
+        recreated_candidate = Candidate.from_dict(candidate.to_dict())
+        assert candidate == recreated_candidate
+        assert recreated_candidate.to_dict() == {
+            'candidate_type': CandidateType.OPENAI.name,
+            'model_name': openai_model,
+        }
+        messages = [user_message("What is the capital of Germany?")]
+        response = recreated_candidate(messages)
+        assert 'Berlin' in response.response
 
-@pytest.mark.skipif(not os.environ.get('OPENAI_API_KEY'), reason="OPENAI_API_KEY is not set")
-def test__OpenAI__invalid_parameters(openai_candidate_template: dict):
-    """Test invalid parameters so that we know we're actually sending them."""
-    template = deepcopy(openai_candidate_template)
-    template['parameters']['temperature'] = -10  # invalid value
-    candidate = Candidate.from_dict(template)
-    messages = [user_message("What is the capital of France?")]
-    with pytest.raises(BadRequestError):
-        _ = candidate(messages)
+    def test__OpenAI__config(self):
+        """Test that the various config options for an OpenAI candidate work."""
+        config = {
+            'metadata': {'name': 'Test Name'},
+            'candidate_type': CandidateType.OPENAI.name,
+            'model_name': 'test model name',
+            'parameters': {
+                'temperature': -1,
+                'max_tokens': -2,
+                'seed': -3,
+            },
+        }
+        candidate = Candidate.from_dict(config)
+        assert candidate.metadata == config['metadata']
+        assert candidate.candidate_type == CandidateType.OPENAI.name
+        assert candidate.parameters == config['parameters']
+        assert candidate.to_dict() == config
+        assert candidate.from_dict(candidate.to_dict()) == candidate
 
-def test__OpenAIToolsCandidate__from_yaml(
+    def test__OpenAI__template__parameters(self, openai_candidate_template: dict):
+        """Test that the template for an OpenAI candidate works."""
+        template = deepcopy(openai_candidate_template)
+        expected_model_param_names = ['temperature', 'max_tokens']
+        expected_parameters = {
+            k:v for k, v in template['parameters'].items()
+            if k in expected_model_param_names
+        }
+        candidate = Candidate.from_dict(template)
+        candidate.parameters == expected_parameters
+        assert candidate.to_dict() == template
+
+        messages = [user_message("What is the capital of France?")]
+        response = candidate(messages)
+        assert 'Paris' in response.response
+
+    def test__OpenAI__invalid_parameters(self, openai_candidate_template: dict):
+        """Test invalid parameters so that we know we're actually sending them."""
+        template = deepcopy(openai_candidate_template)
+        template['parameters']['temperature'] = -10  # invalid value
+        candidate = Candidate.from_dict(template)
+        messages = [user_message("What is the capital of France?")]
+        with pytest.raises(BadRequestError):
+            _ = candidate(messages)
+
+    def test__OpenAIToolsCandidate__from_yaml(
+            self,
             openai_tools_candidate_template: dict,
             weather_tool: Tool, stocks_tool: Tool,
         ):
-    candidate = Candidate.from_yaml('examples/candidates/openai_tools_4o-mini.yaml')
-    assert candidate.candidate_type == CandidateType.OPENAI_TOOLS.name
-    assert candidate.tools[0].model_dump() == weather_tool.model_dump()
-    assert candidate.tools[1].model_dump() == stocks_tool.model_dump()
-    assert candidate.to_dict() == openai_tools_candidate_template
+        candidate = Candidate.from_yaml('examples/candidates/openai_tools_4o-mini.yaml')
+        assert candidate.candidate_type == CandidateType.OPENAI_TOOLS.name
+        assert candidate.tools[0].model_dump() == weather_tool.model_dump()
+        assert candidate.tools[1].model_dump() == stocks_tool.model_dump()
+        assert candidate.to_dict() == openai_tools_candidate_template
 
-    response = candidate([user_message("What's the weather like in Boston today in degrees F?")])
-    assert isinstance(response, CandidateResponse)
-    assert isinstance(response.response, ToolPrediction)
-    tool_prediction = response.response
-    assert tool_prediction.name == 'get_current_weather'
-    arguments = tool_prediction.arguments
-    assert 'location' in arguments
-    assert arguments['location']
-    assert isinstance(arguments['location'], str)
-    assert 'unit' in arguments
-    assert arguments['unit'] in ['celsius', 'fahrenheit']
+        response = candidate([user_message("What's the weather like in Boston today in degrees F?")])  # noqa: E501
+        assert isinstance(response, CandidateResponse)
+        assert isinstance(response.response, ToolPrediction)
+        tool_prediction = response.response
+        assert tool_prediction.name == 'get_current_weather'
+        arguments = tool_prediction.arguments
+        assert 'location' in arguments
+        assert arguments['location']
+        assert isinstance(arguments['location'], str)
+        assert 'unit' in arguments
+        assert arguments['unit'] in ['celsius', 'fahrenheit']
 
-    assert response.metadata['input_tokens'] > 0
-    assert response.metadata['output_tokens'] > 0
-    assert response.metadata['total_tokens'] > 0
-    assert response.metadata['input_cost'] > 0
-    assert response.metadata['output_cost'] > 0
-    assert response.metadata['total_cost'] > 0
+        assert response.metadata['input_tokens'] > 0
+        assert response.metadata['output_tokens'] > 0
+        assert response.metadata['total_tokens'] > 0
+        assert response.metadata['input_cost'] > 0
+        assert response.metadata['output_cost'] > 0
+        assert response.metadata['total_cost'] > 0
+
+
+@pytest.mark.skipif(not os.environ.get('ANTHROPIC_API_KEY'), reason="ANTHROPIC_API_KEY is not set")
+class TestAnthropicCandidate:
+    """Tests for the AnthropicCandidate class."""
+
+    def test__AnthropicCandidate__from_yaml(self, anthropic_candidate_template: dict):
+        candidate = Candidate.from_yaml('examples/candidates/anthropic_sonnet.yaml')
+        assert candidate.candidate_type == CandidateType.ANTHROPIC.name
+        assert candidate.to_dict() == anthropic_candidate_template
+
+    def test__AnthropicCandidate__basic(self):
+        candidate = AnthropicCandidate(model_name='claude-3-5-sonnet-20241022')
+        assert candidate.to_dict() == {
+            'candidate_type': CandidateType.ANTHROPIC.name,
+            'model_name': 'claude-3-5-sonnet-20241022',
+        }
+        messages = [user_message("What is the capital of France?")]
+        response = candidate(messages)
+        assert 'Paris' in response.response
+        assert response.metadata['input_tokens'] > 0
+        assert response.metadata['output_tokens'] > 0
+        assert response.metadata['total_tokens'] > 0
+        assert response.metadata['input_cost'] > 0
+        assert response.metadata['output_cost'] > 0
+        assert response.metadata['total_cost'] > 0
+        assert response.metadata['output_characters'] > 0
+
+    def test__AnthropicToolsCandidate__from_yaml(
+            self,
+            anthropic_tools_candidate_template: dict,
+            weather_tool: Tool, stocks_tool: Tool,
+        ):
+        candidate = Candidate.from_yaml('examples/candidates/anthropic_tools_sonnet.yaml')
+        assert candidate.candidate_type == CandidateType.ANTROPIC_TOOLS.name
+        assert candidate.tools[0].model_dump() == weather_tool.model_dump()
+        assert candidate.tools[1].model_dump() == stocks_tool.model_dump()
+        assert candidate.to_dict() == anthropic_tools_candidate_template
+
+        response = candidate([user_message("What's the weather like in Boston today in degrees F?")])  # noqa: E501
+        assert isinstance(response, CandidateResponse)
+        assert isinstance(response.response, ToolPrediction)
+        tool_prediction = response.response
+        assert tool_prediction.name == 'get_current_weather'
+        arguments = tool_prediction.arguments
+        assert 'location' in arguments
+        assert arguments['location']
+        assert isinstance(arguments['location'], str)
+        assert 'unit' in arguments
+        assert arguments['unit'] in ['celsius', 'fahrenheit']
+
+        assert response.metadata['input_tokens'] > 0
+        assert response.metadata['output_tokens'] > 0
+        assert response.metadata['total_tokens'] > 0
+        assert response.metadata['input_cost'] > 0
+        assert response.metadata['output_cost'] > 0
+        assert response.metadata['total_cost'] > 0

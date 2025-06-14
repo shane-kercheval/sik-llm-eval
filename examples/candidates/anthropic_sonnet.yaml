@@ -1,0 +1,7 @@
+metadata:
+  name: Anthropic Claude-3.5-Sonnet
+model_name: claude-3-5-sonnet-20241022
+candidate_type: ANTHROPIC
+parameters:
+  temperature: 0.01
+  max_tokens: 4096

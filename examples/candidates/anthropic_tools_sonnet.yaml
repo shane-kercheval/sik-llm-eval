@@ -1,0 +1,27 @@
+metadata:
+  name: Anthropic Claude-3.5-Sonnet Tools
+model_name: claude-3-5-sonnet-20241022
+candidate_type: ANTROPIC_TOOLS
+tool_choice: required
+tools: 
+  - name: "get_current_weather"
+    description: "Get the current weather in a given location"
+    parameters:
+      - name: location
+        param_type: str
+        description: "The city and state, e.g. San Francisco, CA"
+        required: true
+      - name: unit
+        param_type: str
+        valid_values: ["celsius", "fahrenheit"]
+        required: true
+  - name: "get_current_stocks"
+    description: "Get the current stock price of a given company"
+    parameters:
+      - name: company
+        param_type: str
+        description: "The name of the company, e.g. Apple"
+        required: true
+parameters:
+  temperature: 0.01
+  max_tokens: 4096

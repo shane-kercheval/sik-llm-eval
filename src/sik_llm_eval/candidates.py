@@ -32,7 +32,6 @@ can be serialized into a dictionary and the information can be saved in the Eval
 
 from __future__ import annotations
 
-import os
 import time
 from datetime import datetime, UTC
 from inspect import iscoroutinefunction
@@ -41,26 +40,25 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from textwrap import dedent
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Any
 from pydantic import BaseModel, Field
-# from openai import OpenAI
-from sik_llms import Client, OpenAI, OpenAITools, Anthropic, AnthropicTools, Parameter, TextResponse, Tool, ToolChoice, ToolPrediction, ToolPredictionResponse
-# from sik_llm_eval.openai import (
-#     MODEL_COST_PER_TOKEN as OPENAI_MODEL_COST_PER_TOKEN,
-#     OpenAICompletion,
-#     OpenAIToolsResponse,
-#     OpenAICompletionResponse,
-# )
+from sik_llms import (
+    Client,
+    OpenAI,
+    OpenAITools,
+    Anthropic,
+    AnthropicTools,
+    TextResponse,
+    Tool,
+    ToolChoice,
+    ToolPrediction,
+    ToolPredictionResponse,
+)
 from sik_llm_eval.internal_utilities import (
     DictionaryEqualsMixin,
     EnumMixin,
     Registry,
     SerializationMixin,
-)
-from sik_llm_eval.anthropic import (
-    AnthropicCompletion,
-    AnthropicCompletionResponse,
-    AnthropicToolsResponse,
 )
 
 
@@ -167,6 +165,14 @@ class Candidate(SerializationMixin, DictionaryEqualsMixin, ABC):
         if cls.is_registered(candidate_type):
             return cls.registry.create_instance(type_name=candidate_type, **data)
         raise ValueError(f"Unknown Candidate type `{candidate_type}`")
+
+    @classmethod
+    def from_yaml(cls: type[Candidate], file_path: str) -> Candidate | list[Candidate]:
+        """Creates a Candidate object from a YAML file."""
+        import yaml
+        with open(file_path) as f:
+            data = yaml.safe_load(f)
+        return cls.from_dict(data)
 
     def to_dict(self) -> dict:
         """Return a dictionary representation of the Candidate."""
@@ -434,37 +440,22 @@ class AnthropicCandidate(BuiltinCandidate):
     NOTE: the `ANTHROPIC_API_KEY` environment variable must be set to use this class.
     """
 
+    def _parse_response(self, response: TextResponse) -> str:
+        return response.response
+
     @property
-    def client_callable(self) -> AnthropicCompletion:
+    def client_callable(self) -> Client:
         """Return the client for the Anthropic service."""
-        from anthropic import Anthropic
-        from sik_llm_eval.anthropic import AnthropicCompletion
-
-        parameters = self.parameters or {}
-        api_key = parameters.pop("api_key", os.getenv("ANTHROPIC_API_KEY"))
-        return AnthropicCompletion(
-            client=Anthropic(api_key=api_key),
-            model=self.model,
-            max_tokens=parameters.pop("max_tokens", 2048),
-            **parameters,
+        return Anthropic(
+            model_name=self.model,
+            **self.parameters or {},
         )
 
-    @property
-    def model_cost_per_token(self) -> float | None:
-        """
-        Return the cost per token for the model. This is used to calculate the cost of the
-        completion.
-        """
-        from sik_llm_eval.anthropic import (
-            MODEL_COST_PER_TOKEN as ANTHROPIC_MODEL_COST_PER_TOKEN,
-        )
-
-        return ANTHROPIC_MODEL_COST_PER_TOKEN.get(self.model)
 
     def _invoke_client_callable(
         self,
         input: list[dict[str, str]],  # noqa: A002
-    ) -> AnthropicCompletionResponse | AnthropicToolsResponse:
+    ) -> TextResponse:
         """Invoke the client with the input and return the response."""
         return self.client_callable(messages=input)
 
@@ -480,9 +471,9 @@ class AnthropicToolsCandidate(AnthropicCandidate):
 
     def __init__(  # noqa: D417
         self,
-        tools: list[dict],
-        tool_choice: Literal["auto", "any", "none"] | dict[str] = "auto",
-        model: str | None = None,
+        tools: list[dict] | list[Tool],
+        tool_choice: str | ToolChoice,
+        model_name: str | None = None,
         endpoint_url: str | None = None,
         metadata: dict | None = None,
         parameters: dict | None = None,
@@ -494,53 +485,83 @@ class AnthropicToolsCandidate(AnthropicCandidate):
             tools:
                 A list of tools to use with the Anthropic model. See
                 https://docs.anthropic.com/en/docs/tools-overview for more information.
+
+                The Tool classes in sik-llms can be used to create the tools list.
             tool_choice:
-                Select from "auto", "any", "none"; for more information, see
-                https://docs.anthropic.com/en/docs/tools-overview
-            model:
-                The name of the Anthropic model to use (e.g. 'gpt-4o-mini').
+                See https://docs.anthropic.com/en/docs/tools-overview
+            model_name:
+                The name of the Anthropic model to use (e.g. 'claude-3-5-sonnet-20241022').
             endpoint_url:
                 This parameter is used when running against a local Anthropic-compatible API
                 endpoint.
             metadata:
                 A dictionary of metadata about the Candidate.
-
-        Parameters
+            parameters:
                 A dictionary of model-specific parameters (e.g. `temperature`).
-        """
+        """  # noqa
         super().__init__(
-            model_name=model,
+            model_name=model_name,
             endpoint_url=endpoint_url,
             metadata=metadata,
             parameters=parameters,
         )
+        if isinstance(tools[0], dict):
+            tools = [Tool(**tool) for tool in tools]
+
+        if not all(isinstance(tool, Tool) for tool in tools):
+            raise ValueError(
+                "All tools must be instances of Tool or a dictionary that can be converted to Tool.",  # noqa: E501
+            )
         self.tools = tools
         self.tool_choice = tool_choice
+
+    @property
+    def client_callable(self) -> AnthropicTools:
+        """Return the client for the Anthropic service."""
+        tool_choice = self.tool_choice
+        if isinstance(tool_choice, str):
+            tool_choice = ToolChoice[tool_choice.upper()]
+        return AnthropicTools(
+            model_name=self.model,
+            tools=self.tools,
+            tool_choice=tool_choice,
+            **self.parameters or {},
+        )
 
     def _invoke_client_callable(
         self,
         input: list[dict[str, str]],  # noqa: A002
-    ) -> AnthropicCompletionResponse | AnthropicToolsResponse:
+    ) -> ToolPredictionResponse:
         """Invoke the client with the input and return the response."""
-        return self.client_callable(
-            messages=input,
-            tools=self.tools,
-            tool_choice=(
-                {"type": self.tool_choice}
-                if isinstance(self.tool_choice, str)
-                else self.tool_choice
-            ),
-        )
+        return self.client_callable(messages=input)
 
     def _parse_response(
         self,
-        response: AnthropicCompletionResponse | AnthropicToolsResponse,
-    ) -> str | dict:
+        response: ToolPredictionResponse,
+    ) -> ToolPrediction | str:
         """Get the desired attribute from the response object."""
-        from sik_llm_eval.anthropic import AnthropicToolsResponse
-
         return (
-            response.tools
-            if isinstance(response, AnthropicToolsResponse)
-            else response.content
+            response.tool_prediction
+            if response.tool_prediction
+            else response.message
         )
+
+    def to_dict(self) -> dict:
+        """Return a dictionary representation of the Candidate."""
+        value = super().to_dict()
+        tools = []
+        # convert parameter types to strings for serialization
+        # e.g. <class 'str'> to 'str'
+        for t in self.tools:
+            if not isinstance(t, Tool):
+                raise ValueError(
+                    "Tools must be instances of Tool or a dictionary that can be converted to Tool.",  # noqa: E501
+                )
+            tool = t.model_dump(exclude_defaults=True, exclude_none=True)
+            parameters = tool.get("parameters", [])
+            for param in parameters:
+                param['param_type'] = param['param_type'].__name__
+            tools.append(tool)
+        value["tools"] = tools
+        value["tool_choice"] = self.tool_choice
+        return value
