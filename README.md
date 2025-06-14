@@ -1,4 +1,4 @@
-[![test](https://github.com/anaconda/sik-llm-eval/actions/workflows/tests.yaml/badge.svg)](https://github.com/anaconda/sik-llm-eval/actions/workflows/tests.yaml)
+[![test](https://github.com/shane-kercheval/sik-llm-eval/actions/workflows/tests.yaml/badge.svg)](https://github.com/shane-kercheval/sik-llm-eval/actions/workflows/tests.yaml)
 
 # sik-llm-eval
 
