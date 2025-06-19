@@ -22,6 +22,8 @@ In this framework, there are two fundamental concepts:
 
 ### Examples
 
+See [examples/Getting-Started-with-Evals.ipynb](https://github.com/shane-kercheval/sik-llm-eval/blob/main/examples/Getting-Started-with-Evals.ipynb) for a thorough introduction to using the framework.
+
 #### Running Evals/Candidates from YAML files
 
 You can define Candidates and Evals using YAML files. Here's an example YAML file for a ChatGPT Candidate:
