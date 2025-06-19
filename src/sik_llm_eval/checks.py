@@ -181,6 +181,11 @@ class ResponseModel:
     Stores the data associated with a request/response. This object is created by, for example, the
     Eval/EvalHarness and passed to the Check objects' __call__ function to evaluate the response,
     potentially using additional information like input, metadata, or ideal_response.
+
+    `metadata` is a dictionary that is set by the `Eval`'s `__call__` method and can contain any
+    additional information that the user wants to pass to the Check objects. When using the
+    EvalHarness, the harness will add additional metadata such as metadata passed back from the
+    candidate, the response timestamp, and other error information if the request failed.
     """
 
     input: object | None = None
@@ -679,20 +684,20 @@ class PythonCodeBlockTests(Check):
 
         Example yaml:
         - check_type: PYTHON_CODE_BLOCK_TESTS
-            code_block_timeout: 5
-            code_test_timeout: 5
-            code_tests:
-                - |
-                def verify_function_exists_and_runs_correctly(code_blocks: list[str]) -> bool:
-                    # should pass
-                    return sum_two_numbers(2, 3) == 5
+          code_block_timeout: 5
+          code_test_timeout: 5
+          code_tests:
+            - |
+            def verify_function_exists_and_runs_correctly(code_blocks: list[str]) -> bool:
+                # should pass
+                return sum_two_numbers(2, 3) == 5
 
         Example yaml:
         - check_type: PYTHON_CODE_BLOCK_TESTS
-            code_tests:
-                - assert mask_email('john.doe@example.com') == '[MASKED]@example.com'
-                - assert mask_email('jane.smith@example.com') == '[MASKED]@example.com'
-                - assert mask_email('foo@bar.com') != '[MASKED]@bar.com'
+          code_tests:
+            - assert mask_email('john.doe@example.com') == '[MASKED]@example.com'
+            - assert mask_email('jane.smith@example.com') == '[MASKED]@example.com'
+            - assert mask_email('foo@bar.com') != '[MASKED]@bar.com'
         """,
     )
 
