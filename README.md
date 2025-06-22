@@ -6,9 +6,6 @@
 
 This framework allows you to easily create tests cases, ranging from simple tests based on matching/regex, to tests that extract and execute Python code blocks (generated from the responses) to determine the percent of code blocks that successfully execute. It also allows you to create your own custom tests.
 
-Get started with examples found in the [examples](https://github.com/anaconda/sik-llm-eval/tree/main/examples) folder.
-
-
 > `sik-llm-eval` is a fork of [`anaconda/llm-eval`](https://github.com/anaconda/llm-eval). I was the original author and principal contributor to the initial codebase while it was developed at Anaconda (last commit on June 12, 2025).
 
 ---
