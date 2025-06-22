@@ -14,7 +14,7 @@ This framework allows you to easily create tests cases, ranging from simple test
 
 In this framework, there are two fundamental concepts:
 
-- **Eval**: An Eval represents a single test scenario. Each Eval defines an `input` to an LLM or agent, and "checks" which evaluate the response of the agent against the criteria specified in the check. Users can also create and custom checks.
+- **Eval**: An Eval represents a single test scenario. Each Eval defines an `input` to an LLM or agent, and one or more `checks` that evaluate the response of the agent against the criteria specified in the check. Users can also create and custom checks.
 - **Candidate**: A Candidate is a lightweight wrapper around an LLM or agent that used to standardize the inputs and outputs of the agent with the inputs and outputs associated with the Eval. In other words, different models might expect inputs to be formatted in different ways (and might return responses formatted in different ways) and a Candidate is an adaptor for those models so that the Evals can be defined in one format, regardless of the various formats expected by various models.
 
 ### Examples
